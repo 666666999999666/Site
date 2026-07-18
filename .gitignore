@@ -1,0 +1,40 @@
+# dependencies
+node_modules
+.pnp
+.pnp.js
+
+# next.js
+.next/
+out/
+build
+dist
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# db data
+data/
+
+# uploads (kept by volume in prod, git-ignored)
+public/uploads/*
+!public/uploads/.gitkeep
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# os
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea
+.vscode
+*.swp
+
+# superpowers scratch
+.superpowers/
