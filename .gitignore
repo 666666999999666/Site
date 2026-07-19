@@ -23,6 +23,9 @@ next-env.d.ts
 # db data
 data/
 
+# generated Prisma Client (Prisma 7 generates into project source)
+lib/generated/prisma/
+
 # uploads (kept by volume in prod, git-ignored)
 public/uploads/*
 !public/uploads/.gitkeep

@@ -1,0 +1,88 @@
+// Prisma 7 schema (Rust-free client, driver adapter required at runtime)
+// Docs: https://www.prisma.io/docs/orm/v6/prisma-schema/overview/generators
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+// NOTE: In Prisma 7, `datasource.url` moved to `prisma.config.ts`.
+datasource db {
+  provider = "postgresql"
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum TodoStatus {
+  TODO
+  DONE
+}
+
+enum CategoryType {
+  BLOG
+  TODO
+}
+
+model Post {
+  id          String     @id @default(cuid())
+  title       String
+  content     String     @db.Text
+  excerpt     String?
+  slug        String     @unique
+  categoryId  String?
+  category    Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags        String[]
+  status      PostStatus @default(DRAFT)
+  readTime    Int        @default(1)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([status, createdAt])
+  @@index([categoryId])
+}
+
+model Category {
+  id          String       @id @default(cuid())
+  name        String
+  type        CategoryType
+  description String?
+  color       String?      @default("#C97B3D")
+  sortOrder   Int          @default(0)
+  posts       Post[]
+  todos       Todo[]
+  createdAt   DateTime     @default(now())
+
+  @@index([type])
+}
+
+model Todo {
+  id          String     @id @default(cuid())
+  title       String
+  description String?
+  categoryId  String?
+  category    Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  status      TodoStatus @default(TODO)
+  priority    Int        @default(0)
+  dueDate     DateTime?
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+
+  @@index([status])
+  @@index([categoryId])
+}
+
+model User {
+  id           String   @id @default(cuid())
+  username     String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
