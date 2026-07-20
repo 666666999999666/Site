@@ -137,21 +137,36 @@ mkdir -p /home/ubuntu/blog
 cd /home/ubuntu/blog
 ```
 
-### 3.2 克隆代码
+### 3.2 上传部署文件
+
+服务器上不需要源码，只需要 `docker-compose.yml`、`.env` 和 `nginx/` 配置。
+
+**方法一：从 GitHub 下载（推荐，简单）**
 
 ```bash
-git clone https://github.com/你的GitHub用户名/你的仓库名.git .
+# 下载 docker-compose.yml
+curl -o docker-compose.yml https://ghproxy.com/https://raw.githubusercontent.com/666666999999666/Site/main/docker-compose.yml
+
+# 下载 nginx 配置
+mkdir -p nginx/conf.d
+curl -o nginx/conf.d/default.conf https://ghproxy.com/https://raw.githubusercontent.com/666666999999666/Site/main/nginx/conf.d/default.conf
 ```
 
-> 如果仓库是私有的，需要先配置 GitHub 访问令牌：
-> ```bash
-> git clone https://你的用户名:你的Token@github.com/你的用户名/你的仓库名.git .
-> ```
+**方法二：从本地电脑上传（用 scp）**
+
+在 Windows PowerShell 中执行：
+
+```powershell
+# 上传 docker-compose.yml
+scp docker-compose.yml ubuntu@你的服务器IP:/home/ubuntu/blog/
+
+# 上传 nginx 配置
+scp -r nginx ubuntu@你的服务器IP:/home/ubuntu/blog/
+```
 
 ### 3.3 创建 .env 文件
 
 ```bash
-cp .env.example .env
 nano .env
 ```
 
