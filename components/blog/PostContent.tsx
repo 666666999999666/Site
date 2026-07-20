@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { generateHTML } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Image from "@tiptap/extension-image"
@@ -8,13 +9,17 @@ import { type JSONContent } from "@tiptap/core"
 const extensions = [StarterKit, Image]
 
 export function PostContent({ content }: { content: string }) {
-  let html = ""
-  try {
-    const json = JSON.parse(content) as JSONContent
-    html = generateHTML(json, extensions)
-  } catch {
-    html = content // 兼容纯文本
-  }
+  const [html, setHtml] = useState("")
+
+  useEffect(() => {
+    try {
+      const json = JSON.parse(content) as JSONContent
+      setHtml(generateHTML(json, extensions))
+    } catch {
+      setHtml(content)
+    }
+  }, [content])
+
   return (
     <div
       className="prose prose-stone max-w-none

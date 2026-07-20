@@ -20,7 +20,7 @@ const notoSans = Noto_Sans_SC({
 });
 
 export const metadata: Metadata = {
-  title: "个人数字花园",
+  title: "QZ Site",
   description: "个人博客与知识管理",
 };
 
@@ -33,8 +33,12 @@ export default function RootLayout({
     <html
       lang="zh-CN"
       className={`${notoSerif.variable} ${notoSans.variable} antialiased`}
+      suppressHydrationWarning
     >
       <body>
+        <script dangerouslySetInnerHTML={{ __html: `
+          (function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})()
+        `}} />
         <Header />
         <main>{children}</main>
         <Footer />

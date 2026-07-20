@@ -13,7 +13,7 @@ export function RecentPosts({ posts }: { posts: PostWithCategory[] }) {
     return (
       <section className="py-16">
         <Container size="narrow">
-          <p className="text-center text-ink-muted">还没有文章，花园刚刚种下。</p>
+          <p className="text-center text-ink-muted">还没有文章，开始写下第一篇吧。</p>
         </Container>
       </section>
     )

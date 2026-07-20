@@ -11,7 +11,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     <div className="min-h-screen flex">
       <aside className="w-56 border-r border-line p-4 hidden md:block">
         <div className="mb-8 px-4">
-          <span className="font-serif text-lg text-ink">花园后台</span>
+          <span className="font-serif text-lg text-ink">QZ Site 后台</span>
         </div>
         <AdminSidebar />
         <div className="mt-8">

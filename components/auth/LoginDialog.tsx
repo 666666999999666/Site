@@ -54,7 +54,7 @@ export function LoginDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>进入花园</DialogTitle>
+          <DialogTitle>登录</DialogTitle>
           <DialogDescription>私人空间，仅限本人。</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">

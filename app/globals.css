@@ -105,37 +105,45 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  /* 暖色深色模式 —— 咖啡夜读风格（参考 Vev Warm Tones + ColorSift Earthy Brown） */
+  --paper: #1C1610;
+  --ink: #F5E8D8;
+  --ink-muted: #A89888;
+  --accent-hover: #D4883A;
+  --line: #3A322A;
+
+  --background: #1C1610;
+  --foreground: #F5E8D8;
+  --card: #262018;
+  --card-foreground: #F5E8D8;
+  --popover: #262018;
+  --popover-foreground: #F5E8D8;
+  --primary: #C97B3D;
+  --primary-foreground: #1C1610;
+  --secondary: #302820;
+  --secondary-foreground: #F5E8D8;
+  --muted: #302820;
+  --muted-foreground: #A89888;
+  --accent: #C97B3D;
+  --accent-foreground: #1C1610;
+  --destructive: #E54D4D;
+  --border: #3A322A;
+  --input: #3A322A;
+  --ring: #C97B3D;
+  --chart-1: #C97B3D;
+  --chart-2: #A89888;
+  --chart-3: #D4883A;
+  --chart-4: #C4B098;
+  --chart-5: #F5E8D8;
+  --radius: 0.625rem;
+  --sidebar: #1C1610;
+  --sidebar-foreground: #F5E8D8;
+  --sidebar-primary: #C97B3D;
+  --sidebar-primary-foreground: #1C1610;
+  --sidebar-accent: #302820;
+  --sidebar-accent-foreground: #F5E8D8;
+  --sidebar-border: #3A322A;
+  --sidebar-ring: #C97B3D;
 }
 
 @layer base {
