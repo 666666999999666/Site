@@ -1,0 +1,12 @@
+node_modules
+.next
+.git
+*.md
+docs
+data
+nginx
+docker-compose*.yml
+.env*
+!.env.example
+.superpowers
+scripts
