@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Noto_Serif_SC, Noto_Sans_SC } from "next/font/google";
 import "./globals.css";
 import { CatButton } from "@/components/auth/CatButton";
+import { Header } from "@/components/layout/Header";
+import { Footer } from "@/components/layout/Footer";
 
 const notoSerif = Noto_Serif_SC({
   subsets: ["latin"],
@@ -33,7 +35,9 @@ export default function RootLayout({
       className={`${notoSerif.variable} ${notoSans.variable} antialiased`}
     >
       <body>
-        {children}
+        <Header />
+        <main>{children}</main>
+        <Footer />
         <CatButton />
       </body>
     </html>
