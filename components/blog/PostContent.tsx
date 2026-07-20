@@ -3,10 +3,9 @@
 import { generateHTML } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Image from "@tiptap/extension-image"
-import Link from "@tiptap/extension-link"
 import { type JSONContent } from "@tiptap/core"
 
-const extensions = [StarterKit, Image, Link]
+const extensions = [StarterKit, Image]
 
 export function PostContent({ content }: { content: string }) {
   let html = ""
