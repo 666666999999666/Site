@@ -141,9 +141,22 @@ cd "/home/ubuntu/个人网站"
 
 服务器上不需要源码，只需要 `docker-compose.yml`、`.env` 和 `nginx/` 配置。
 
-**方法一：从本地电脑上传（推荐，最可靠）**
+**方法一：从 GitHub 下载**
 
-在 Windows PowerShell 中，进入项目目录后执行：
+```bash
+# 下载 docker-compose.yml
+curl -o docker-compose.yml https://raw.githubusercontent.com/666666999999666/Site/main/docker-compose.yml
+
+# 下载 nginx 配置
+mkdir -p nginx/conf.d
+curl -o nginx/conf.d/default.conf https://raw.githubusercontent.com/666666999999666/Site/main/nginx/conf.d/default.conf
+```
+
+> 如果 GitHub 下载慢，用方法二从本地上传。
+
+**方法二：从本地电脑上传（用 scp，推荐国内服务器）**
+
+在 Windows PowerShell 中执行：
 
 ```powershell
 # 上传 docker-compose.yml
@@ -151,90 +164,6 @@ scp docker-compose.yml ubuntu@你的服务器IP:"/home/ubuntu/个人网站/"
 
 # 上传 nginx 配置
 scp -r nginx ubuntu@你的服务器IP:"/home/ubuntu/个人网站/"
-```
-
-> 注意：路径带中文需要用双引号包裹。
-
-**方法二：在服务器上直接创建文件（无需下载）**
-
-如果 scp 也不方便，可以直接在服务器上创建文件：
-
-```bash
-cd "/home/ubuntu/个人网站"
-
-# 创建 docker-compose.yml
-cat > docker-compose.yml << 'EOF'
-services:
-  db:
-    image: postgres:16-alpine
-    restart: always
-    environment:
-      POSTGRES_DB: ${DB_NAME:-blog}
-      POSTGRES_USER: ${DB_USER:-blog}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-blog}
-    volumes:
-      - ./data/postgres:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-blog}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  web:
-    image: ghcr.io/666666999999666/site:latest
-    restart: always
-    depends_on:
-      db:
-        condition: service_healthy
-    environment:
-      DATABASE_URL: postgresql://${DB_USER:-blog}:${DB_PASSWORD:-blog}@db:5432/${DB_NAME:-blog}?schema=public
-      SESSION_SECRET: ${SESSION_SECRET}
-      NEXT_PUBLIC_GITHUB_URL: ${NEXT_PUBLIC_GITHUB_URL}
-      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL}
-    volumes:
-      - ./data/uploads:/app/public/uploads
-
-  nginx:
-    image: nginx:alpine
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d:ro
-      - ./nginx/certs:/etc/nginx/certs:ro
-      - ./data/uploads:/var/www/uploads:ro
-    depends_on:
-      - web
-EOF
-
-# 创建 nginx 配置
-mkdir -p nginx/conf.d
-cat > nginx/conf.d/default.conf << 'EOF'
-server {
-    listen 80;
-    server_name _;
-
-    client_max_body_size 10M;
-
-    location /uploads/ {
-        alias /var/www/uploads/;
-        expires 7d;
-        access_log off;
-    }
-
-    location / {
-        proxy_pass http://web:3000;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-        proxy_set_header Upgrade $http_upgrade;
-        proxy_set_header Connection "upgrade";
-    }
-}
-EOF
 ```
 
 ### 3.3 创建 .env 文件
