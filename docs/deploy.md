@@ -1,6 +1,6 @@
 # 部署指南
 
-本指南帮助你在腾讯云服务器上部署个人网站项目。整个过程分为几个步骤，按顺序操作即可。
+本指南帮助你在腾讯云服务器上部署 QZ Site 个人网站项目。
 
 ---
 
@@ -35,7 +35,25 @@ newgrp docker
 docker --version
 ```
 
-### 1.2 安装 Docker Compose
+### 1.2 配置 Docker 镜像加速（国内服务器必须）
+
+国内服务器访问 Docker Hub 很慢，需要配置镜像加速：
+
+```bash
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json << 'EOF'
+{
+  "registry-mirrors": [
+    "https://docker.1ms.run",
+    "https://docker.xuanyuan.me"
+  ]
+}
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart docker
+```
+
+### 1.3 安装 Docker Compose
 
 Docker 安装完成后，Docker Compose 通常已经自带。验证一下：
 
@@ -61,7 +79,7 @@ GitHub Actions 需要一些密钥才能自动部署到你的服务器。这些�
 
 | Secret 名称 | 说明 | 示例值 |
 |-------------|------|--------|
-| `SERVER_HOST` | 服务器公网 IP 地址 | `43.136.xx.xx` |
+| `SERVER_HOST` | 服务器公网 IP 地址 | `REDACTED_SERVER_IP` |
 | `SERVER_USER` | 服务器登录用户名 | `ubuntu` |
 | `SERVER_SSH_KEY` | 服务器 SSH 私钥 | （见下方生成方法） |
 | `SERVER_APP_DIR` | 项目在服务器上的目录 | `/home/ubuntu/个人网站` |
@@ -132,29 +150,13 @@ ssh -i $env:USERPROFILE\.ssh\github-actions ubuntu@你的服务器IP
 SSH 登录服务器后：
 
 ```bash
-# 创建项目目录
-mkdir -p "/home/ubuntu/个人网站"
-cd "/home/ubuntu/个人网站"
+mkdir -p /home/ubuntu/个人网站
+cd /home/ubuntu/个人网站
 ```
 
 ### 3.2 上传部署文件
 
 服务器上不需要源码，只需要 `docker-compose.yml`、`.env` 和 `nginx/` 配置。
-
-**方法一：从 GitHub 下载**
-
-```bash
-# 下载 docker-compose.yml
-curl -o docker-compose.yml https://raw.githubusercontent.com/666666999999666/Site/main/docker-compose.yml
-
-# 下载 nginx 配置
-mkdir -p nginx/conf.d
-curl -o nginx/conf.d/default.conf https://raw.githubusercontent.com/666666999999666/Site/main/nginx/conf.d/default.conf
-```
-
-> 如果 GitHub 下载慢，用方法二从本地上传。
-
-**方法二：从本地电脑上传（用 scp，推荐国内服务器）**
 
 在 Windows PowerShell 中执行：
 
@@ -168,49 +170,43 @@ scp -r nginx ubuntu@你的服务器IP:"/home/ubuntu/个人网站/"
 
 ### 3.3 创建 .env 文件
 
+SSH 登录服务器后：
+
 ```bash
-nano .env
-```
-
-编辑 `.env`，填入生产环境的真实值：
-
-```env
+cd /home/ubuntu/个人网站
+cat > .env << 'EOF'
 DB_NAME=blog
 DB_USER=blog
-DB_PASSWORD=替换为一个强密码（建议16位以上，包含字母数字和符号）
+DB_PASSWORD=替换为一个强密码
 SESSION_SECRET=替换为32位以上随机字符串
-NEXT_PUBLIC_SITE_URL=https://你的域名
+NEXT_PUBLIC_SITE_URL=http://你的服务器IP
 NEXT_PUBLIC_GITHUB_URL=https://github.com/666666999999666
-GITHUB_REPOSITORY=666666999999666/Site
+EOF
 ```
 
 > **生成随机密码的方法**（在服务器上执行）：
 > ```bash
-> # 生成 32 位随机字符串
 > openssl rand -base64 32
 > ```
 
-### 3.4 登录 GHCR 并启动
+### 3.4 首次构建并启动
 
-GitHub Actions 构建的镜像存在 GitHub Container Registry（GHCR）里。服务器需要登录才能拉取镜像。
-
-先在 GitHub 上创建一个 Personal Access Token（个人访问令牌）：
-1. 进入 GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens
-2. 点击 **Generate new token**
-3. 勾选 `read:packages` 权限
-4. 生成后复制令牌值
-
-然后在服务器上登录 GHCR：
+首次部署需要手动构建镜像（后续由 CI/CD 自动完成）：
 
 ```bash
-echo "你的GitHub令牌" | docker login ghcr.io -u 666666999999666 --password-stdin
-```
+cd /home/ubuntu/个人网站
 
-启动所有服务：
+# 从 GitHub 克隆源码（仅首次需要）
+git clone https://github.com/666666999999666/Site.git src
 
-```bash
+# 构建镜像
+docker compose build web
+
+# 启动所有服务
 docker compose up -d
 ```
+
+> **注意**：首次构建在 2核4G 服务器上大约需要 5-8 分钟，构建期间服务器可能响应缓慢，这是正常现象。
 
 查看运行状态：
 
@@ -226,11 +222,52 @@ docker compose ps
 
 ---
 
-## 四、HTTPS 配置（让网站更安全）
+## 四、CI/CD 自动部署
+
+### 4.1 前提条件
+
+确保已完成第二步的 GitHub Secrets 配置，然后推送代码即可触发自动部署。
+
+### 4.2 部署流程
+
+```
+git push → GitHub Actions 构建镜像 → gzip 压缩 → SSH 管道传输到服务器 → docker load 加载 → docker compose up -d 重启
+```
+
+**关键优势**：
+- 构建在 GitHub Actions 上完成（2分钟），不在服务器上构建
+- 镜像通过 SSH 管道直接传输，不经过 ghcr.io（避免国内拉取慢的问题）
+- 服务器只需加载镜像并重启（秒级完成）
+- 使用 gzip 压缩传输，减少约 60% 传输量
+
+### 4.3 日常更新
+
+1. 在本地修改代码
+2. 提交并推送到 GitHub：
+   ```powershell
+   git add .
+   git commit -m "描述你改了什么"
+   git push
+   ```
+3. GitHub Actions 会自动完成：构建新镜像 → 传输到服务器 → 重启服务
+
+你可以在 GitHub 仓库的 **Actions** 页面查看部署进度和日志。
+
+### 4.4 数据安全说明
+
+每次部署只会更新 web 容器（你的 Next.js 应用），数据库容器不会被重建。
+- 文章、Todo、设置等数据存在 `./data/postgres/` 目录（宿主机磁盘），不受容器更新影响
+- 上传的图片存在 `./data/uploads/` 目录，同样不受影响
+- `prisma db push` 只会添加新字段/新表，不会删除已有数据
+- 即使万一出问题，自动备份（每天凌晨 4 点）也能恢复
+
+---
+
+## 五、HTTPS 配置（让网站更安全）
 
 HTTPS 让你的网站显示小锁标志，数据传输加密。我们用 Let's Encrypt 免费证书。
 
-### 4.1 安装 certbot
+### 5.1 安装 certbot
 
 在服务器上执行：
 
@@ -238,13 +275,13 @@ HTTPS 让你的网站显示小锁标志，数据传输加密。我们用 Let's E
 sudo apt install certbot -y
 ```
 
-### 4.2 申请证书
+### 5.2 申请证书
 
-先确保域名已经指向服务器 IP（见第五步），然后：
+先确保域名已经指向服务器 IP（见第六步），然后：
 
 ```bash
 # 停掉 nginx 容器，释放 80 端口
-cd "/home/ubuntu/个人网站"
+cd /home/ubuntu/个人网站
 docker compose stop nginx
 
 # 申请证书（把 yourdomain.com 换成你的域名）
@@ -253,21 +290,21 @@ sudo certbot certonly --standalone -d yourdomain.com
 # 证书会保存在 /etc/letsencrypt/live/yourdomain.com/ 目录下
 ```
 
-### 4.3 复制证书到项目目录
+### 5.3 复制证书到项目目录
 
 ```bash
 # 创建证书目录
-mkdir -p "/home/ubuntu/个人网站/nginx/certs"
+mkdir -p /home/ubuntu/个人网站/nginx/certs
 
 # 复制证书文件
-sudo cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem "/home/ubuntu/个人网站/nginx/certs/"
-sudo cp /etc/letsencrypt/live/yourdomain.com/privkey.pem "/home/ubuntu/个人网站/nginx/certs/"
+sudo cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem /home/ubuntu/个人网站/nginx/certs/
+sudo cp /etc/letsencrypt/live/yourdomain.com/privkey.pem /home/ubuntu/个人网站/nginx/certs/
 
 # 修改权限，让 nginx 容器能读取
-sudo chmod 644 "/home/ubuntu/个人网站/nginx/certs/"*.pem
+sudo chmod 644 /home/ubuntu/个人网站/nginx/certs/*.pem
 ```
 
-### 4.4 修改 nginx 配置支持 HTTPS
+### 5.4 修改 nginx 配置支持 HTTPS
 
 编辑 `/home/ubuntu/个人网站/nginx/conf.d/default.conf`，替换为以下内容：
 
@@ -308,16 +345,16 @@ server {
 
 > 记得把 `yourdomain.com` 替换成你的真实域名。
 
-### 4.5 重启 nginx
+### 5.5 重启 nginx
 
 ```bash
-cd "/home/ubuntu/个人网站"
+cd /home/ubuntu/个人网站
 docker compose up -d
 ```
 
 浏览器访问 `https://你的域名`，确认有小锁标志。
 
-### 4.6 设置证书自动续期
+### 5.6 设置证书自动续期
 
 Let's Encrypt 证书有效期 90 天，需要定期续期。设置自动续期：
 
@@ -332,14 +369,14 @@ sudo crontab -e
 在打开的文件末尾添加一行：
 
 ```
-0 3 * * * certbot renew --quiet && cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem "/home/ubuntu/个人网站/nginx/certs/" && cp /etc/letsencrypt/live/yourdomain.com/privkey.pem "/home/ubuntu/个人网站/nginx/certs/" && cd "/home/ubuntu/个人网站" && docker compose restart nginx
+0 3 * * * certbot renew --quiet && cp /etc/letsencrypt/live/yourdomain.com/fullchain.pem /home/ubuntu/个人网站/nginx/certs/ && cp /etc/letsencrypt/live/yourdomain.com/privkey.pem /home/ubuntu/个人网站/nginx/certs/ && cd /home/ubuntu/个人网站 && docker compose restart nginx
 ```
 
 > 这行配置的意思是：每天凌晨 3 点检查证书是否需要续期，如果续期成功就复制新证书并重启 nginx。
 
 ---
 
-## 五、DNS 配置（让域名指向服务器）
+## 六、DNS 配置（让域名指向服务器）
 
 1. 登录你的域名服务商（比如腾讯云、阿里云、Cloudflare）
 2. 找到 DNS 解析设置
@@ -371,29 +408,6 @@ sudo crontab -e
 
 ---
 
-## 六、后续更新（自动部署）
-
-配置好 GitHub Actions 后，更新网站非常简单：
-
-1. 在本地修改代码
-2. 提交并推送到 GitHub：
-   ```powershell
-   git add .
-   git commit -m "描述你改了什么"
-   git push
-   ```
-3. GitHub Actions 会自动完成：构建新镜像 → 推送到 GHCR → SSH 登录服务器 → 拉取新镜像 → 重启服务
-
-> **数据安全说明**：每次部署只会更新 web 容器（你的 Next.js 应用），数据库容器不会被重建。
-> - 文章、Todo、设置等数据存在 `./data/postgres/` 目录（宿主机磁盘），不受容器更新影响
-> - 上传的图片存在 `./data/uploads/` 目录，同样不受影响
-> - `prisma db push` 只会添加新字段/新表，不会删除已有数据
-> - 即使万一出问题，自动备份（每天凌晨 4 点）也能恢复
-
-你可以在 GitHub 仓库的 **Actions** 页面查看部署进度和日志。
-
----
-
 ## 七、数据备份
 
 ### 7.1 手动备份
@@ -401,6 +415,8 @@ sudo crontab -e
 在服务器上执行：
 
 ```bash
+cd /home/ubuntu/个人网站
+
 # 备份数据库
 docker compose exec db pg_dump -U blog blog > backup_$(date +%Y%m%d_%H%M%S).sql
 
@@ -414,37 +430,32 @@ tar czf uploads_backup_$(date +%Y%m%d_%H%M%S).tar.gz data/uploads/
 
 ```bash
 mkdir -p /home/ubuntu/backups
-nano /home/ubuntu/backups/backup.sh
-```
-
-写入以下内容：
-
-```bash
+cat > /home/ubuntu/backups/backup.sh << 'SCRIPT'
 #!/bin/bash
 BACKUP_DIR="/home/ubuntu/backups"
 APP_DIR="/home/ubuntu/个人网站"
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
 
 # 备份数据库
-cd "$APP_DIR"
+cd $APP_DIR
 docker compose exec -T db pg_dump -U blog blog > "$BACKUP_DIR/db_$TIMESTAMP.sql"
 
 # 备份上传文件
-tar czf "$BACKUP_DIR/uploads_$TIMESTAMP.tar.gz" -C "$APP_DIR" data/uploads/
+tar czf "$BACKUP_DIR/uploads_$TIMESTAMP.tar.gz" -C $APP_DIR data/uploads/
 
 # 删除 7 天前的备份
 find $BACKUP_DIR -name "*.sql" -mtime +7 -delete
 find $BACKUP_DIR -name "*.tar.gz" -mtime +7 -delete
 
 echo "Backup completed: $TIMESTAMP"
+SCRIPT
+
+chmod +x /home/ubuntu/backups/backup.sh
 ```
 
-设置权限并添加定时任务：
+添加定时任务：
 
 ```bash
-chmod +x /home/ubuntu/backups/backup.sh
-
-# 添加定时任务
 crontab -e
 ```
 
@@ -458,13 +469,26 @@ crontab -e
 
 ```bash
 # 恢复数据库
-cd "/home/ubuntu/个人网站"
+cd /home/ubuntu/个人网站
 cat /home/ubuntu/backups/db_备份文件名.sql | docker compose exec -T db psql -U blog blog
 
 # 恢复上传文件
-cd "/home/ubuntu/个人网站"
+cd /home/ubuntu/个人网站
 tar xzf /home/ubuntu/backups/uploads_备份文件名.tar.gz
 ```
+
+---
+
+## 八、手动部署（备用方案）
+
+如果 CI/CD 不可用，可以使用本地一键部署脚本：
+
+```powershell
+# 在项目根目录执行
+.\deploy.ps1
+```
+
+该脚本会：本地构建镜像 → 保存为 tar → scp 上传到服务器 → 加载并重启
 
 ---
 
@@ -472,19 +496,14 @@ tar xzf /home/ubuntu/backups/uploads_备份文件名.tar.gz
 
 ### Q: 推送代码后 Actions 没有触发？
 
-检查 `.github/workflows/deploy.yml` 中的分支名是否和你的默认分支一致（本项目使用 `master`）。
-
-### Q: docker compose pull 报权限错误？
-
-在服务器上重新登录 GHCR：
-```bash
-echo "你的GitHub令牌" | docker login ghcr.io -u 666666999999666 --password-stdin
-```
+检查 `.github/workflows/deploy.yml` 中的分支名是否和你的默认分支一致（本项目使用 `main`）。
 
 ### Q: 网站打不开？
 
 逐步排查：
 ```bash
+cd /home/ubuntu/个人网站
+
 # 查看容器状态
 docker compose ps
 
@@ -501,3 +520,7 @@ docker compose logs db
 ### Q: 如何查看 GitHub Actions 构建日志？
 
 进入 GitHub 仓库 → **Actions** 标签页 → 点击最近的 workflow run → 展开每个步骤查看日志。
+
+### Q: 服务器上构建镜像太慢/卡死？
+
+2核4G 服务器构建 Next.js 镜像需要 5-8 分钟，期间服务器可能响应缓慢。建议使用 CI/CD 自动部署（在 GitHub Actions 上构建），避免在服务器上构建。
