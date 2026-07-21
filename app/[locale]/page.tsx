@@ -2,22 +2,33 @@ import { HeroSection } from "@/components/home/HeroSection"
 import { RecentPosts } from "@/components/home/RecentPosts"
 import { LatestProjects, type Project } from "@/components/home/LatestProjects"
 import { getRecentPosts } from "@/lib/posts"
+import { getRecentProjects } from "@/lib/projects"
+import { prisma } from "@/lib/db"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 3600
 
-// 暂时使用硬编码的项目数据，后续可从数据库获取
-const sampleProjects: Project[] = []
-
 export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params
-  const posts = await getRecentPosts(6)
+  const [posts, dbProjects, taglineSetting] = await Promise.all([
+    getRecentPosts(6),
+    getRecentProjects(4),
+    prisma.setting.findUnique({ where: { key: "home_tagline" } }),
+  ])
+
+  const tagline = taglineSetting?.value || undefined
+  const projects: Project[] = dbProjects.map((p) => ({
+    name: p.title,
+    description: p.description || "",
+    tags: p.tags,
+    demoUrl: p.demoUrl || undefined,
+  }))
 
   return (
     <>
-      <HeroSection />
+      <HeroSection description={tagline} />
       <RecentPosts posts={posts} locale={locale} />
-      <LatestProjects projects={sampleProjects} />
+      <LatestProjects projects={projects} />
     </>
   )
 }
