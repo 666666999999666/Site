@@ -10,3 +10,4 @@ docker-compose*.yml
 !.env.example
 .superpowers
 scripts
+!scripts/collect-prisma-deps.js
