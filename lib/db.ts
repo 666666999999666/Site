@@ -10,6 +10,7 @@ function createPrismaClient() {
   return new PrismaClient({ adapter })
 }
 
-export const prisma = globalForPrisma.prisma ?? createPrismaClient()
+// 构建时没有 DATABASE_URL，延迟初始化
+export const prisma = globalForPrisma.prisma ?? (process.env.DATABASE_URL ? createPrismaClient() : undefined as unknown as PrismaClient)
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = prisma
+if (process.env.NODE_ENV !== 'production' && process.env.DATABASE_URL) globalForPrisma.prisma = prisma
