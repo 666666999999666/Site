@@ -44,8 +44,8 @@ export function PasswordForm() {
         <Label>确认新密码</Label>
         <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
       </div>
-      {error && <p className="text-sm text-red-600">{error}</p>}
-      {ok && <p className="text-sm text-accent">已修改</p>}
+      {error && <p className="text-sm text-destructive">{error}</p>}
+      {ok && <p className="text-sm text-primary">已修改</p>}
       <Button onClick={save}>修改密码</Button>
     </div>
   )

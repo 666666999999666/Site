@@ -13,7 +13,7 @@ export default async function PostsPage() {
   return (
     <Container>
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-serif">Blog</h1>
+        <h1 className="text-3xl font-semibold">Blog</h1>
         <Link href="/admin/posts/new">
           <Button><Plus className="h-4 w-4 mr-1" /> 新文章</Button>
         </Link>
