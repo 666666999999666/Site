@@ -4,8 +4,7 @@ import { PostContent } from "@/components/blog/PostContent"
 import { getPostBySlug } from "@/lib/posts"
 import { prisma } from "@/lib/db"
 
-export const dynamic = "force-static"
-export const revalidate = 3600
+export const dynamic = "force-dynamic"
 
 async function getPost(slug: string) {
   const post = await prisma.post.findUnique({
@@ -13,11 +12,6 @@ async function getPost(slug: string) {
     include: { category: true },
   })
   return post
-}
-
-export async function generateStaticParams() {
-  const posts = await prisma.post.findMany({ where: { status: "PUBLISHED" } })
-  return posts.map((p) => ({ slug: p.slug }))
 }
 
 export default async function PostPage({ params }: { params: Promise<{ slug: string }> }) {
