@@ -6,7 +6,7 @@ function formatDate(d: Date) {
   return new Date(d).toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric" })
 }
 
-export const dynamic = "force-static"
+export const dynamic = "force-dynamic"
 export const revalidate = 3600
 
 export default async function BlogPage() {

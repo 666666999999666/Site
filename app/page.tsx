@@ -4,6 +4,9 @@ import { ContactSection } from "@/components/home/ContactSection"
 import { getRecentPosts } from "@/lib/posts"
 import { prisma } from "@/lib/db"
 
+export const dynamic = "force-dynamic"
+export const revalidate = 3600
+
 async function getSettings() {
   const settings = await prisma.setting.findMany()
   const map: Record<string, string> = {}
