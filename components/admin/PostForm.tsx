@@ -70,7 +70,7 @@ export function PostForm({
           <select
             value={categoryId}
             onChange={(e) => setCategoryId(e.target.value)}
-            className="w-full border border-line rounded-md px-3 py-2 text-sm bg-card"
+            className="w-full border border-border/50 rounded-md px-3 py-2 text-sm bg-background"
           >
             <option value="">无分区</option>
             {categories.map((c) => (

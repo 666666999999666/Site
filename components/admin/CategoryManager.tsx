@@ -55,14 +55,14 @@ export function CategoryManager({
       </div>
       <ul className="space-y-1">
         {filtered.length === 0 ? (
-          <li className="text-sm text-ink-muted">还没有分区</li>
+          <li className="text-sm text-muted-foreground">还没有分区</li>
         ) : (
           filtered.map((c) => (
             <li key={c.id} className="flex items-center gap-2 py-1.5 group">
-              <span className="w-2 h-2 rounded-full" style={{ background: c.color || "#C97B3D" }} />
+              <span className="w-2 h-2 rounded-full" style={{ background: c.color || "#6366f1" }} />
               <span className="flex-1">{c.name}</span>
-              <button onClick={() => del(c.id)} className="opacity-0 group-hover:opacity-100 transition-opacity">
-                <Trash2 className="h-4 w-4 text-ink-muted hover:text-red-500" />
+              <button onClick={() => del(c.id)} className="opacity-0 group-hover:opacity-100 transition-opacity hover:text-destructive">
+                <Trash2 className="h-4 w-4 text-muted-foreground" />
               </button>
             </li>
           ))

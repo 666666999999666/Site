@@ -9,7 +9,7 @@ export default async function NewPostPage() {
   })
   return (
     <Container>
-      <h1 className="text-3xl font-serif mb-8">写新文章</h1>
+      <h1 className="text-3xl font-semibold mb-8">写新文章</h1>
       <PostForm categories={categories} />
     </Container>
   )

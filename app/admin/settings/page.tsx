@@ -14,25 +14,25 @@ export default async function SettingsPage() {
 
   return (
     <Container>
-      <h1 className="text-3xl font-serif mb-8">Settings</h1>
+      <h1 className="text-3xl font-semibold mb-8">Settings</h1>
 
       <section className="mb-12">
-        <h2 className="text-xl font-serif mb-4">个人信息</h2>
+        <h2 className="text-xl font-semibold mb-4">个人信息</h2>
         <SettingsForm initial={map} />
       </section>
 
       <section className="mb-12">
-        <h2 className="text-xl font-serif mb-4">博客分区</h2>
+        <h2 className="text-xl font-semibold mb-4">博客分区</h2>
         <CategoryManager categories={categories} type="BLOG" />
       </section>
 
       <section className="mb-12">
-        <h2 className="text-xl font-serif mb-4">Todo 分区</h2>
+        <h2 className="text-xl font-semibold mb-4">Todo 分区</h2>
         <CategoryManager categories={categories} type="TODO" />
       </section>
 
       <section>
-        <h2 className="text-xl font-serif mb-4">修改密码</h2>
+        <h2 className="text-xl font-semibold mb-4">修改密码</h2>
         <PasswordForm />
       </section>
     </Container>

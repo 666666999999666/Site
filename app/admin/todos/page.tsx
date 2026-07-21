@@ -9,7 +9,7 @@ export default async function TodosPage() {
   ])
   return (
     <Container>
-      <h1 className="text-3xl font-serif mb-8">Todo</h1>
+      <h1 className="text-3xl font-semibold mb-8">Todo</h1>
       <TodoList todos={todos} categories={categories} />
     </Container>
   )

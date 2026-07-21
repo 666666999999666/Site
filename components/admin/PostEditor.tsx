@@ -33,7 +33,7 @@ export function PostEditor({
     },
     editorProps: {
       attributes: {
-        class: "prose prose-stone max-w-none min-h-[400px] p-4 focus:outline-none",
+        class: "prose prose-neutral max-w-none min-h-[400px] p-4 focus:outline-none font-mono text-sm",
       },
     },
   })
@@ -72,11 +72,11 @@ export function PostEditor({
     if (url) editor?.chain().focus().setLink({ href: url }).run()
   }
 
-  const btn = "h-8 w-8 p-0 text-ink-muted hover:text-accent"
+  const btn = "h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
 
   return (
-    <div className="border border-line rounded-lg overflow-hidden bg-card">
-      <div className="sticky top-0 z-10 flex flex-wrap gap-1 p-2 border-b border-line bg-card">
+    <div className="border border-border/50 rounded-lg overflow-hidden bg-card">
+      <div className="sticky top-0 z-10 flex flex-wrap gap-1 p-2 border-b border-border/50 bg-card">
         <Button type="button" variant="ghost" size="icon" className={btn} onClick={() => editor.chain().focus().toggleBold().run()} aria-label="加粗">
           <Bold className="h-4 w-4" />
         </Button>
@@ -123,7 +123,7 @@ export function PostEditor({
 }
 
 function Sep() {
-  return <span className="w-px h-6 bg-line mx-1 self-center" />
+  return <span className="w-px h-6 bg-border/50 mx-1 self-center" />
 }
 
 function safeParse(s: string) {
