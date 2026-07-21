@@ -6,7 +6,7 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* shadcn 颜色映射（值在 :root 中定义为暖色） */
+  /* shadcn 颜色映射 */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -39,18 +39,9 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* 暖色主题语义变量 */
-  --color-paper: var(--paper);
-  --color-ink: var(--ink);
-  --color-ink-muted: var(--ink-muted);
-  --color-accent-hover: var(--accent-hover);
-  --color-line: var(--line);
-
   /* 字体（通过 Google Fonts CDN link 引入，运行时加载） */
-  --font-sans: "Noto Sans SC", sans-serif;
-  --font-serif: "Noto Serif SC", serif;
-  --font-heading: "Noto Serif SC", serif;
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: "Geist Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -62,88 +53,74 @@
 }
 
 :root {
-  /* 暖色主题 —— 米白纸感 + 棕墨 + 赤陶强调 */
-  --paper: #FAF7F2;
-  --ink: #3D3530;
-  --ink-muted: #8A7F75;
-  --accent-hover: #B86A2D;
-  --line: #E8E0D5;
-
-  /* shadcn 变量映射到暖色 */
-  --background: #FAF7F2;
-  --foreground: #3D3530;
-  --card: #FFFFFF;
-  --card-foreground: #3D3530;
-  --popover: #FFFFFF;
-  --popover-foreground: #3D3530;
-  --primary: #C97B3D;
-  --primary-foreground: #FFFFFF;
-  --secondary: #F0EAE0;
-  --secondary-foreground: #3D3530;
-  --muted: #F0EAE0;
-  --muted-foreground: #8A7F75;
-  --accent: #C97B3D;
-  --accent-foreground: #FFFFFF;
-  --destructive: #DC2626;
-  --border: #E8E0D5;
-  --input: #E8E0D5;
-  --ring: #C97B3D;
-  --chart-1: #C97B3D;
-  --chart-2: #8A7F75;
-  --chart-3: #B86A2D;
-  --chart-4: #6B5B4F;
-  --chart-5: #3D3530;
   --radius: 0.625rem;
-  --sidebar: #FAF7F2;
-  --sidebar-foreground: #3D3530;
-  --sidebar-primary: #C97B3D;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #F0EAE0;
-  --sidebar-accent-foreground: #3D3530;
-  --sidebar-border: #E8E0D5;
-  --sidebar-ring: #C97B3D;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.145 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.145 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.145 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0 0);
+  --chart-2: oklch(0.6 0 0);
+  --chart-3: oklch(0.556 0 0);
+  --chart-4: oklch(0.496 0 0);
+  --chart-5: oklch(0.422 0 0);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.145 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.145 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
 }
 
 .dark {
-  /* 暖色深色模式 —— 咖啡夜读风格（参考 Vev Warm Tones + ColorSift Earthy Brown） */
-  --paper: #1C1610;
-  --ink: #F5E8D8;
-  --ink-muted: #A89888;
-  --accent-hover: #D4883A;
-  --line: #3A322A;
-
-  --background: #1C1610;
-  --foreground: #F5E8D8;
-  --card: #262018;
-  --card-foreground: #F5E8D8;
-  --popover: #262018;
-  --popover-foreground: #F5E8D8;
-  --primary: #C97B3D;
-  --primary-foreground: #1C1610;
-  --secondary: #302820;
-  --secondary-foreground: #F5E8D8;
-  --muted: #302820;
-  --muted-foreground: #A89888;
-  --accent: #C97B3D;
-  --accent-foreground: #1C1610;
-  --destructive: #E54D4D;
-  --border: #3A322A;
-  --input: #3A322A;
-  --ring: #C97B3D;
-  --chart-1: #C97B3D;
-  --chart-2: #A89888;
-  --chart-3: #D4883A;
-  --chart-4: #C4B098;
-  --chart-5: #F5E8D8;
-  --radius: 0.625rem;
-  --sidebar: #1C1610;
-  --sidebar-foreground: #F5E8D8;
-  --sidebar-primary: #C97B3D;
-  --sidebar-primary-foreground: #1C1610;
-  --sidebar-accent: #302820;
-  --sidebar-accent-foreground: #F5E8D8;
-  --sidebar-border: #3A322A;
-  --sidebar-ring: #C97B3D;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.145 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.145 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.145 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 10%);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.8 0 0);
+  --chart-2: oklch(0.7 0 0);
+  --chart-3: oklch(0.6 0 0);
+  --chart-4: oklch(0.5 0 0);
+  --chart-5: oklch(0.4 0 0);
+  --sidebar: oklch(0.145 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.985 0 0);
+  --sidebar-primary-foreground: oklch(0.145 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.708 0 0);
 }
 
 @layer base {
@@ -155,28 +132,37 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-size: 17px;
-    line-height: 1.8;
+    font-size: 1rem;
+    line-height: 1.75;
   }
-  h1,
-  h2,
-  h3,
+  h1 {
+    @apply font-sans;
+    font-weight: 700;
+  }
+  h2 {
+    @apply font-sans;
+    font-weight: 700;
+  }
+  h3 {
+    @apply font-sans;
+    font-weight: 600;
+  }
   h4 {
-    @apply font-serif;
+    @apply font-sans;
     font-weight: 600;
   }
   ::selection {
-    background: var(--accent);
-    color: #fff;
+    background: var(--primary);
+    color: var(--primary-foreground);
   }
 }
 
-/* 滚动条柔化 */
+/* 滚动条 */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 ::-webkit-scrollbar-thumb {
-  background: var(--line);
+  background: var(--border);
   border-radius: 4px;
 }
