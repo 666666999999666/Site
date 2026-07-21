@@ -55,9 +55,9 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           script_stop: true
+          command_timeout: 30m
           script: |
             cd ${{ secrets.SERVER_APP_DIR }}
-            # 服务器已保存 GHCR 凭据，无需重新登录
             # 拉取最新镜像（增量传输，只下载变化的层）
             docker compose pull web
             # 重启服务（数据库数据在 volume 中，不会丢失）
