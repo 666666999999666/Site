@@ -1,0 +1,42 @@
+{
+  "nav": {
+    "home": "首页",
+    "blog": "博客",
+    "projects": "项目",
+    "about": "关于",
+    "github": "GitHub"
+  },
+  "home": {
+    "title": "欢迎",
+    "description": "记录思考、项目和对现代 Web 开发的探索。",
+    "readBlog": "阅读博客",
+    "viewProjects": "查看项目",
+    "latestPosts": "最新文章",
+    "viewAll": "查看全部",
+    "latestProjects": "最新项目"
+  },
+  "blog": {
+    "title": "博客",
+    "description": "关于 Web 开发、设计和技术的思考。",
+    "search": "搜索文章...",
+    "all": "全部",
+    "readMore": "阅读更多",
+    "minuteRead": "{count}分钟阅读"
+  },
+  "projects": {
+    "title": "项目",
+    "description": "个人项目和开源作品的集合。",
+    "demo": "在线演示",
+    "source": "源码"
+  },
+  "about": {
+    "title": "关于",
+    "description": "你好，我是一名热爱构建 Web 应用的开发者。",
+    "whatIDo": "我做什么",
+    "techStack": "技术栈",
+    "contact": "联系方式"
+  },
+  "footer": {
+    "copyright": "© {year} QZ Site. All rights reserved."
+  }
+}

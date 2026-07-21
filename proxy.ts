@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
+import createIntlMiddleware from 'next-intl/middleware'
+import { routing } from './i18n/routing'
 
-// Next.js 16: middleware 已重命名为 proxy
-// 文档: node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md
+// next-intl i18n middleware
+const intlMiddleware = createIntlMiddleware(routing)
+
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
 
@@ -14,11 +17,18 @@ export function proxy(req: NextRequest) {
       loginUrl.searchParams.set("from", pathname)
       return NextResponse.redirect(loginUrl)
     }
+    return NextResponse.next()
   }
 
-  return NextResponse.next()
+  // 跳过 API 路由
+  if (pathname.startsWith("/api")) {
+    return NextResponse.next()
+  }
+
+  // i18n 路由处理
+  return intlMiddleware(req)
 }
 
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: ['/', '/(zh|en)/:path*', '/admin/:path*'],
 }
