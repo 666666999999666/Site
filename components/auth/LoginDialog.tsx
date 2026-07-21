@@ -21,7 +21,6 @@ export function LoginDialog({
   open: boolean
   onOpenChange: (v: boolean) => void
 }) {
-  const [username, setUsername] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
@@ -35,7 +34,7 @@ export function LoginDialog({
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ password }),
       })
       if (res.ok) {
         router.push("/admin")
@@ -54,20 +53,10 @@ export function LoginDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>登录</DialogTitle>
+          <DialogTitle>输入密码</DialogTitle>
           <DialogDescription>私人空间，仅限本人。</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="u">用户名</Label>
-            <Input
-              id="u"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              autoComplete="username"
-              autoFocus
-            />
-          </div>
           <div className="space-y-2">
             <Label htmlFor="p">密码</Label>
             <Input
@@ -76,9 +65,10 @@ export function LoginDialog({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete="current-password"
+              autoFocus
             />
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="submit" disabled={loading}>
               {loading ? "进入中…" : "进入"}
