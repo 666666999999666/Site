@@ -25,10 +25,10 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      className="p-2 rounded-lg text-ink-muted hover:text-accent hover:bg-paper transition-colors"
+      className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
       aria-label={dark ? "切换浅色模式" : "切换深色模式"}
     >
-      {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
     </button>
   )
 }
