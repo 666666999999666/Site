@@ -4,9 +4,17 @@ on:
   push:
     branches: [main]
 
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -14,25 +22,33 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build image
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=sha
+            type=raw,value=latest
+
+      - name: Build and push image
         uses: docker/build-push-action@v6
         with:
           context: .
-          load: true
-          tags: qzsite:latest
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Save and transfer image to server
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.SERVER_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.SERVER_HOST }} >> ~/.ssh/known_hosts 2>/dev/null
-          echo "Saving and transferring image via SSH..."
-          docker save qzsite:latest | gzip | ssh -i ~/.ssh/deploy_key -o ConnectTimeout=30 -o ServerAliveInterval=60 ${{ secrets.SERVER_USER }}@${{ secrets.SERVER_HOST }} "gunzip | docker load"
-
-      - name: Restart services
+      - name: Deploy to server
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.SERVER_HOST }}
@@ -41,5 +57,10 @@ jobs:
           script_stop: true
           script: |
             cd ${{ secrets.SERVER_APP_DIR }}
+            # 服务器已保存 GHCR 凭据，无需重新登录
+            # 拉取最新镜像（增量传输，只下载变化的层）
+            docker compose pull web
+            # 重启服务（数据库数据在 volume 中，不会丢失）
             docker compose up -d web
+            # 清理旧镜像
             docker image prune -f
