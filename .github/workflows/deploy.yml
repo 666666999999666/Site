@@ -52,7 +52,6 @@ jobs:
           script_stop: true
           script: |
             cd ${{ secrets.SERVER_APP_DIR }}
-            docker login ghcr.io -u ${{ github.actor }} -p ${{ secrets.GITHUB_TOKEN }} || true
             docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
             docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest qzsite:latest
             docker compose up -d
