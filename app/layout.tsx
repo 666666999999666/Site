@@ -1,8 +1,5 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { CatButton } from "@/components/auth/CatButton";
-import { Header } from "@/components/layout/Header";
-import { Footer } from "@/components/layout/Footer";
 
 export const metadata: Metadata = {
   title: "QZ Site",
@@ -29,10 +26,7 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: `
           (function(){try{var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches)){document.documentElement.classList.add('dark')}}catch(e){}})()
         `}} />
-        <Header />
-        <main>{children}</main>
-        <Footer />
-        <CatButton />
+        {children}
       </body>
     </html>
   );
