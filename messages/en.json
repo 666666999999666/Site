@@ -1,0 +1,42 @@
+{
+  "nav": {
+    "home": "Home",
+    "blog": "Blog",
+    "projects": "Projects",
+    "about": "About",
+    "github": "GitHub"
+  },
+  "home": {
+    "title": "Welcome",
+    "description": "Thoughts, projects, and explorations in modern Web development.",
+    "readBlog": "Read Blog",
+    "viewProjects": "View Projects",
+    "latestPosts": "Latest Posts",
+    "viewAll": "View All",
+    "latestProjects": "Latest Projects"
+  },
+  "blog": {
+    "title": "Blog",
+    "description": "Thoughts on web development, design, and technology.",
+    "search": "Search articles...",
+    "all": "All",
+    "readMore": "Read more",
+    "minuteRead": "{count} min read"
+  },
+  "projects": {
+    "title": "Projects",
+    "description": "A collection of personal and open-source projects.",
+    "demo": "Live Demo",
+    "source": "Source"
+  },
+  "about": {
+    "title": "About",
+    "description": "Hi, I'm a developer who loves building web applications.",
+    "whatIDo": "What I Do",
+    "techStack": "Tech Stack",
+    "contact": "Contact"
+  },
+  "footer": {
+    "copyright": "© {year} QZ Site. All rights reserved."
+  }
+}
