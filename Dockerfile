@@ -26,6 +26,9 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
+# standalone 可能遗漏的运行时依赖（iron-session、bcryptjs 等 API route 依赖）
+RUN cd /app && npm install --no-fund --no-audit iron-session bcryptjs
+
 # prisma schema + config + 生成代码
 COPY --from=builder /app/prisma/ ./prisma/
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
