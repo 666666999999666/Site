@@ -33,4 +33,4 @@ ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
 # 启动时先建表再启动服务
-CMD ["sh", "-c", "npx prisma db push --skip-generate && node server.js"]
+CMD ["sh", "-c", "npx prisma db push && node server.js"]
