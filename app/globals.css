@@ -46,10 +46,10 @@
   --color-accent-hover: var(--accent-hover);
   --color-line: var(--line);
 
-  /* 字体（引用 Next Font 注入的 CSS 变量，修复原 --font-sans 自引用 bug） */
-  --font-sans: var(--font-noto-sans-sc);
-  --font-serif: var(--font-noto-serif-sc);
-  --font-heading: var(--font-noto-serif-sc);
+  /* 字体（通过 Google Fonts CDN link 引入，运行时加载） */
+  --font-sans: "Noto Sans SC", sans-serif;
+  --font-serif: "Noto Serif SC", serif;
+  --font-heading: "Noto Serif SC", serif;
   --font-mono: ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --radius-sm: calc(var(--radius) * 0.6);
