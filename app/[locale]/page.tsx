@@ -1,30 +1,23 @@
 import { HeroSection } from "@/components/home/HeroSection"
 import { RecentPosts } from "@/components/home/RecentPosts"
-import { ContactSection } from "@/components/home/ContactSection"
+import { LatestProjects, type Project } from "@/components/home/LatestProjects"
 import { getRecentPosts } from "@/lib/posts"
-import { prisma } from "@/lib/db"
 
 export const dynamic = "force-dynamic"
 export const revalidate = 3600
 
-async function getSettings() {
-  const settings = await prisma.setting.findMany()
-  const map: Record<string, string> = {}
-  for (const s of settings) map[s.key] = s.value
-  return {
-    name: map.owner_name || "你的名字",
-    tagline: map.tagline || "今天也想写点什么",
-    email: map.email,
-  }
-}
+// 暂时使用硬编码的项目数据，后续可从数据库获取
+const sampleProjects: Project[] = []
 
-export default async function Home() {
-  const [settings, posts] = await Promise.all([getSettings(), getRecentPosts(5)])
+export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
+  const { locale } = await params
+  const posts = await getRecentPosts(6)
+
   return (
     <>
-      <HeroSection name={settings.name} tagline={settings.tagline} />
-      <RecentPosts posts={posts} />
-      <ContactSection githubUrl={process.env.NEXT_PUBLIC_GITHUB_URL!} email={settings.email} />
+      <HeroSection />
+      <RecentPosts posts={posts} locale={locale} />
+      <LatestProjects projects={sampleProjects} />
     </>
   )
 }

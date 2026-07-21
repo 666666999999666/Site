@@ -1,24 +1,36 @@
 "use client"
 
+import { useTranslations } from "next-intl"
+import { Link } from "@/i18n/navigation"
 import { Container } from "@/components/layout/Container"
-import { motion } from "motion/react"
 
-export function HeroSection({ name, tagline }: { name: string; tagline: string }) {
+export function HeroSection() {
+  const t = useTranslations("home")
   return (
-    <section className="py-24 md:py-32">
+    <section className="py-24 sm:py-36">
       <Container size="narrow">
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="text-center"
-        >
-          <div className="mx-auto mb-8 h-24 w-24 rounded-full bg-accent/10 flex items-center justify-center text-accent text-3xl font-serif">
-            {name.slice(0, 1)}
+        <div className="text-center">
+          <h1 className="text-5xl sm:text-6xl font-bold tracking-tight text-foreground mb-4">
+            {t("title")}
+          </h1>
+          <p className="text-lg text-muted-foreground mb-8">
+            {t("description")}
+          </p>
+          <div className="flex items-center justify-center gap-3">
+            <Link
+              href="/blog"
+              className="inline-flex items-center justify-center bg-primary text-primary-foreground rounded-lg h-9 px-4 text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              {t("readBlog")}
+            </Link>
+            <Link
+              href="/projects"
+              className="inline-flex items-center justify-center border border-border bg-background hover:bg-muted rounded-lg h-9 px-4 text-sm font-medium transition-colors"
+            >
+              {t("viewProjects")}
+            </Link>
           </div>
-          <h1 className="text-4xl md:text-5xl text-ink mb-4">{name}</h1>
-          <p className="text-lg text-ink-muted">{tagline}</p>
-        </motion.div>
+        </div>
       </Container>
     </section>
   )
