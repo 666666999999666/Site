@@ -1,26 +1,10 @@
 import { getTranslations } from "next-intl/server"
 import { Container } from "@/components/layout/Container"
 import { ExternalLink } from "lucide-react"
+import { getAllProjects } from "@/lib/projects"
 
-interface ProjectData {
-  id: string
-  title: string
-  description: string
-  tags: string[]
-  sourceUrl?: string
-  demoUrl?: string
-}
-
-const projects: ProjectData[] = [
-  {
-    id: "1",
-    title: "QZ Site",
-    description:
-      "个人博客与知识管理网站，基于 Next.js 16 + Prisma 7 + Tailwind CSS v4",
-    tags: ["Next.js", "TypeScript", "Prisma", "Tailwind"],
-    sourceUrl: "https://github.com/666666999999666/Site",
-  },
-]
+export const dynamic = "force-dynamic"
+export const revalidate = 3600
 
 export default async function ProjectsPage({
   params,
@@ -28,6 +12,7 @@ export default async function ProjectsPage({
   params: Promise<{ locale: string }>
 }) {
   const t = await getTranslations("projects")
+  const projects = await getAllProjects()
 
   return (
     <section className="py-16">

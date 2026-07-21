@@ -2,12 +2,13 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { FileText, ListTodo, Settings, Home } from "lucide-react"
+import { FileText, ListTodo, Settings, Home, FolderKanban } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const items = [
   { href: "/admin", label: "概览", icon: Home },
   { href: "/admin/posts", label: "Blog", icon: FileText },
+  { href: "/admin/projects", label: "项目管理", icon: FolderKanban },
   { href: "/admin/todos", label: "Todo", icon: ListTodo },
   { href: "/admin/settings", label: "Settings", icon: Settings },
 ]
