@@ -1,7 +1,8 @@
 FROM ccr.ccs.tencentyun.com/lqzzql/node:22-alpine AS deps
 WORKDIR /app
 COPY package.json ./
-RUN npm install --registry=https://registry.npmmirror.com --no-fund --no-audit --no-package-lock
+RUN --mount=type=cache,target=/root/.npm \
+    npm install --registry=https://registry.npmmirror.com --no-fund --no-audit --no-package-lock
 
 FROM ccr.ccs.tencentyun.com/lqzzql/node:22-alpine AS builder
 WORKDIR /app
@@ -10,12 +11,14 @@ COPY . .
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build?schema=public"
 ENV NEXT_PHASE="phase-production-build"
 RUN npx prisma generate
-RUN npm run build
+RUN --mount=type=cache,target=/app/.next/cache \
+    npm run build
 
 # 在独立目录安装 prisma CLI（完整依赖树，不影响 standalone）
 FROM ccr.ccs.tencentyun.com/lqzzql/node:22-alpine AS prisma-cli
 WORKDIR /prisma
-RUN npm init -y && npm install --registry=https://registry.npmmirror.com --no-fund --no-audit prisma@7 dotenv
+RUN --mount=type=cache,target=/root/.npm \
+    npm init -y && npm install --registry=https://registry.npmmirror.com --no-fund --no-audit prisma@7 dotenv
 
 FROM ccr.ccs.tencentyun.com/lqzzql/node:22-alpine AS runner
 WORKDIR /app
@@ -27,7 +30,8 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
 # standalone 可能遗漏的运行时依赖（iron-session、bcryptjs 等 API route 依赖）
-RUN cd /app && npm install --registry=https://registry.npmmirror.com --no-fund --no-audit iron-session bcryptjs
+RUN --mount=type=cache,target=/root/.npm \
+    cd /app && npm install --registry=https://registry.npmmirror.com --no-fund --no-audit iron-session bcryptjs
 
 # prisma schema + config + 生成代码
 COPY --from=builder /app/prisma/ ./prisma/
