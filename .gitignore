@@ -65,5 +65,5 @@ docs/superpowers/
 # temp/debug files
 giteecicd*.md
 
-# Gitee Go auto-generated pipeline config (managed on Gitee platform)
-.workflow/
+# Gitee Go pipeline config (tracked in git, contains no secrets)
+# .workflow/pipeline-deploy.yml uses ${TCR_USERNAME} and ${TCR_PASSWORD} variables
