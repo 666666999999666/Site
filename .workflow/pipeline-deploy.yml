@@ -35,14 +35,6 @@ stages:
   - step: deploy@agent
     name: deploy_agent
     displayName: 主机部署
-    deployArtifact:
-    - name: output
-      target: "~/gitee_go/deploy"
-      source: build
-      dependArtifact: BUILD_ARTIFACT
-      artifactRepository: default
-      artifactName: output
-      artifactVersion: latest
     script: |-
       cd /home/ubuntu/个人网站
       docker login ccr.ccs.tencentyun.com -u ${TCR_USERNAME} -p ${TCR_PASSWORD}
