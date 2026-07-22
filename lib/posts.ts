@@ -25,10 +25,29 @@ export async function getPostBySlug(slug: string) {
 }
 
 export function calculateReadTime(content: string): number {
-  // 中文按字数算，每分钟 300 字
-  const text = content.replace(/<[^>]+>/g, "")
+  // 从 Tiptap JSON 递归提取纯文本，再按字数计算
+  let text: string
+  try {
+    const json = JSON.parse(content)
+    text = extractText(json)
+  } catch {
+    text = content.replace(/<[^>]+>/g, "")
+  }
   const chars = text.length
   return Math.max(1, Math.ceil(chars / 300))
+}
+
+function extractText(node: Record<string, unknown>): string {
+  let result = ""
+  if (typeof node.text === "string") {
+    result += node.text
+  }
+  if (Array.isArray(node.content)) {
+    for (const child of node.content as Record<string, unknown>[]) {
+      result += extractText(child)
+    }
+  }
+  return result
 }
 
 export function generateSlug(title: string): string {

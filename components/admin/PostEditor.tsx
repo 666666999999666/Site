@@ -33,7 +33,7 @@ export function PostEditor({
     },
     editorProps: {
       attributes: {
-        class: "prose prose-neutral max-w-none min-h-[400px] p-4 focus:outline-none font-mono text-sm",
+        class: "prose prose-neutral dark:prose-invert max-w-none min-h-[400px] p-4 focus:outline-none font-mono text-sm",
       },
     },
   })

@@ -13,11 +13,12 @@
     "viewProjects": "View Projects",
     "latestPosts": "Latest Posts",
     "viewAll": "View All",
-    "latestProjects": "Latest Projects"
+    "latestProjects": "Latest Projects",
+    "minuteRead": "{count} min read"
   },
   "blog": {
     "title": "Blog",
-    "description": "Thoughts on web development, design, and technology.",
+    "description": "Thoughts on development, design, and technology.",
     "search": "Search articles...",
     "all": "All",
     "readMore": "Read more",
