@@ -73,7 +73,7 @@ export default async function PostPage({
   const t = await getTranslations("blog")
   const headings = extractHeadings(post.content)
 
-  const date = new Date(post.createdAt).toLocaleDateString(
+  const date = new Date(post.publishedAt ?? post.createdAt).toLocaleDateString(
     locale === "zh" ? "zh-CN" : "en-US",
     { year: "numeric", month: "long", day: "numeric" }
   )

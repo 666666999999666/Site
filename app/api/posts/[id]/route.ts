@@ -22,7 +22,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     const { id } = await params
     const body = await req.json()
-    const { title, content, excerpt, categoryId, tags, status } = body
+    const { title, content, excerpt, categoryId, tags, status, publishedAt } = body
     const data: Record<string, unknown> = {}
     if (title !== undefined) data.title = title
     if (content !== undefined) { data.content = content; data.readTime = calculateReadTime(content) }
@@ -30,6 +30,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     if (categoryId !== undefined) data.categoryId = categoryId || null
     if (tags !== undefined) data.tags = tags
     if (status !== undefined) data.status = status
+    if (publishedAt !== undefined) data.publishedAt = publishedAt ? new Date(publishedAt) : null
     const post = await prisma.post.update({ where: { id }, data })
     return NextResponse.json(post)
   } catch (e) {

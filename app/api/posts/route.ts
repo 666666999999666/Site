@@ -30,8 +30,8 @@ export async function POST(req: NextRequest) {
   if (!(await ensureAuth())) return NextResponse.json({ error: "未登录" }, { status: 401 })
   try {
     const body = await req.json()
-    const { title, content, excerpt, categoryId, tags, status } = body as {
-      title: string; content: string; excerpt?: string; categoryId?: string; tags?: string[]; status: "DRAFT" | "PUBLISHED"
+    const { title, content, excerpt, categoryId, tags, status, publishedAt } = body as {
+      title: string; content: string; excerpt?: string; categoryId?: string; tags?: string[]; status: "DRAFT" | "PUBLISHED"; publishedAt?: string
     }
     if (!title) return NextResponse.json({ error: "标题必填" }, { status: 400 })
     const post = await prisma.post.create({
@@ -44,6 +44,7 @@ export async function POST(req: NextRequest) {
         tags: tags || [],
         status: status || "DRAFT",
         readTime: calculateReadTime(content || ""),
+        publishedAt: publishedAt ? new Date(publishedAt) : new Date(),
       },
     })
     return NextResponse.json(post, { status: 201 })

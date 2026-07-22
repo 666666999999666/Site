@@ -24,6 +24,9 @@ export function PostForm({
   const [excerpt, setExcerpt] = useState(post?.excerpt || "")
   const [categoryId, setCategoryId] = useState(post?.categoryId || "")
   const [tags, setTags] = useState((post?.tags || []).join(", "))
+  const [publishedAt, setPublishedAt] = useState(
+    post?.publishedAt ? new Date(post.publishedAt).toISOString().slice(0, 16) : ""
+  )
   const [pending, startTransition] = useTransition()
 
   async function save(status: "DRAFT" | "PUBLISHED") {
@@ -39,6 +42,7 @@ export function PostForm({
         categoryId: categoryId || null,
         tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
         status,
+        publishedAt: publishedAt || null,
       }
       const url = post ? `/api/posts/${post.id}` : "/api/posts"
       const method = post ? "PUT" : "POST"
@@ -82,6 +86,16 @@ export function PostForm({
           <Label htmlFor="tags">标签（逗号分隔）</Label>
           <Input id="tags" value={tags} onChange={(e) => setTags(e.target.value)} placeholder="技术, 学习" />
         </div>
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="publishedAt">发布时间</Label>
+        <Input
+          id="publishedAt"
+          type="datetime-local"
+          value={publishedAt}
+          onChange={(e) => setPublishedAt(e.target.value)}
+        />
       </div>
 
       <div className="space-y-2">

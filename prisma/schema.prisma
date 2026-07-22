@@ -37,6 +37,7 @@ model Post {
   tags        String[]
   status      PostStatus @default(DRAFT)
   readTime    Int        @default(1)
+  publishedAt DateTime?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 
