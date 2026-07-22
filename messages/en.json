@@ -22,7 +22,8 @@
     "search": "Search articles...",
     "all": "All",
     "readMore": "Read more",
-    "minuteRead": "{count} min read"
+    "minuteRead": "{count} min read",
+    "backLink": "Back to blog"
   },
   "projects": {
     "title": "Projects",

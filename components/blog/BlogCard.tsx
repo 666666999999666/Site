@@ -18,8 +18,8 @@ export function BlogCard({ post, locale }: { post: PostWithCategory; locale: str
   const t = useTranslations("blog")
 
   return (
-    <Link href={`/blog/${post.slug}`} className="group block">
-      <article className="border border-border/50 rounded-lg p-5 transition-all group-hover:border-border group-hover:bg-muted/50">
+    <Link href={`/blog/${post.slug}`} className="group block h-full">
+      <article className="flex flex-col h-full border border-border/50 rounded-lg p-5 transition-all group-hover:border-border group-hover:bg-muted/50">
         {post.category && (
           <span className="text-xs uppercase tracking-wider text-muted-foreground mb-2 block">
             {post.category.name}
@@ -31,7 +31,7 @@ export function BlogCard({ post, locale }: { post: PostWithCategory; locale: str
         {post.excerpt && (
           <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{post.excerpt}</p>
         )}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <div className="mt-auto flex items-center gap-2 text-xs text-muted-foreground">
           <time>{formatDate(post.publishedAt ?? post.createdAt, locale)}</time>
           <span>·</span>
           <span>{t("minuteRead", { count: post.readTime })}</span>
