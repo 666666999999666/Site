@@ -40,7 +40,7 @@ stages:
       docker login ccr.ccs.tencentyun.com -u ${TCR_USERNAME} -p ${TCR_PASSWORD}
       docker compose pull web
       docker compose up -d web
-      docker image prune -f
+      docker image prune -f || true
     hostGroupID:
       ID: tencent-cloud
       hostID:
