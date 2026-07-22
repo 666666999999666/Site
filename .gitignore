@@ -44,5 +44,10 @@ Thumbs.db
 .vscode
 *.swp
 
+# SSL certificates (private keys must never be committed)
+nginx/certs/*.key
+nginx/certs/*.crt
+nginx/certs/*.pem
+
 # superpowers scratch
 .superpowers/
