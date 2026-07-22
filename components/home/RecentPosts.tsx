@@ -56,7 +56,7 @@ export function RecentPosts({ posts, locale }: { posts: PostWithCategory[]; loca
                   <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{p.excerpt}</p>
                 )}
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                  <time>{formatDate(p.createdAt, locale)}</time>
+                  <time>{formatDate(p.publishedAt ?? p.createdAt, locale)}</time>
                   <span>·</span>
                   <span>{p.readTime} {locale === "zh" ? "分钟阅读" : "min read"}</span>
                 </div>

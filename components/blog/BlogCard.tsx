@@ -32,7 +32,7 @@ export function BlogCard({ post, locale }: { post: PostWithCategory; locale: str
           <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{post.excerpt}</p>
         )}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <time>{formatDate(post.createdAt, locale)}</time>
+          <time>{formatDate(post.publishedAt ?? post.createdAt, locale)}</time>
           <span>·</span>
           <span>{t("minuteRead", { count: post.readTime })}</span>
         </div>
