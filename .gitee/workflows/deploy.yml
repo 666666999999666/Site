@@ -1,47 +1,47 @@
-name: build-and-deploy
+version: '1.0'
+name: pipeline-deploy
 displayName: 构建并部署
-
 triggers:
+  trigger: auto
   push:
-    - matchType: PRECISE
-      branch: main
-
+    branches:
+      precise:
+        - main
 variables:
-  TCR_REGISTRY: ccr.ccs.tencentyun.com
-  TCR_IMAGE: ccr.ccs.tencentyun.com/qzsite/web
-
+  TCR_USERNAME: '100033514933'
+  TCR_PASSWORD: dockerlqz123
 stages:
-  - stage:
-      name: build-stage
-      displayName: Docker 镜像构建
-      failFast: true
-      trigger: auto
-      steps:
-        - step: build@docker
-          name: build_docker
-          displayName: 构建并推送镜像到腾讯云 ACR
-          repository: ccr.ccs.tencentyun.com
-          username: ${TCR_USERNAME}
-          password: ${TCR_PASSWORD}
-          tag: qzsite/web:latest,qzsite/web:${GITEE_PIPELINE_BUILD_NUMBER}
-          dockerfile: ./Dockerfile
-          isCache: true
+  - name: build-stage
+    displayName: Docker 镜像构建
+    strategy: fast
+    trigger: auto
+    executor:
+      - lqzzql
+    steps:
+      - step: build@docker
+        name: build_docker
+        displayName: 构建并推送镜像到腾讯云 ACR
+        repository: ccr.ccs.tencentyun.com
+        username: ${TCR_USERNAME}
+        password: ${TCR_PASSWORD}
+        tag: lqzzql/web:latest
+        dockerfile: ./Dockerfile
+        isCache: false
 
-  - stage:
-      name: deploy-stage
-      displayName: 部署到服务器
-      failFast: true
-      trigger: auto
-      steps:
-        - step: ssh@deploy
-          name: ssh_deploy
-          displayName: SSH 部署
-          host: ${SERVER_HOST}
-          user: ${SERVER_USER}
-          privateKey: ${SERVER_SSH_KEY}
-          commands:
-            - cd ${SERVER_APP_DIR}
-            - docker login ccr.ccs.tencentyun.com -u ${TCR_USERNAME} -p ${TCR_PASSWORD}
-            - docker compose pull web
-            - docker compose up -d web
-            - docker image prune -f
+  - name: deploy-stage
+    displayName: 部署到服务器
+    strategy: fast
+    trigger: auto
+    executor:
+      - lqzzql
+    steps:
+      - step: deploy@agent
+        name: deploy_agent
+        displayName: 主机部署
+        hostGroupID: tencent-cloud
+        script: |
+          cd /home/ubuntu/个人网站
+          docker login ccr.ccs.tencentyun.com -u ${TCR_USERNAME} -p ${TCR_PASSWORD}
+          docker compose pull web
+          docker compose up -d web
+          docker image prune -f

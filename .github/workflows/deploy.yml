@@ -6,7 +6,7 @@ on:
 
 env:
   TCR_REGISTRY: ccr.ccs.tencentyun.com
-  TCR_IMAGE: ccr.ccs.tencentyun.com/qzsite/web
+  TCR_IMAGE: ccr.ccs.tencentyun.com/lqzzql/web
 
 jobs:
   build-and-deploy:
