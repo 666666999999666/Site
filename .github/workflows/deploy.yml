@@ -49,4 +49,4 @@ jobs:
             docker login ccr.ccs.tencentyun.com -u ${{ secrets.TCR_USERNAME }} -p ${{ secrets.TCR_PASSWORD }}
             docker compose pull web
             docker compose up -d web
-            docker image prune -f
+            docker image prune -f || true
