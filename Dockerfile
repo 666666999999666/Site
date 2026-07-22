@@ -1,11 +1,13 @@
 FROM ccr.ccs.tencentyun.com/lqzzql/node:22-alpine AS deps
 WORKDIR /app
+ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
 COPY package.json ./
 RUN --mount=type=cache,target=/root/.npm \
     npm install --registry=https://registry.npmmirror.com --no-fund --no-audit --no-package-lock
 
 FROM ccr.ccs.tencentyun.com/lqzzql/node:22-alpine AS builder
 WORKDIR /app
+ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build?schema=public"
@@ -17,6 +19,7 @@ RUN --mount=type=cache,target=/app/.next/cache \
 # 在独立目录安装 prisma CLI（完整依赖树，不影响 standalone）
 FROM ccr.ccs.tencentyun.com/lqzzql/node:22-alpine AS prisma-cli
 WORKDIR /prisma
+ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
 RUN --mount=type=cache,target=/root/.npm \
     npm init -y && npm install --registry=https://registry.npmmirror.com --no-fund --no-audit prisma@7 dotenv
 
