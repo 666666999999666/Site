@@ -11,7 +11,6 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
   const router = useRouter()
   const [form, setForm] = useState({
     owner_name: initial.owner_name || "",
-    tagline: initial.tagline || "",
     email: initial.email || "",
     home_tagline: initial.home_tagline || "",
     about_intro: initial.about_intro || "",
@@ -41,10 +40,6 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
       <div className="space-y-2">
         <Label>姓名</Label>
         <Input value={form.owner_name} onChange={(e) => set("owner_name", e.target.value)} />
-      </div>
-      <div className="space-y-2">
-        <Label>一句话标语</Label>
-        <Input value={form.tagline} onChange={(e) => set("tagline", e.target.value)} />
       </div>
       <div className="space-y-2">
         <Label>邮箱</Label>

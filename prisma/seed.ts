@@ -18,12 +18,6 @@ async function main() {
     update: {},
     create: { key: 'owner_name', value: '你的名字' },
   })
-  await prisma.setting.upsert({
-    where: { key: 'tagline' },
-    update: {},
-    create: { key: 'tagline', value: '今天也想写点什么' },
-  })
-
   // 内容管理相关设置
   await prisma.setting.upsert({
     where: { key: 'home_tagline' },
