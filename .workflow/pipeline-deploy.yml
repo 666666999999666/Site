@@ -10,6 +10,10 @@ triggers:
         - main
       include: []
 notify: []
+variables:
+  global:
+    - TCR_USERNAME
+    - TCR_PASSWORD
 stages:
   - name: Docker 镜像构建
     displayName: Docker 镜像构建
