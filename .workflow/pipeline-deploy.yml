@@ -1,0 +1,63 @@
+version: '1.0'
+name: pipeline-deploy
+displayName: 构建并部署
+triggers:
+  trigger: auto
+  push:
+    branches:
+      precise:
+        - main
+stages:
+  - name: stage-build
+    displayName: Docker 镜像构建
+    strategy: naturally
+    trigger: auto
+    executor: []
+    steps:
+      - step: build@docker
+        name: build_docker
+        displayName: 镜像构建
+        type: account
+        repository: ccr.ccs.tencentyun.com
+        username: '100033514933'
+        password: dockerlqz123
+        tag: lqzzql/web:latest
+        dockerfile: ./Dockerfile
+        context: ''
+        artifacts: []
+        isCache: false
+        processorType:
+          - amd64
+        parameter: {}
+        notify: []
+        strategy:
+          retry: '0'
+  - name: stage-deploy
+    displayName: 部署到服务器
+    strategy: naturally
+    trigger: auto
+    executor: []
+    steps:
+      - step: deploy@agent
+        name: deploy_agent
+        displayName: 主机部署
+        hostGroupID:
+          ID: tencent-cloud
+          hostID:
+            - b57ee737-9ddd-4dba-bda2-0322378ea9f2
+        deployArtifact:
+          - source: artifact
+            name: output
+            target: ~/gitee_go/deploy
+            artifactRepository: default
+            artifactName: output
+            artifactVersion: latest
+        script:
+          - cd /home/ubuntu/个人网站
+          - docker login ccr.ccs.tencentyun.com -u 100033514933 -p dockerlqz123
+          - docker compose pull web
+          - docker compose up -d web
+          - docker image prune -f
+        notify: []
+        strategy:
+          retry: '0'
