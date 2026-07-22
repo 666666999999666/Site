@@ -64,3 +64,6 @@ docs/superpowers/
 
 # temp/debug files
 giteecicd*.md
+
+# Gitee Go auto-generated pipeline config (managed on Gitee platform)
+.workflow/
