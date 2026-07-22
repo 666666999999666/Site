@@ -41,17 +41,7 @@ stages:
       - step: deploy@agent
         name: deploy_agent
         displayName: 主机部署
-        hostGroupID:
-          ID: tencent-cloud
-          hostID:
-            - b57ee737-9ddd-4dba-bda2-0322378ea9f2
-        deployArtifact:
-          - source: artifact
-            name: output
-            target: ~/gitee_go/deploy
-            artifactRepository: default
-            artifactName: output
-            artifactVersion: latest
+        hostGroupID: tencent-cloud
         script:
           - cd /home/ubuntu/个人网站
           - docker login ccr.ccs.tencentyun.com -u 100033514933 -p dockerlqz123
