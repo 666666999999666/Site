@@ -1,53 +1,66 @@
-version: '1.0'
+version: "1.0"
 name: pipeline-deploy
 displayName: 构建并部署
+stages:
+- name: Docker 镜像构建
+  displayName: Docker 镜像构建
+  strategy: naturally
+  trigger: auto
+  executor: []
+  steps:
+  - step: build@docker
+    name: build_docker
+    displayName: 镜像构建
+    type: account
+    repository: ccr.ccs.tencentyun.com
+    username: "${TCR_USERNAME}"
+    password: "${TCR_PASSWORD}"
+    tag: lqzzql/web:latest
+    dockerfile: ./Dockerfile
+    context: ""
+    artifacts: []
+    isCache: false
+    processorType:
+    - amd64
+    parameter: {}
+    notify: []
+    strategy:
+      retry: "0"
+- name: 部署到服务器
+  displayName: 部署到服务器
+  strategy: naturally
+  trigger: auto
+  executor: []
+  steps:
+  - step: deploy@agent
+    name: deploy_agent
+    displayName: 主机部署
+    deployArtifact:
+    - name: output
+      target: "~/gitee_go/deploy"
+      source: build
+      dependArtifact: BUILD_ARTIFACT
+      artifactRepository: default
+      artifactName: output
+      artifactVersion: latest
+    script: |-
+      cd /home/ubuntu/个人网站
+      docker login ccr.ccs.tencentyun.com -u ${TCR_USERNAME} -p ${TCR_PASSWORD}
+      docker compose pull web
+      docker compose up -d web
+      docker image prune -f
+    notify: []
+    strategy:
+      retry: "0"
 triggers:
   trigger: auto
   push:
     branches:
+      prefix: []
       precise:
-        - main
-stages:
-  - name: stage-build
-    displayName: Docker 镜像构建
-    strategy: naturally
-    trigger: auto
-    executor: []
-    steps:
-      - step: build@docker
-        name: build_docker
-        displayName: 镜像构建
-        type: account
-        repository: ccr.ccs.tencentyun.com
-        username: ${TCR_USERNAME}
-        password: ${TCR_PASSWORD}
-        tag: lqzzql/web:latest
-        dockerfile: ./Dockerfile
-        context: ''
-        artifacts: []
-        isCache: false
-        processorType:
-          - amd64
-        parameter: {}
-        notify: []
-        strategy:
-          retry: '0'
-  - name: stage-deploy
-    displayName: 部署到服务器
-    strategy: naturally
-    trigger: auto
-    executor: []
-    steps:
-      - step: deploy@agent
-        name: deploy_agent
-        displayName: 主机部署
-        hostGroupID: tencent-cloud
-        script:
-            - cd /home/ubuntu/个人网站
-            - docker login ccr.ccs.tencentyun.com -u ${TCR_USERNAME} -p ${TCR_PASSWORD}
-            - docker compose pull web
-            - docker compose up -d web
-            - docker image prune -f
-        notify: []
-        strategy:
-          retry: '0'
+      - main
+      include: []
+notify: []
+variables:
+  TCR_USERNAME: "100033514933"
+  TCR_PASSWORD: dockerlqz123
