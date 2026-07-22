@@ -1,9 +1,9 @@
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 
-FROM node:20-alpine AS builder
+FROM node:22-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -13,11 +13,11 @@ RUN npx prisma generate
 RUN npm run build
 
 # 在独立目录安装 prisma CLI（完整依赖树，不影响 standalone）
-FROM node:20-alpine AS prisma-cli
+FROM node:22-alpine AS prisma-cli
 WORKDIR /prisma
 RUN npm init -y && npm install --no-fund --no-audit prisma@7 dotenv
 
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 
