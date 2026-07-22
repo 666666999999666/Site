@@ -13,11 +13,12 @@
     "viewProjects": "查看项目",
     "latestPosts": "最新文章",
     "viewAll": "查看全部",
-    "latestProjects": "最新项目"
+    "latestProjects": "最新项目",
+    "minuteRead": "{count}分钟阅读"
   },
   "blog": {
     "title": "博客",
-    "description": "关于 Web 开发、设计和技术的思考。",
+    "description": "关于开发、设计和技术的思考。",
     "search": "搜索文章...",
     "all": "全部",
     "readMore": "阅读更多",
