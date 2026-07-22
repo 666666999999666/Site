@@ -3,7 +3,8 @@ import { prisma } from '../lib/db'
 import { hashPassword } from '../lib/auth/password'
 
 async function main() {
-  const password = process.env.SEED_PASSWORD || 'admin123'
+  const password = process.env.SEED_PASSWORD
+  if (!password) throw new Error('SEED_PASSWORD environment variable is required')
   const hash = await hashPassword(password)
 
   await prisma.user.upsert({
@@ -18,7 +19,6 @@ async function main() {
     update: {},
     create: { key: 'owner_name', value: '你的名字' },
   })
-  // 内容管理相关设置
   await prisma.setting.upsert({
     where: { key: 'home_tagline' },
     update: {},
@@ -45,7 +45,6 @@ async function main() {
     create: { key: 'about_email', value: '' },
   })
 
-  // 初始化示例项目
   await prisma.project.upsert({
     where: { id: 'proj-qzsite' },
     update: {},
@@ -59,7 +58,6 @@ async function main() {
     },
   })
 
-  // 初始化默认分区
   await prisma.category.upsert({
     where: { id: 'cat-blog-tech' },
     update: {},
@@ -71,8 +69,7 @@ async function main() {
     create: { id: 'cat-todo-study', name: '学习', type: 'TODO', sortOrder: 0 },
   })
 
-  console.log('Seed 完成')
-  console.log('默认账号: admin /', password)
+  console.log('Seed completed')
 }
 
 main().catch(console.error).finally(() => prisma.$disconnect())
