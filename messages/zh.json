@@ -22,7 +22,8 @@
     "search": "搜索文章...",
     "all": "全部",
     "readMore": "阅读更多",
-    "minuteRead": "{count}分钟阅读"
+    "minuteRead": "{count}分钟阅读",
+    "backLink": "返回博客"
   },
   "projects": {
     "title": "项目",

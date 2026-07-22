@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation"
 import { getTranslations } from "next-intl/server"
 import { prisma } from "@/lib/db"
+import { Link } from "@/i18n/navigation"
 import { PostContent } from "@/components/blog/PostContent"
 import { TableOfContents } from "@/components/blog/TableOfContents"
 
@@ -85,6 +86,12 @@ export default async function PostPage({
           {/* Main content */}
           <article className="min-w-0 max-w-3xl flex-1">
             <header className="mb-10">
+              <Link
+                href="/blog"
+                className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground transition-colors mb-6"
+              >
+                ← {t("backLink")}
+              </Link>
               <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-foreground mb-4">
                 {post.title}
               </h1>

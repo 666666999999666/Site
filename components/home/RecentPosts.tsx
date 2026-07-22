@@ -42,8 +42,8 @@ export function RecentPosts({ posts, locale }: { posts: PostWithCategory[]; loca
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {posts.map((p) => (
-            <Link key={p.id} href={`/blog/${p.slug}`} className="group block">
-              <article className="border border-border/50 rounded-lg p-5 transition-all group-hover:border-border group-hover:bg-muted/50">
+            <Link key={p.id} href={`/blog/${p.slug}`} className="group block h-full">
+              <article className="flex flex-col h-full border border-border/50 rounded-lg p-5 transition-all group-hover:border-border group-hover:bg-muted/50">
                 {p.category && (
                   <span className="text-xs text-muted-foreground mb-2 block">
                     {p.category.name}
@@ -55,7 +55,7 @@ export function RecentPosts({ posts, locale }: { posts: PostWithCategory[]; loca
                 {p.excerpt && (
                   <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{p.excerpt}</p>
                 )}
-                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <div className="mt-auto flex items-center gap-2 text-xs text-muted-foreground">
                   <time>{formatDate(p.publishedAt ?? p.createdAt, locale)}</time>
                   <span>·</span>
                   <span>{t("minuteRead", { count: p.readTime })}</span>
