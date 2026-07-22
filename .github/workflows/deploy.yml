@@ -1,8 +1,7 @@
 name: Build and Deploy
 
 on:
-  push:
-    branches: [main]
+  workflow_dispatch:  # 只允许手动触发，不再自动运行
 
 env:
   TCR_REGISTRY: ccr.ccs.tencentyun.com
@@ -47,11 +46,7 @@ jobs:
           command_timeout: 30m
           script: |
             cd ${{ secrets.SERVER_APP_DIR }}
-            # 登录腾讯云 ACR（内网拉取免流量费）
             docker login ccr.ccs.tencentyun.com -u ${{ secrets.TCR_USERNAME }} -p ${{ secrets.TCR_PASSWORD }}
-            # 拉取最新镜像（腾讯云内网，速度极快）
             docker compose pull web
-            # 重启服务（数据库数据在 volume 中，不会丢失）
             docker compose up -d web
-            # 清理旧镜像
             docker image prune -f
