@@ -1,68 +1,47 @@
-name: Build and Deploy
+name: build-and-deploy
+displayName: 构建并部署
 
-on:
+triggers:
   push:
-    branches:
-      - main
+    - matchType: PRECISE
+      branch: main
 
-env:
+variables:
   TCR_REGISTRY: ccr.ccs.tencentyun.com
   TCR_IMAGE: ccr.ccs.tencentyun.com/qzsite/web
 
 stages:
-  - name: build-and-push
-    jobs:
-      - name: docker-build-push
-        displayName: Docker 构建并推送镜像到腾讯云 ACR
-        runsOn: public/cn-east-2-docker
-        env:
-          TCR_USERNAME: ${{ gitee.TCR_USERNAME }}
-          TCR_PASSWORD: ${{ gitee.TCR_PASSWORD }}
-          TCR_REGISTRY: ${{ env.TCR_REGISTRY }}
-          TCR_IMAGE: ${{ env.TCR_IMAGE }}
-        step: build@docker
-        dockerfilePath: ./Dockerfile
-        dockerContext: .
-        image:
-          - ${{ env.TCR_IMAGE }}:latest
-          - ${{ env.TCR_IMAGE }}:${{ gitee.sha }}
-        registry: ${{ env.TCR_REGISTRY }}
-        username: ${{ gitee.TCR_USERNAME }}
-        password: ${{ gitee.TCR_PASSWORD }}
+  - stage:
+      name: build-stage
+      displayName: Docker 镜像构建
+      failFast: true
+      trigger: auto
+      steps:
+        - step: build@docker
+          name: build_docker
+          displayName: 构建并推送镜像到腾讯云 ACR
+          repository: ccr.ccs.tencentyun.com
+          username: ${TCR_USERNAME}
+          password: ${TCR_PASSWORD}
+          tag: qzsite/web:latest,qzsite/web:${GITEE_PIPELINE_BUILD_NUMBER}
+          dockerfile: ./Dockerfile
+          isCache: true
 
-  - name: deploy
-    dependsOn: build-and-push
-    jobs:
-      - name: ssh-deploy
-        displayName: SSH 部署到腾讯云服务器
-        runsOn: public/cn-east-2
-        env:
-          SERVER_HOST: ${{ gitee.SERVER_HOST }}
-          SERVER_USER: ${{ gitee.SERVER_USER }}
-          SERVER_SSH_KEY: ${{ gitee.SERVER_SSH_KEY }}
-          SERVER_APP_DIR: ${{ gitee.SERVER_APP_DIR }}
-          TCR_USERNAME: ${{ gitee.TCR_USERNAME }}
-          TCR_PASSWORD: ${{ gitee.TCR_PASSWORD }}
-          TCR_REGISTRY: ${{ env.TCR_REGISTRY }}
-        steps:
-          - name: deploy-via-ssh
-            displayName: 拉取镜像并部署
-            script: |
-              # 配置 SSH 密钥
-              mkdir -p ~/.ssh
-              echo "${SERVER_SSH_KEY}" > ~/.ssh/deploy_key
-              chmod 600 ~/.ssh/deploy_key
-              ssh-keyscan -H ${SERVER_HOST} >> ~/.ssh/known_hosts 2>/dev/null
-
-              # SSH 到服务器执行部署
-              ssh -o StrictHostKeyChecking=no -i ~/.ssh/deploy_key ${SERVER_USER}@${SERVER_HOST} << 'DEPLOY'
-                cd ${{ env.SERVER_APP_DIR }}
-                # 登录腾讯云 ACR（内网拉取免流量费）
-                docker login ccr.ccs.tencentyun.com -u ${TCR_USERNAME} -p ${TCR_PASSWORD}
-                # 拉取最新镜像（腾讯云内网，速度极快）
-                docker compose pull web
-                # 重启服务（数据库数据在 volume 中，不会丢失）
-                docker compose up -d web
-                # 清理旧镜像
-                docker image prune -f
-              DEPLOY
+  - stage:
+      name: deploy-stage
+      displayName: 部署到服务器
+      failFast: true
+      trigger: auto
+      steps:
+        - step: ssh@deploy
+          name: ssh_deploy
+          displayName: SSH 部署
+          host: ${SERVER_HOST}
+          user: ${SERVER_USER}
+          privateKey: ${SERVER_SSH_KEY}
+          commands:
+            - cd ${SERVER_APP_DIR}
+            - docker login ccr.ccs.tencentyun.com -u ${TCR_USERNAME} -p ${TCR_PASSWORD}
+            - docker compose pull web
+            - docker compose up -d web
+            - docker image prune -f
