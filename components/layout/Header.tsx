@@ -5,11 +5,20 @@ import { Link, usePathname } from '@/i18n/navigation';
 import { ThemeToggle } from './ThemeToggle';
 import { LanguageToggle } from './LanguageToggle';
 import { MobileMenu } from './MobileMenu';
+import { useEffect, useState } from 'react';
 
 export function Header() {
   const t = useTranslations('nav');
   const locale = useLocale();
   const pathname = usePathname();
+  const [siteName, setSiteName] = useState('QZ Site');
+
+  useEffect(() => {
+    fetch('/api/settings?keys=owner_name')
+      .then((r) => r.json())
+      .then((d) => { if (d.owner_name) setSiteName(d.owner_name) })
+      .catch(() => {})
+  }, []);
 
   const links = [
     { href: '/', label: t('home') },
@@ -31,7 +40,7 @@ export function Header() {
           locale={locale}
           className="text-sm font-semibold tracking-tight hover:opacity-80 transition-opacity"
         >
-          QZ Site
+          {siteName}
         </Link>
 
         <nav className="hidden sm:flex items-center gap-1">
