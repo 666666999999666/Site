@@ -5,12 +5,13 @@ import { prisma } from "@/lib/db"
 export default async function AboutPage() {
   const t = await getTranslations("about")
 
-  const keys = ["about_intro", "about_skills", "about_github", "email"]
+  const keys = ["about_intro", "about_whatido", "about_skills", "about_github", "email"]
   const settings = await prisma.setting.findMany({ where: { key: { in: keys } } })
   const map: Record<string, string> = {}
   for (const s of settings) map[s.key] = s.value
 
   const intro = map.about_intro || ""
+  const whatIDo = map.about_whatido || ""
   const skills = map.about_skills
     ? map.about_skills.split(",").map((s) => s.trim()).filter(Boolean)
     : []
@@ -34,7 +35,7 @@ export default async function AboutPage() {
               {t("whatIDo")}
             </h2>
             <p className="text-muted-foreground mt-3 leading-relaxed">
-              {intro || t("description")}
+              {whatIDo || intro || t("description")}
             </p>
           </div>
 
