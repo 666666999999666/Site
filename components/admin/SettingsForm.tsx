@@ -14,6 +14,7 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
     email: initial.email || "",
     home_tagline: initial.home_tagline || "",
     about_intro: initial.about_intro || "",
+    about_whatido: initial.about_whatido || "",
     about_skills: initial.about_skills || "",
     about_github: initial.about_github || "",
   })
@@ -53,6 +54,11 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
       <div className="space-y-2">
         <Label>关于页介绍</Label>
         <Textarea value={form.about_intro} onChange={(e) => set("about_intro", e.target.value)} rows={3} placeholder="关于页的自我介绍" />
+      </div>
+
+      <div className="space-y-2">
+        <Label>我做什么</Label>
+        <Textarea value={form.about_whatido} onChange={(e) => set("about_whatido", e.target.value)} rows={3} placeholder="描述你做什么工作/提供什么服务" />
       </div>
 
       <div className="space-y-2">
