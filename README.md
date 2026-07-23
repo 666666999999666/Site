@@ -119,6 +119,16 @@ git push origin main
 | `SERVER_SSH_KEY` | SSH 私钥 |
 | `SERVER_APP_DIR` | 应用目录 |
 
+## 服务器安全
+
+- **SSH 密码登录**：已禁用（`PasswordAuthentication no`）
+- **Root 登录**：已禁用（`PermitRootLogin no`）
+- **SSH 密钥登录**：仅允许授权密钥（你的电脑 + GitHub Actions 专用密钥）
+- **日常运维**：只能通过 `git push origin main` → CI/CD 自动部署
+- **紧急运维**：腾讯云控制台 VNC 登录（SSH 密钥丢失时）
+
+> **重要**：不要在服务器上直接修改代码或配置。所有变更必须通过 git push → CI/CD 部署。
+
 ## 服务器维护
 
 ### 自动化任务（crontab）
@@ -133,9 +143,9 @@ git push origin main
 | 任务 | 方式 |
 |------|------|
 | SSL 证书续期 | 腾讯云 SSL 控制台续期 → 替换 `nginx/certs/` → `docker compose restart nginx` |
-| 查看数据库备份 | `ls ~/backups/` |
-| 查看容器状态 | `docker ps` |
-| 查看网站日志 | `docker logs qzsite-web-1 --tail 50` |
+| 查看数据库备份 | 腾讯云 VNC → `ls ~/backups/` |
+| 查看容器状态 | 腾讯云 VNC → `docker ps` |
+| 查看网站日志 | 腾讯云 VNC → `docker logs qzsite-web-1 --tail 50` |
 | 手动触发部署 | Gitee Go 流水线页面 → 手动触发（或 `git push origin main`） |
 | GitHub Actions 备份部署 | GitHub Actions 页面 → Run workflow（手动） |
 
@@ -154,6 +164,7 @@ git push origin main
 5. `docker compose up -d`
 6. 安装 Gitee Go Agent（参考 Gitee Go 文档）
 7. 配置 crontab：`backup-db.sh` + `check-ssl.sh`
+8. 禁用 SSH 密码登录：`PasswordAuthentication no` + `PermitRootLogin no`
 
 ## 基础设施
 
@@ -161,7 +172,7 @@ git push origin main
 |------|------|------|
 | 服务器 | 腾讯云 CVM | Ubuntu 22.04 |
 | 镜像仓库 | 腾讯云 ACR | `ccr.ccs.tencentyun.com/lqzzql/` |
-| CI/CD（主） | Gitee Go | push 触发，agent 部署 |
-| CI/CD（备份） | GitHub Actions | 手动触发，SSH 部署 |
+| CI/CD（主） | Gitee Go | push 触发，agent 部署（HTTPS 长连接，不依赖 SSH） |
+| CI/CD（备份） | GitHub Actions | 手动触发，SSH 密钥部署（专用 deploy key） |
 | 域名 | `liaoqizai.site` | SSL 已配置 |
 | 代码仓库 | GitHub + Gitee | `git push origin main` 同时推送 |
