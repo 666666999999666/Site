@@ -11,6 +11,12 @@ import { Textarea } from "@/components/ui/textarea"
 
 type PostWithCategory = Post & { category: Category | null }
 
+function toLocalDatetimeInput(date: string | Date): string {
+  const d = new Date(date)
+  const offset = d.getTimezoneOffset() * 60000
+  return new Date(d.getTime() - offset).toISOString().slice(0, 16)
+}
+
 export function PostForm({
   post,
   categories,
@@ -25,7 +31,7 @@ export function PostForm({
   const [categoryId, setCategoryId] = useState(post?.categoryId || "")
   const [tags, setTags] = useState((post?.tags || []).join(", "))
   const [publishedAt, setPublishedAt] = useState(
-    post?.publishedAt ? new Date(post.publishedAt).toISOString().slice(0, 16) : ""
+    post?.publishedAt ? toLocalDatetimeInput(post.publishedAt) : ""
   )
   const [pending, startTransition] = useTransition()
 
