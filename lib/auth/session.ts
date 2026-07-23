@@ -14,7 +14,7 @@ const sessionOptions: SessionOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production' && !!process.env.NEXT_PUBLIC_SITE_URL?.startsWith('https'),
     sameSite: 'lax',
-    maxAge: 60 * 60 * 24, // 24 小时
+    maxAge: 60 * 60 * 24 * 30, // 30 天
   },
 }
 
