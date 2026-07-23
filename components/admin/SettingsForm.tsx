@@ -19,6 +19,7 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
     about_github: initial.about_github || "",
   })
   const [pending, startTransition] = useTransition()
+  const [feedback, setFeedback] = useState<"saved" | "error" | null>(null)
 
   function set(key: string, value: string) {
     setForm((f) => ({ ...f, [key]: value }))
@@ -26,12 +27,22 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
 
   async function save() {
     startTransition(async () => {
-      await fetch("/api/settings", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      })
-      router.refresh()
+      try {
+        const res = await fetch("/api/settings", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(form),
+        })
+        if (res.ok) {
+          setFeedback("saved")
+          router.refresh()
+        } else {
+          setFeedback("error")
+        }
+      } catch {
+        setFeedback("error")
+      }
+      setTimeout(() => setFeedback(null), 2000)
     })
   }
 
@@ -71,7 +82,11 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
         <Input value={form.about_github} onChange={(e) => set("about_github", e.target.value)} placeholder="https://github.com/..." />
       </div>
 
-      <Button onClick={save} disabled={pending}>保存</Button>
+      <div className="flex items-center gap-3">
+        <Button onClick={save} disabled={pending}>保存</Button>
+        {feedback === "saved" && <span className="text-sm text-green-600">已保存</span>}
+        {feedback === "error" && <span className="text-sm text-red-600">保存失败</span>}
+      </div>
     </div>
   )
 }

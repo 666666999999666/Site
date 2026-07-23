@@ -3,6 +3,7 @@
 import { useEditor, EditorContent } from "@tiptap/react"
 import StarterKit from "@tiptap/starter-kit"
 import Image from "@tiptap/extension-image"
+import Link from "@tiptap/extension-link"
 import Placeholder from "@tiptap/extension-placeholder"
 import { useRef, useEffect } from "react"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ export function PostEditor({
     extensions: [
       StarterKit,
       Image,
+      Link.configure({ openOnClick: false }),
       Placeholder.configure({ placeholder: "开始写点什么…" }),
     ],
     content: value ? safeParse(value) : "",
