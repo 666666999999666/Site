@@ -50,8 +50,6 @@ function extractText(node: Record<string, unknown>): string {
   return result
 }
 
-export function generateSlug(title: string): string {
-  const ts = Date.now().toString(36)
-  const clean = title.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]/g, "-").toLowerCase().slice(0, 30)
-  return `${clean}-${ts}`
+export function generateSlug(): string {
+  return Date.now().toString(36)
 }

@@ -5,7 +5,7 @@ import { prisma } from "@/lib/db"
 export default async function AboutPage() {
   const t = await getTranslations("about")
 
-  const keys = ["about_intro", "about_skills", "about_github", "about_email"]
+  const keys = ["about_intro", "about_skills", "about_github", "email"]
   const settings = await prisma.setting.findMany({ where: { key: { in: keys } } })
   const map: Record<string, string> = {}
   for (const s of settings) map[s.key] = s.value
@@ -15,7 +15,7 @@ export default async function AboutPage() {
     ? map.about_skills.split(",").map((s) => s.trim()).filter(Boolean)
     : []
   const github = map.about_github || ""
-  const email = map.about_email || ""
+  const email = map.email || ""
 
   return (
     <section className="py-16">
