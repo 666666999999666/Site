@@ -6,6 +6,21 @@ import { LogOut, ShieldOff } from "lucide-react"
 
 export function LogoutButton() {
   const router = useRouter()
+  return (
+    <button
+      onClick={() => {
+        router.push("/")
+        router.refresh()
+      }}
+      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
+    >
+      <LogOut className="size-4" /> 退出后台
+    </button>
+  )
+}
+
+export function SignOutButton() {
+  const router = useRouter()
   const [showConfirm, setShowConfirm] = useState(false)
   const [loggingOut, setLoggingOut] = useState(false)
 
@@ -18,16 +33,6 @@ export function LogoutButton() {
 
   return (
     <div className="space-y-2">
-      <button
-        onClick={() => {
-          router.push("/")
-          router.refresh()
-        }}
-        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
-      >
-        <LogOut className="size-4" /> 退出后台
-      </button>
-
       {showConfirm ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 space-y-2">
           <p className="text-xs text-destructive">注销后需重新输入密码</p>
@@ -50,9 +55,9 @@ export function LogoutButton() {
       ) : (
         <button
           onClick={() => setShowConfirm(true)}
-          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-xs text-muted-foreground/60 hover:text-destructive hover:bg-destructive/5 transition-colors"
+          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
         >
-          <ShieldOff className="size-3.5" /> 注销登录
+          <ShieldOff className="size-4" /> 注销登录
         </button>
       )}
     </div>
