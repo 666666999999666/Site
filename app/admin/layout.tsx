@@ -14,8 +14,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <span className="font-sans text-lg text-foreground">QZ Site 后台</span>
         </div>
         <AdminSidebar />
-        <div className="mt-auto pt-4 border-t border-border/50 space-y-1">
+        <div className="mt-4">
           <LogoutButton />
+        </div>
+        <div className="mt-auto">
           <SignOutButton />
         </div>
       </aside>
