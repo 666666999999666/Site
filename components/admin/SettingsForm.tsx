@@ -16,7 +16,6 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
     about_intro: initial.about_intro || "",
     about_skills: initial.about_skills || "",
     about_github: initial.about_github || "",
-    about_email: initial.about_email || "",
   })
   const [pending, startTransition] = useTransition()
 
@@ -39,11 +38,11 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
     <div className="space-y-4 max-w-md">
       <div className="space-y-2">
         <Label>姓名</Label>
-        <Input value={form.owner_name} onChange={(e) => set("owner_name", e.target.value)} />
+        <Input value={form.owner_name} onChange={(e) => set("owner_name", e.target.value)} placeholder="显示在页脚版权信息中" />
       </div>
       <div className="space-y-2">
         <Label>邮箱</Label>
-        <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
+        <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="关于页联系方式邮箱" />
       </div>
 
       <div className="space-y-2">
@@ -64,11 +63,6 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
       <div className="space-y-2">
         <Label>GitHub 链接</Label>
         <Input value={form.about_github} onChange={(e) => set("about_github", e.target.value)} placeholder="https://github.com/..." />
-      </div>
-
-      <div className="space-y-2">
-        <Label>邮箱（关于页）</Label>
-        <Input type="email" value={form.about_email} onChange={(e) => set("about_email", e.target.value)} placeholder="关于页联系方式邮箱" />
       </div>
 
       <Button onClick={save} disabled={pending}>保存</Button>

@@ -39,6 +39,6 @@
     "contact": "联系方式"
   },
   "footer": {
-    "copyright": "© {year} QZ Site. All rights reserved."
+    "copyright": "© {year} {name}. All rights reserved."
   }
 }

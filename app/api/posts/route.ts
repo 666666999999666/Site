@@ -39,7 +39,7 @@ export async function POST(req: NextRequest) {
         title,
         content: content || "",
         excerpt,
-        slug: generateSlug(title),
+        slug: generateSlug(),
         categoryId: categoryId || null,
         tags: tags || [],
         status: status || "DRAFT",
