@@ -26,7 +26,6 @@ RUN --mount=type=cache,target=/root/.npm \
 FROM ccr.ccs.tencentyun.com/lqzzql/node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
 
 # standalone 输出已包含运行时所需的最小依赖（含 pg、@prisma/client 等）
 COPY --from=builder /app/.next/standalone ./
@@ -34,8 +33,9 @@ COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
 # standalone 可能遗漏的运行时依赖（iron-session、bcryptjs 等 API route 依赖）
+# --ignore-scripts: 跳过 postinstall，避免 @prisma/engines 下载引擎二进制文件（runner 不需要）
 RUN --mount=type=cache,target=/root/.npm \
-    cd /app && npm install --registry=https://registry.npmmirror.com --no-fund --no-audit --legacy-peer-deps iron-session bcryptjs
+    cd /app && npm install --registry=https://registry.npmmirror.com --no-fund --no-audit --legacy-peer-deps --ignore-scripts iron-session bcryptjs
 
 # prisma schema + config + 生成代码
 COPY --from=builder /app/prisma/ ./prisma/
