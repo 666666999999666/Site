@@ -13,7 +13,7 @@ export function SearchInput({ value, onChange }: SearchInputProps) {
   const t = useTranslations("blog")
   const [localValue, setLocalValue] = useState(value)
   const isComposingRef = useRef(false)
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>()
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // 当外部 value 变化且不在组合中时，同步到 localValue
   useEffect(() => {
