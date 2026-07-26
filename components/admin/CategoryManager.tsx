@@ -47,7 +47,7 @@ export function CategoryManager({
           placeholder="分区名…"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && add()}
+          onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && add()}
         />
         <Button onClick={add} disabled={pending}>
           <Plus className="h-4 w-4" />

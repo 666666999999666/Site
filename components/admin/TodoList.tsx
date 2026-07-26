@@ -113,7 +113,9 @@ export function TodoList({
             placeholder="添加新任务…"
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && add()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.nativeEvent.isComposing) add()
+            }}
           />
           <select
             value={newCategoryId}

@@ -71,7 +71,7 @@ export function BlogGroupManager({
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") confirmEdit()
+                  if (e.key === "Enter" && !e.nativeEvent.isComposing) confirmEdit()
                   if (e.key === "Escape") cancelEdit()
                 }}
                 className="h-7 text-sm"
@@ -133,7 +133,7 @@ export function BlogGroupManager({
           placeholder="新分区…"
           value={newName}
           onChange={(e) => setNewName(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+          onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && handleCreate()}
           className="h-8 text-sm"
         />
         <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={handleCreate}>

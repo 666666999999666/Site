@@ -106,7 +106,7 @@ export function PostsList({
               placeholder="搜索标题或内容…"
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && search()}
+              onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && search()}
               className="pl-9"
             />
           </div>
