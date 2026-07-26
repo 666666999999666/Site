@@ -34,7 +34,7 @@ COPY --from=builder /app/public ./public
 
 # standalone 可能遗漏的运行时依赖（iron-session、bcryptjs 等 API route 依赖）
 RUN --mount=type=cache,target=/root/.npm \
-    cd /app && npm install --registry=https://registry.npmmirror.com --no-fund --no-audit iron-session bcryptjs
+    cd /app && npm install --registry=https://registry.npmmirror.com --no-fund --no-audit --legacy-peer-deps iron-session bcryptjs
 
 # prisma schema + config + 生成代码
 COPY --from=builder /app/prisma/ ./prisma/
