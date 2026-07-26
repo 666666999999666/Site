@@ -3,7 +3,7 @@ WORKDIR /app
 ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
 COPY package.json ./
 RUN --mount=type=cache,target=/root/.npm \
-    npm install --registry=https://registry.npmmirror.com --no-fund --no-audit --no-package-lock
+    npm install --registry=https://registry.npmmirror.com --no-fund --no-audit --no-package-lock --legacy-peer-deps
 
 FROM ccr.ccs.tencentyun.com/lqzzql/node:22-alpine AS builder
 WORKDIR /app
