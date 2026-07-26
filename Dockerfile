@@ -26,6 +26,7 @@ RUN --mount=type=cache,target=/root/.npm \
 FROM ccr.ccs.tencentyun.com/lqzzql/node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
+ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
 
 # standalone 输出已包含运行时所需的最小依赖（含 pg、@prisma/client 等）
 COPY --from=builder /app/.next/standalone ./
