@@ -52,7 +52,7 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# 启动时先同步数据库再启动服务
+# 启动时先执行已审核的 migration 再启动服务
 # NODE_PATH 让 prisma CLI 能 resolve @prisma/* 等包
-# db push: 根据 schema 同步表结构，加字段不丢数据，删字段会丢（我们不会删）
-CMD ["sh", "-c", "cd /app && NODE_PATH=/prisma/node_modules node /prisma/node_modules/prisma/build/index.js db push && node server.js"]
+# migrate deploy: 只执行 migrations/ 下已审核的迁移文件，可审计、可回溯
+CMD ["sh", "-c", "cd /app && NODE_PATH=/prisma/node_modules node /prisma/node_modules/prisma/build/index.js migrate deploy && node server.js"]
