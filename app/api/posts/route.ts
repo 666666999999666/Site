@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
         tags: tags || [],
         status: status || "DRAFT",
         readTime: calculateReadTime(content || ""),
-        publishedAt: publishedAt ? new Date(publishedAt) : new Date(),
+        publishedAt: status === "PUBLISHED" ? (publishedAt ? new Date(publishedAt) : new Date()) : null,
       },
     })
     return NextResponse.json(post, { status: 201 })
