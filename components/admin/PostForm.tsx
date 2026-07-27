@@ -2,12 +2,17 @@
 
 import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
+import dynamic from "next/dynamic"
 import type { Post, Category } from "@/lib/generated/prisma/client"
-import { PostEditor } from "./PostEditor"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+
+const PostEditor = dynamic(
+  () => import("./PostEditor").then((mod) => mod.PostEditor),
+  { ssr: false }
+)
 
 type PostWithCategory = Post & { category: Category | null }
 

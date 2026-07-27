@@ -14,7 +14,7 @@ export default async function EditPostPage({ params }: { params: Promise<{ id: s
   ])
   if (!post) notFound()
   return (
-    <Container>
+    <Container size="wide">
       <h1 className="text-3xl font-semibold mb-8">编辑文章</h1>
       <PostForm post={post} categories={categories} />
     </Container>

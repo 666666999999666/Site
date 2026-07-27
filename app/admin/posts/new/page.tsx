@@ -8,7 +8,7 @@ export default async function NewPostPage() {
     orderBy: { sortOrder: "asc" },
   })
   return (
-    <Container>
+    <Container size="wide">
       <h1 className="text-3xl font-semibold mb-8">写新文章</h1>
       <PostForm categories={categories} />
     </Container>

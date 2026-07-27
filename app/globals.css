@@ -204,76 +204,31 @@
 .dark .katex { color: var(--foreground); }
 
 /* ====================================
- * ByteMD 编辑器样式适配
+ * Milkdown/Crepe 编辑器样式适配
  * ==================================== */
-.bytemd-wrapper {
-  font-sans: var(--font-sans);
-}
-.bytemd-wrapper .bytemd {
-  height: 600px;
-  border: none;
-  background: var(--card);
-}
-.bytemd-wrapper .bytemd-toolbar {
-  border-bottom: 1px solid var(--border);
-  background: var(--card);
-}
-.bytemd-wrapper .bytemd-toolbar-icon:hover {
-  background: var(--muted);
-}
-.bytemd-wrapper .bytemd-toolbar-icon svg {
-  color: var(--muted-foreground);
-}
-.bytemd-wrapper .bytemd-editor .CodeMirror {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-mono);
-  font-size: 14px;
-}
-.bytemd-wrapper .bytemd-editor .CodeMirror-gutters {
-  background: var(--background);
-  border-right: 1px solid var(--border);
-}
-.bytemd-wrapper .bytemd-editor .CodeMirror-linenumber {
-  color: var(--muted-foreground);
-}
-.bytemd-wrapper .bytemd-editor .CodeMirror-cursor {
-  border-left-color: var(--foreground);
-}
-.bytemd-wrapper .bytemd-editor .CodeMirror-selected {
-  background: var(--muted);
-}
-.bytemd-wrapper .bytemd-preview {
-  background: var(--background);
-  padding: 16px 24px;
-}
-.bytemd-wrapper .bytemd-preview .markdown-body {
-  color: var(--foreground);
-  font-family: var(--font-sans);
-}
-.bytemd-wrapper .bytemd-split .bytemd-preview {
-  border-left: 1px solid var(--border);
-}
-.bytemd-wrapper .bytemd-fullscreen {
-  z-index: 50;
+.milkdown-editor-wrapper .crepe {
+  --crepe-bg: var(--background);
+  --crepe-border: var(--border);
+  --crepe-text: var(--foreground);
+  --crepe-muted: var(--muted-foreground);
+  --crepe-accent: var(--primary);
+  --crepe-hover: var(--muted);
 }
 
-/* CodeMirror 语法高亮适配暗色模式 */
-.dark .bytemd-wrapper .cm-s-default .cm-keyword { color: #ff7b72; }
-.dark .bytemd-wrapper .cm-s-default .cm-atom { color: #79c0ff; }
-.dark .bytemd-wrapper .cm-s-default .cm-number { color: #79c0ff; }
-.dark .bytemd-wrapper .cm-s-default .cm-def { color: #d2a8ff; }
-.dark .bytemd-wrapper .cm-s-default .cm-variable { color: #e1e4e8; }
-.dark .bytemd-wrapper .cm-s-default .cm-variable-2 { color: #79c0ff; }
-.dark .bytemd-wrapper .cm-s-default .cm-variable-3 { color: #79c0ff; }
-.dark .bytemd-wrapper .cm-s-default .cm-string { color: #a5d6ff; }
-.dark .bytemd-wrapper .cm-s-default .cm-comment { color: #8b949e; }
-.dark .bytemd-wrapper .cm-s-default .cm-tag { color: #ff7b72; }
-.dark .bytemd-wrapper .cm-s-default .cm-attribute { color: #79c0ff; }
-.dark .bytemd-wrapper .cm-s-default .cm-bracket { color: #e1e4e8; }
+.milkdown-editor-wrapper .ProseMirror {
+  background: var(--background);
+  color: var(--foreground);
+  min-height: 500px;
+  padding: 24px 32px;
+  outline: none;
+}
+
+.milkdown-editor-wrapper pre code {
+  font-family: var(--font-mono);
+}
 
 /* Mermaid 容器：暗色模式背景 */
-.dark .mermaid {
+.dark .milkdown-editor-wrapper .mermaid {
   background: var(--card);
 }
 

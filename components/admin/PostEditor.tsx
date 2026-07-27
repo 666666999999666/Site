@@ -1,57 +1,13 @@
 "use client"
 
-import { useEffect, useRef } from "react"
-import { Editor } from "bytemd"
-import gfm from "@bytemd/plugin-gfm"
-import math from "@bytemd/plugin-math"
-import mermaid from "@bytemd/plugin-mermaid"
-import "bytemd/dist/index.css"
-import "highlight.js/styles/github.css"
-import "katex/dist/katex.min.css"
-
-/**
- * ByteMD 插件配置：GFM（表格/脚注/任务列表/删除线）+ 数学公式 + Mermaid 流程图
- */
-const plugins = [gfm(), math(), mermaid()]
-
-/**
- * ByteMD 图片上传：对接现有 /api/upload 接口
- * bytemd 期望 uploadFile 返回 URL 字符串，会自动插入 ![](url)
- */
-async function uploadFile(file: File): Promise<string> {
-  const fd = new FormData()
-  fd.append("file", file)
-  const res = await fetch("/api/upload", {
-    method: "POST",
-    body: fd,
-  })
-  if (!res.ok) {
-    throw new Error("图片上传失败")
-  }
-  const { url } = await res.json()
-  return url
-}
-
-/**
- * ByteMD 是 Svelte 组件，TypeScript 类型定义（SvelteComponentTyped）的构造函数签名不准确
- * 这里手动声明构造函数和实例类型，通过类型断言绕过类型检查
- */
-type ByteMDEditorInstance = {
-  $on(event: "change", cb: (e: { detail: { value: string } }) => void): void
-  $set(props: { value: string }): void
-  $destroy(): void
-}
-
-type ByteMDEditorCtor = new (opts: {
-  target: HTMLElement
-  props: {
-    value: string
-    plugins: unknown[]
-    uploadFile: (file: File) => Promise<string>
-  }
-}) => ByteMDEditorInstance
-
-const ByteMDEditor = Editor as unknown as ByteMDEditorCtor
+import { useLayoutEffect, useRef } from "react"
+import { Crepe } from "@milkdown/crepe"
+import { listener, listenerCtx } from "@milkdown/kit/plugin/listener"
+import { editorViewCtx, parserCtx } from "@milkdown/kit/core"
+import { Slice } from "@milkdown/kit/prose/model"
+import { Selection } from "@milkdown/kit/prose/state"
+import "@milkdown/crepe/theme/common/style.css"
+import "@milkdown/crepe/theme/frame.css"
 
 /**
  * 检测内容是否为 Tiptap JSON 格式，如果是则转换为 Markdown
@@ -135,11 +91,11 @@ function normalizeTiptapToMarkdown(raw: string): string {
 }
 
 /**
- * Markdown 编辑器（基于 ByteMD，自己写 React 19 wrapper 避免依赖 @bytemd/react）
+ * Markdown 所见即所得编辑器（基于 Milkdown + Crepe）
  *
- * 接口签名与原 Tiptap 版本一致：
- *   value: string          // 现在是 Markdown 文本（之前是 Tiptap JSON 字符串）
- *   onChange: (v: string)  // 现在回调的是 Markdown 文本
+ * 接口签名与原版本一致：
+ *   value: string          // Markdown 文本
+ *   onChange: (v: string)  // 回调 Markdown 文本
  */
 export function PostEditor({
   value,
@@ -148,10 +104,11 @@ export function PostEditor({
   value: string
   onChange: (value: string) => void
 }) {
-  const containerRef = useRef<HTMLDivElement>(null)
-  const editorRef = useRef<ByteMDEditorInstance | null>(null)
+  const divRef = useRef<HTMLDivElement>(null)
+  const crepeRef = useRef<Crepe | null>(null)
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const loadingRef = useRef(false)
 
   // 将 Tiptap JSON 自动转换为 Markdown
   const normalizedValue = normalizeTiptapToMarkdown(value || "")
@@ -159,66 +116,81 @@ export function PostEditor({
   // 当前编辑器内容，避免外部 value 变化时回环更新
   const currentValueRef = useRef<string>(normalizedValue)
 
-  useEffect(() => {
-    if (!containerRef.current) {
-      console.error("[PostEditor] containerRef.current is null")
-      return
-    }
+  // 初始化 Crepe 编辑器（仅运行一次）
+  useLayoutEffect(() => {
+    if (!divRef.current) return
+    if (loadingRef.current) return
+    loadingRef.current = true
 
-    // 防止 React StrictMode 双重挂载时重复初始化
-    if (editorRef.current) {
-      console.log("[PostEditor] editor already exists, skip")
-      return
-    }
-
-    console.log("[PostEditor] initializing bytemd, container:", containerRef.current)
-
-    try {
-      const editor = new ByteMDEditor({
-        target: containerRef.current,
-        props: {
-          value: normalizedValue || "",
-          plugins,
-          uploadFile,
+    const crepe = new Crepe({
+      root: divRef.current,
+      defaultValue: normalizedValue || "",
+      featureConfigs: {
+        [Crepe.Feature.ImageBlock]: {
+          onUpload: async (file: File) => {
+            const fd = new FormData()
+            fd.append("file", file)
+            const res = await fetch("/api/upload", {
+              method: "POST",
+              body: fd,
+            })
+            if (!res.ok) throw new Error("图片上传失败")
+            const { url } = await res.json()
+            return url
+          },
         },
+      },
+    })
+
+    crepe.editor
+      .config((ctx) => {
+        ctx.get(listenerCtx).markdownUpdated((_, markdown) => {
+          currentValueRef.current = markdown
+          onChangeRef.current(markdown)
+        })
       })
+      .use(listener)
 
-      console.log("[PostEditor] bytemd created successfully:", editor)
-
-      editor.$on("change", (e) => {
-        const newValue = e.detail.value
-        currentValueRef.current = newValue
-        onChangeRef.current(newValue)
-        // 同步回 editor，避免内部状态不一致
-        editor.$set({ value: newValue })
-      })
-
-      editorRef.current = editor
-    } catch (err) {
-      console.error("[PostEditor] bytemd init failed:", err)
-    }
+    crepe.create().then(() => {
+      crepeRef.current = crepe
+      loadingRef.current = false
+    })
 
     return () => {
-      if (editorRef.current) {
-        editorRef.current.$destroy()
-        editorRef.current = null
+      if (crepeRef.current) {
+        crepeRef.current.destroy()
+        crepeRef.current = null
       }
+      loadingRef.current = false
     }
-    // 仅初始化一次，value 通过下面的 effect 同步
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 外部 value 变化时同步到编辑器（避免回环）
-  useEffect(() => {
-    if (editorRef.current && normalizedValue !== currentValueRef.current) {
+  useLayoutEffect(() => {
+    if (crepeRef.current && normalizedValue !== currentValueRef.current) {
       currentValueRef.current = normalizedValue
-      editorRef.current.$set({ value: normalizedValue || "" })
+      crepeRef.current.editor.action((ctx) => {
+        const view = ctx.get(editorViewCtx)
+        const parser = ctx.get(parserCtx)
+        const doc = parser(normalizedValue || "")
+        if (!doc) return
+        const state = view.state
+        const selection = state.selection
+        const { from } = selection
+        let tr = state.tr
+        tr = tr.replace(0, state.doc.content.size, new Slice(doc.content, 0, 0))
+        const docSize = doc.content.size
+        const safeFrom = Math.min(from, docSize - 2)
+        tr = tr.setSelection(Selection.near(tr.doc.resolve(safeFrom)))
+        view.dispatch(tr)
+      })
     }
   }, [normalizedValue])
 
   return (
-    <div className="border border-border/50 rounded-lg overflow-hidden bg-card bytemd-wrapper">
-      <div ref={containerRef} />
+    <div className="border border-border/50 rounded-lg overflow-hidden bg-card">
+      <div ref={divRef} className="milkdown-editor-wrapper" style={{ minHeight: "500px" }} />
     </div>
   )
 }
