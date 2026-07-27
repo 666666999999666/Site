@@ -16,7 +16,7 @@ export default async function AboutPage() {
     ? map.about_skills.split(",").map((s) => s.trim()).filter(Boolean)
     : []
   const github = map.about_github || ""
-  const email = map.email || ""
+  const email = map.about_email || ""
 
   return (
     <section className="py-16">
