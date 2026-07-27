@@ -107,7 +107,6 @@ export function PostEditor({
   const divRef = useRef<HTMLDivElement>(null)
   const crepeRef = useRef<Crepe | null>(null)
   const onChangeRef = useRef(onChange)
-  onChangeRef.current = onChange
   const loadingRef = useRef(false)
 
   // 将 Tiptap JSON 自动转换为 Markdown
@@ -115,6 +114,11 @@ export function PostEditor({
 
   // 当前编辑器内容，避免外部 value 变化时回环更新
   const currentValueRef = useRef<string>(normalizedValue)
+
+  // 每次 render 同步 onChange 回调到 ref，避免渲染阶段直接写 ref
+  useEffect(() => {
+    onChangeRef.current = onChange
+  })
 
   // 初始化 Crepe 编辑器（仅运行一次）
   useLayoutEffect(() => {
