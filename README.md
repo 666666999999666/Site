@@ -5,7 +5,7 @@
 ## 技术栈
 
 - **前端**: Next.js 16 + React 19 + TypeScript + Tailwind CSS + shadcn/ui
-- **编辑器**: Tiptap（富文本博客编辑）
+- **编辑器**: Milkdown + Crepe（Markdown 所见即所得编辑）
 - **数据库**: PostgreSQL 16 + Prisma ORM
 - **部署**: Docker + Docker Compose
 - **CI/CD**: Gitee Go（主）+ GitHub Actions（备份）
@@ -26,7 +26,7 @@
 │   └── api/                # API 路由
 ├── components/             # React 组件
 ├── lib/                    # 工具库（auth, db, api）
-├── prisma/                 # 数据库 Schema
+├── prisma/                 # 数据库 Schema + Migrations
 ├── nginx/                  # Nginx 配置
 ├── messages/               # i18n 翻译文件
 ├── Dockerfile              # 多阶段 Docker 构建
@@ -55,6 +55,8 @@ npm run dev
 
 访问 http://localhost:3000
 
+> **注意**：本地开发用 `prisma db push` 即可；生产环境使用 `prisma migrate deploy`（通过 Dockerfile CMD 自动执行），只应用已审核的 migration 文件。
+
 ## 部署
 
 ### CI/CD 流程
@@ -66,13 +68,13 @@ git push origin main
        └── Gitee Go 自动触发
             ├── 镜像构建：build@docker
             │   ├── 从腾讯云 ACR 拉取基础镜像（内网加速）
-            │   ├── npm install（npmmirror 加速）
+            │   ├── npm ci（npmmirror 加速）
             │   ├── Next.js 构建（buildkit 缓存）
             │   └── 推送镜像到腾讯云 ACR
             └── 部署：shell@agent
                 ├── docker login
-                ├── docker compose pull web
-                ├── docker compose up -d web
+                ├── docker compose pull
+                ├── docker compose up -d
                 └── docker image prune -f
 ```
 
@@ -152,7 +154,8 @@ git push origin main
 ### 数据库
 
 数据库数据存储在 Docker volume `./data/postgres/`，与 CI/CD 解耦：
-- 每次 `git push` 只重建 web 容器，数据库不受影响
+- 每次 `git push` 重建所有容器，数据库数据不受影响（volume 持久化）
+- 数据库 schema 变更通过 `prisma migrate deploy` 自动执行（Dockerfile CMD）
 - 数据库备份文件在 `~/backups/`，每天自动生成
 
 ### 服务器重装恢复

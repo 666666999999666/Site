@@ -174,8 +174,8 @@ git push origin main
 ```bash
 cd /home/ubuntu/个人网站
 docker login ccr.ccs.tencentyun.com -u ${TCR_USERNAME} -p ${TCR_PASSWORD}
-docker compose pull web
-docker compose up -d web
+docker compose pull
+docker compose up -d
 docker image prune -f || true
 ```
 
@@ -201,7 +201,7 @@ CI/CD 打通后，继续完善了网站功能。
 
 **修复**：
 - `owner_name`：显示在页脚版权信息（`© 2026 xxx. All rights reserved.`）和首页左上角 Header
-- `email`：合并到关于页联系方式，删除冗余的 `about_email` 字段
+- `email`：合并到关于页联系方式，使用 `about_email` 字段统一命名
 - 新增公开 API：`/api/settings?keys=owner_name,email`（带白名单）
 
 ### 6.3 关于页内容重复
@@ -283,7 +283,7 @@ CI/CD 打通后，继续完善了网站功能。
 | 功能 | 状态 |
 |------|------|
 | QZ Site 网站开发 | ✅ 完成 |
-| 博客系统（Tiptap + 分类管理） | ✅ 完成 |
+| 博客系统（Milkdown + Crepe + 分类管理） | ✅ 完成 |
 | Todo 管理（分类管理） | ✅ 完成 |
 | 深色/浅色模式 | ✅ 完成 |
 | 数据库持久化 + 自动备份 | ✅ 完成 |
