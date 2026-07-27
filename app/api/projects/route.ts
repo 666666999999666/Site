@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { getSession } from "@/lib/auth/session"
 import { handleApiError } from "@/lib/api/handler"
-import { AuthError } from "@/lib/errors"
+import { AuthError, ValidationError } from "@/lib/errors"
 
 async function ensureAuth() {
   const session = await getSession()
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       sourceUrl?: string
       demoUrl?: string
     }
-    if (!title) throw new Error("标题必填")
+    if (!title) throw new ValidationError("标题必填")
     const project = await prisma.project.create({
       data: {
         title,
