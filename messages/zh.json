@@ -19,7 +19,7 @@
   "blog": {
     "title": "博客",
     "description": "关于开发、设计和技术的思考。",
-    "search": "搜索文章...",
+    "search": "搜索标题或内容...",
     "all": "全部",
     "readMore": "阅读更多",
     "minuteRead": "{count}分钟阅读",

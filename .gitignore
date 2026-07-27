@@ -20,6 +20,9 @@ next-env.d.ts
 .env.*.local
 !.env.example
 
+# docker-compose 本地开发覆盖文件（不提交，生产部署用 docker-compose.yml）
+docker-compose.override.yml
+
 # db data
 data/
 

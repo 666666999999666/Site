@@ -19,7 +19,7 @@
   "blog": {
     "title": "Blog",
     "description": "Thoughts on development, design, and technology.",
-    "search": "Search articles...",
+    "search": "Search title or content...",
     "all": "All",
     "readMore": "Read more",
     "minuteRead": "{count} min read",

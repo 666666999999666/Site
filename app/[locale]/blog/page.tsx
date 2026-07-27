@@ -33,7 +33,7 @@ export default async function BlogPage({
       ? {
           OR: [
             { title: { contains: search, mode: "insensitive" as const } },
-            { excerpt: { contains: search, mode: "insensitive" as const } },
+            { content: { contains: search, mode: "insensitive" as const } },
           ],
         }
       : {}),
