@@ -44,7 +44,7 @@ stages:
     hostGroupID:
       ID: tencent-cloud
       hostID:
-      - REDACTED_AGENT_ID
+      - b57ee737-9ddd-4dba-bda2-0322378ea9f2
     notify: []
     strategy:
       retry: "0"
