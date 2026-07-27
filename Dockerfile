@@ -54,5 +54,6 @@ ENV HOSTNAME="0.0.0.0"
 
 # 启动时先执行已审核的 migration 再启动服务
 # NODE_PATH 让 prisma CLI 能 resolve @prisma/* 等包
-# migrate deploy: 只执行 migrations/ 下已审核的迁移文件，可审计、可回溯
-CMD ["sh", "-c", "cd /app && NODE_PATH=/prisma/node_modules node /prisma/node_modules/prisma/build/index.js migrate deploy && node server.js"]
+# 如果 migrate deploy 失败（baseline 遇到已存在的表），
+# 自动 resolve baseline 让 Prisma 标记已应用，然后重试
+CMD ["sh", "-c", "cd /app && export NODE_PATH=/prisma/node_modules && P=/prisma/node_modules/prisma/build/index.js && (node $P migrate deploy || (node $P migrate resolve --applied 0_init && node $P migrate deploy)) && node server.js"]
