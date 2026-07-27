@@ -5,7 +5,7 @@ import { handleApiError } from "@/lib/api/handler"
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const ip = req.headers.get("x-forwarded-for")?.split(",")[0].trim() || "unknown"
+    const ip = req.headers.get("x-real-ip") || "unknown"
     const result = await login(body.password, ip)
     return NextResponse.json(result)
   } catch (e) {
