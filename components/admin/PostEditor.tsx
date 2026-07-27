@@ -1,6 +1,6 @@
 "use client"
 
-import { useLayoutEffect, useRef } from "react"
+import { useEffect, useLayoutEffect, useRef } from "react"
 import { Crepe } from "@milkdown/crepe"
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener"
 import { editorViewCtx, parserCtx } from "@milkdown/kit/core"
