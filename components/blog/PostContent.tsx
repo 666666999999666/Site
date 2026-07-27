@@ -28,7 +28,7 @@ function MermaidBlock({ code }: { code: string }) {
           theme: document.documentElement.classList.contains("dark")
             ? "dark"
             : "default",
-          securityLevel: "loose",
+          securityLevel: "strict",
         })
         const id = `mermaid-${Math.random().toString(36).slice(2, 9)}`
         const { svg: rendered } = await mermaid.render(id, code)
