@@ -63,6 +63,9 @@ rollback() {
     set_env_value WEB_IMAGE "$previous_image"
     compose pull web nginx db > /dev/null 2>&1 || true
     compose up --detach --wait --wait-timeout 240 || true
+    compose exec --no-TTY nginx nginx -t > /dev/null 2>&1 \
+      && compose exec --no-TTY nginx nginx -s reload > /dev/null 2>&1 \
+      || true
   fi
   exit "$exit_code"
 }
@@ -75,6 +78,10 @@ compose pull db web nginx > /dev/null
 
 log "Starting services and waiting for health checks"
 compose up --detach --wait --wait-timeout 240
+
+log "Validating and reloading Nginx configuration"
+compose exec --no-TTY nginx nginx -t
+compose exec --no-TTY nginx nginx -s reload
 
 health="$(
   curl --fail --silent --show-error --retry 5 --retry-delay 2 \
