@@ -5,6 +5,7 @@ import {
   validatePostCreate,
   validateProjectCreate,
   validateSettings,
+  validateTodoDraft,
   validateTodoUpdate,
 } from "../lib/validation"
 
@@ -30,6 +31,10 @@ test("post validation trims fields and requires timezone-aware dates", () => {
 test("todo validation rejects invalid status and priority", () => {
   assert.throws(() => validateTodoUpdate({ status: "UNKNOWN" }), /状态无效/)
   assert.throws(() => validateTodoUpdate({ priority: 3 }), /0 到 2/)
+  assert.deepEqual(validateTodoDraft({}), { markDone: false })
+  assert.deepEqual(validateTodoDraft({ markDone: true }), { markDone: true })
+  assert.throws(() => validateTodoDraft({ markDone: "yes" }), /必须是布尔值/)
+  assert.throws(() => validateTodoDraft({ title: "unexpected" }), /不支持的字段/)
 })
 
 test("project validation only accepts web URLs and local cover paths", () => {

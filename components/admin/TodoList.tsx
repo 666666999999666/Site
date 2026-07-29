@@ -1,8 +1,9 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import { Check, ChevronDown, Pencil, Plus, Search, Trash2 } from "lucide-react"
-import type { Category, Todo } from "@/lib/generated/prisma/client"
+import { Check, ChevronDown, FilePlus2, Pencil, Plus, Search, Trash2 } from "lucide-react"
+import { useRouter } from "next/navigation"
+import type { Category, Post, Todo } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 import { CategoryManager } from "./CategoryManager"
@@ -54,6 +55,7 @@ export function TodoList({
   const [query, setQuery] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
+  const router = useRouter()
 
   function selectNewCategory(id: string) {
     setNewCategoryId(id)
@@ -116,6 +118,25 @@ export function TodoList({
       setTodos((current) => current.filter((item) => item.id !== todo.id))
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "删除失败")
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function createDraft(todo: Todo, markDone: boolean) {
+    setPending(true)
+    setError("")
+    try {
+      const result = await apiRequest<{ post: Post; todo: TodoWithCategory }>(
+        `/api/todos/${todo.id}/draft`,
+        jsonRequest("POST", { markDone })
+      )
+      setTodos((current) => current.map((item) => (
+        item.id === todo.id ? result.todo : item
+      )))
+      router.push(`/admin/posts/${result.post.id}`)
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "创建草稿失败")
     } finally {
       setPending(false)
     }
@@ -270,6 +291,7 @@ export function TodoList({
                 onToggle={() => toggle(todo)}
                 onDelete={() => remove(todo)}
                 onSave={(input) => updateTodo(todo.id, input)}
+                onCreateDraft={(markDone) => createDraft(todo, markDone)}
               />
             ))}
           </ul>
@@ -286,6 +308,7 @@ function TodoItem({
   onToggle,
   onDelete,
   onSave,
+  onCreateDraft,
 }: {
   todo: TodoWithCategory
   categories: Category[]
@@ -293,6 +316,7 @@ function TodoItem({
   onToggle: () => void
   onDelete: () => void
   onSave: (input: Record<string, unknown>) => Promise<TodoWithCategory>
+  onCreateDraft: (markDone: boolean) => Promise<void>
 }) {
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(todo.title)
@@ -330,6 +354,12 @@ function TodoItem({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存失败")
     }
+  }
+
+  async function createDraft() {
+    if (!window.confirm(`将“${todo.title}”创建为博客草稿？`)) return
+    const markDone = !done && window.confirm("创建草稿后，同时将该 Todo 标记为已完成？")
+    await onCreateDraft(markDone)
   }
 
   return (
@@ -379,6 +409,17 @@ function TodoItem({
           )}
         </div>
 
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={createDraft}
+          disabled={disabled}
+          aria-label={`创建博客草稿：${todo.title}`}
+          title="创建博客草稿"
+        >
+          <FilePlus2 className="size-4" />
+        </Button>
         <Button
           type="button"
           variant="ghost"

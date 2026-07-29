@@ -246,6 +246,14 @@ export function validateTodoUpdate(value: JsonObject): TodoInput {
   return parseTodo(value, true)
 }
 
+export function validateTodoDraft(value: JsonObject): { markDone: boolean } {
+  rejectUnknownKeys(value, ["markDone"])
+  if (value.markDone !== undefined && typeof value.markDone !== "boolean") {
+    throw new ValidationError("完成状态必须是布尔值")
+  }
+  return { markDone: value.markDone ?? false }
+}
+
 export interface CategoryInput {
   name?: string
   type?: "BLOG" | "TODO"
