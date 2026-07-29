@@ -93,6 +93,7 @@ model Project {
   title       String
   description String?
   tags        String[]
+  coverImage  String?
   sourceUrl   String?
   demoUrl     String?
   sortOrder   Int      @default(0)

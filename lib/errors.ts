@@ -28,8 +28,20 @@ export class NotFoundError extends AppError {
   }
 }
 
+export class ConflictError extends AppError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super(message, "CONFLICT", 409, context)
+  }
+}
+
 export class DatabaseError extends AppError {
   constructor(message: string, context?: Record<string, unknown>) {
     super(message, "DATABASE_ERROR", 500, context)
+  }
+}
+
+export class ConfigurationError extends AppError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super(message, "CONFIGURATION_ERROR", 503, context)
   }
 }

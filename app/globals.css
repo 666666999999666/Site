@@ -39,9 +39,9 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  /* 字体（通过 Google Fonts CDN link 引入，运行时加载） */
-  --font-sans: "Geist Sans", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* 本地系统字体，避免公开站依赖境外字体 CDN */
+  --font-sans: "Segoe UI", "PingFang SC", "Microsoft YaHei", Arial, sans-serif;
+  --font-mono: "Cascadia Code", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
 
   --radius-sm: calc(var(--radius) * 0.6);
   --radius-md: calc(var(--radius) * 0.8);
@@ -129,9 +129,11 @@
   }
   html {
     @apply font-sans;
+    overflow-x: clip;
   }
   body {
     @apply bg-background text-foreground;
+    overflow-x: clip;
     font-size: 1rem;
     line-height: 1.75;
   }
@@ -194,13 +196,27 @@
 /* ====================================
  * Milkdown/Crepe 编辑器样式适配
  * ==================================== */
-.milkdown-editor-wrapper .crepe {
-  --crepe-bg: var(--background);
-  --crepe-border: var(--border);
-  --crepe-text: var(--foreground);
-  --crepe-muted: var(--muted-foreground);
-  --crepe-accent: var(--primary);
-  --crepe-hover: var(--muted);
+.milkdown-editor-wrapper .milkdown {
+  --crepe-color-background: var(--background);
+  --crepe-color-on-background: var(--foreground);
+  --crepe-color-surface: var(--card);
+  --crepe-color-surface-low: var(--muted);
+  --crepe-color-on-surface: var(--foreground);
+  --crepe-color-on-surface-variant: var(--muted-foreground);
+  --crepe-color-outline: var(--border);
+  --crepe-color-primary: var(--primary);
+  --crepe-color-secondary: var(--secondary);
+  --crepe-color-on-secondary: var(--secondary-foreground);
+  --crepe-color-inverse: var(--foreground);
+  --crepe-color-on-inverse: var(--background);
+  --crepe-color-inline-code: var(--destructive);
+  --crepe-color-error: var(--destructive);
+  --crepe-color-hover: var(--muted);
+  --crepe-color-selected: var(--accent);
+  --crepe-color-inline-area: var(--border);
+  --crepe-font-title: var(--font-sans);
+  --crepe-font-default: var(--font-sans);
+  --crepe-font-code: var(--font-mono);
 }
 
 .milkdown-editor-wrapper .ProseMirror {
@@ -215,6 +231,10 @@
   font-family: var(--font-mono);
 }
 
+.milkdown-editor-wrapper .crepe-placeholder::before {
+  color: color-mix(in srgb, var(--foreground), transparent 45%);
+}
+
 /* Mermaid 容器：暗色模式背景 */
 .dark .milkdown-editor-wrapper .mermaid {
   background: var(--card);
@@ -223,4 +243,8 @@
 /* 代码块字体 */
 .prose pre code {
   font-family: var(--font-mono);
+}
+
+.prose :is(h2, h3, h4) {
+  scroll-margin-top: 5rem;
 }

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useRouter } from "next/navigation"
+import { apiRequest, jsonRequest } from "@/lib/api-client"
 
 export function LoginDialog({
   open,
@@ -31,19 +32,13 @@ export function LoginDialog({
     setError("")
     setLoading(true)
     try {
-      const res = await fetch("/api/auth/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
-      })
-      if (res.ok) {
-        router.push("/admin")
-      } else {
-        const data = await res.json()
-        setError(data.error || "登录失败")
-      }
-    } catch {
-      setError("网络错误，请重试")
+      await apiRequest("/api/auth/login", jsonRequest("POST", { password }))
+      setPassword("")
+      onOpenChange(false)
+      router.push("/admin")
+      router.refresh()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "网络错误，请重试")
     } finally {
       setLoading(false)
     }
@@ -70,7 +65,7 @@ export function LoginDialog({
           </div>
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
-            <Button type="submit" disabled={loading}>
+            <Button type="submit" disabled={loading || !password}>
               {loading ? "进入中…" : "进入"}
             </Button>
           </DialogFooter>

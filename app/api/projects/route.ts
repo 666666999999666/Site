@@ -1,13 +1,8 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { getSession } from "@/lib/auth/session"
 import { handleApiError } from "@/lib/api/handler"
-import { AuthError, ValidationError } from "@/lib/errors"
-
-async function ensureAuth() {
-  const session = await getSession()
-  if (!session.isLoggedIn) throw new AuthError("未登录")
-}
+import { ensureAuthenticated } from "@/lib/api/auth"
+import { readJsonObject, validateProjectCreate } from "@/lib/validation"
 
 export async function GET() {
   try {
@@ -22,23 +17,17 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await ensureAuth()
-    const body = await req.json()
-    const { title, description, tags, sourceUrl, demoUrl } = body as {
-      title: string
-      description?: string
-      tags?: string[]
-      sourceUrl?: string
-      demoUrl?: string
-    }
-    if (!title) throw new ValidationError("标题必填")
+    await ensureAuthenticated()
+    const input = validateProjectCreate(await readJsonObject(req))
     const project = await prisma.project.create({
       data: {
-        title,
-        description: description || null,
-        tags: tags || [],
-        sourceUrl: sourceUrl || null,
-        demoUrl: demoUrl || null,
+        title: input.title,
+        description: input.description ?? null,
+        tags: input.tags ?? [],
+        coverImage: input.coverImage ?? null,
+        sourceUrl: input.sourceUrl ?? null,
+        demoUrl: input.demoUrl ?? null,
+        sortOrder: input.sortOrder ?? 0,
       },
     })
     return NextResponse.json(project, { status: 201 })

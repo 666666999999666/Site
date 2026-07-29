@@ -69,6 +69,8 @@ export function SearchInput({ value, onChange }: SearchInputProps) {
       />
       {localValue && (
         <button
+          type="button"
+          aria-label="清除搜索"
           onClick={() => {
             setLocalValue("")
             if (debounceRef.current) clearTimeout(debounceRef.current)

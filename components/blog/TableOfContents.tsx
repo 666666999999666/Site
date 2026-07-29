@@ -34,7 +34,7 @@ export function TableOfContents({ headings }: { headings: Heading[] }) {
   if (headings.length === 0) return null
 
   return (
-    <nav className="sticky top-20" aria-label="Table of contents">
+    <nav className="sticky top-20" aria-label="文章目录">
       <h4 className="text-sm font-medium text-foreground mb-3">目录</h4>
       <ul className="space-y-0.5 border-l border-border">
         {headings.map((h) => (
@@ -44,9 +44,10 @@ export function TableOfContents({ headings }: { headings: Heading[] }) {
               onClick={(e) => {
                 e.preventDefault()
                 document.getElementById(h.id)?.scrollIntoView({ behavior: "smooth" })
+                window.history.replaceState(null, "", `#${h.id}`)
               }}
               className={`block text-sm py-1 transition-colors ${
-                h.level === 3 ? "pl-4" : "pl-0"
+                h.level === 4 ? "pl-7" : h.level === 3 ? "pl-4" : "pl-2"
               } ${
                 activeId === h.id
                   ? "text-foreground font-medium border-l-2 border-foreground -ml-px"

@@ -1,52 +1,92 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
+import { apiRequest, jsonRequest } from "@/lib/api-client"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
 
 export function PasswordForm() {
+  const router = useRouter()
   const [current, setCurrent] = useState("")
   const [next, setNext] = useState("")
   const [confirm, setConfirm] = useState("")
   const [error, setError] = useState("")
-  const [ok, setOk] = useState(false)
+  const [pending, setPending] = useState(false)
 
-  async function save() {
+  async function save(event: React.FormEvent) {
+    event.preventDefault()
     setError("")
-    setOk(false)
-    if (next !== confirm) { setError("两次新密码不一致"); return }
-    const res = await fetch("/api/auth/password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ currentPassword: current, newPassword: next }),
-    })
-    if (res.ok) {
-      setOk(true)
-      setCurrent(""); setNext(""); setConfirm("")
-    } else {
-      const data = await res.json()
-      setError(data.error || "修改失败")
+    if (next !== confirm) {
+      setError("两次新密码不一致")
+      return
+    }
+    if (next.length < 15) {
+      setError("新密码至少 15 个字符")
+      return
+    }
+    setPending(true)
+    try {
+      await apiRequest(
+        "/api/auth/password",
+        jsonRequest("POST", { currentPassword: current, newPassword: next })
+      )
+      setCurrent("")
+      setNext("")
+      setConfirm("")
+      router.push("/zh")
+      router.refresh()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "修改失败")
+    } finally {
+      setPending(false)
     }
   }
 
   return (
-    <div className="space-y-4 max-w-md">
+    <form onSubmit={save} className="max-w-md space-y-4">
       <div className="space-y-2">
-        <Label>当前密码</Label>
-        <Input type="password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+        <Label htmlFor="current-password">当前密码</Label>
+        <Input
+          id="current-password"
+          type="password"
+          value={current}
+          onChange={(event) => setCurrent(event.target.value)}
+          autoComplete="current-password"
+          required
+        />
       </div>
       <div className="space-y-2">
-        <Label>新密码（至少 6 位）</Label>
-        <Input type="password" value={next} onChange={(e) => setNext(e.target.value)} />
+        <Label htmlFor="new-password">新密码（至少 15 个字符）</Label>
+        <Input
+          id="new-password"
+          type="password"
+          value={next}
+          onChange={(event) => setNext(event.target.value)}
+          autoComplete="new-password"
+          minLength={15}
+          maxLength={128}
+          required
+        />
       </div>
       <div className="space-y-2">
-        <Label>确认新密码</Label>
-        <Input type="password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        <Label htmlFor="confirm-password">确认新密码</Label>
+        <Input
+          id="confirm-password"
+          type="password"
+          value={confirm}
+          onChange={(event) => setConfirm(event.target.value)}
+          autoComplete="new-password"
+          minLength={15}
+          maxLength={128}
+          required
+        />
       </div>
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      {ok && <p className="text-sm text-primary">已修改</p>}
-      <Button onClick={save}>修改密码</Button>
-    </div>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      <Button type="submit" disabled={pending}>
+        {pending ? "修改中..." : "修改并退出登录"}
+      </Button>
+    </form>
   )
 }

@@ -28,7 +28,7 @@ export function BlogFilters({ categories }: BlogFiltersProps) {
         params.delete(key)
       }
       const query = params.toString()
-      router.push(query ? `${pathname}?${query}` : pathname)
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
     },
     [router, pathname, searchParams]
   )

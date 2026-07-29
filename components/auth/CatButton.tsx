@@ -2,9 +2,9 @@
 
 import { useState, useEffect } from "react"
 import { Cat } from "lucide-react"
-import { motion } from "motion/react"
 import { LoginDialog } from "./LoginDialog"
 import { useRouter } from "next/navigation"
+import { apiRequest } from "@/lib/api-client"
 
 export function CatButton() {
   const [open, setOpen] = useState(false)
@@ -12,9 +12,8 @@ export function CatButton() {
   const router = useRouter()
 
   useEffect(() => {
-    fetch("/api/auth/check")
-      .then((r) => r.json())
-      .then((d) => setLoggedIn(d.isLoggedIn))
+    apiRequest<{ isLoggedIn: boolean }>("/api/auth/check")
+      .then((data) => setLoggedIn(data.isLoggedIn))
       .catch(() => setLoggedIn(false))
   }, [])
 
@@ -28,16 +27,15 @@ export function CatButton() {
 
   return (
     <>
-      <motion.button
+      <button
+        type="button"
         onClick={handleClick}
-        className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full bg-white/60 backdrop-blur-sm border border-line flex items-center justify-center text-ink-muted hover:text-accent hover:bg-white transition-colors"
-        whileHover={{ y: -4, scale: 1.05 }}
-        whileTap={{ scale: 0.95 }}
+        className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
         aria-label="管理入口"
-        title="喵~"
+        title={loggedIn ? "进入后台" : "管理登录"}
       >
-        <Cat className="h-5 w-5" />
-      </motion.button>
+        <Cat className="size-4" />
+      </button>
       <LoginDialog open={open} onOpenChange={setOpen} />
     </>
   )

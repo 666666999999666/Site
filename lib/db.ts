@@ -5,15 +5,18 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
 }
 
-const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build' ||
-  (process.env.NODE_ENV === 'production' && !process.env.DATABASE_URL?.includes('://'))
+const isBuildTime = process.env.NEXT_PHASE === 'phase-production-build'
 
 function createPrismaClient() {
-  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! })
+  const connectionString = process.env.DATABASE_URL
+  if (!connectionString || !connectionString.includes('://')) {
+    throw new Error('DATABASE_URL is required outside the production build phase')
+  }
+  const adapter = new PrismaPg({ connectionString })
   return new PrismaClient({ adapter })
 }
 
-// 构建时返回一个所有查询都返回空数组的安全 client
+// Next.js 会在镜像构建阶段导入动态页面；该 client 只存在于明确的构建阶段。
 function createBuildSafeClient(): PrismaClient {
   const handler: ProxyHandler<object> = {
     get(_target, prop) {

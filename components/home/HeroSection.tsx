@@ -4,17 +4,26 @@ import { useTranslations } from "next-intl"
 import { Link } from "@/i18n/navigation"
 import { Container } from "@/components/layout/Container"
 
-export function HeroSection({ description }: { description?: string }) {
+export function HeroSection({
+  name,
+  role,
+  description,
+}: {
+  name: string
+  role: string
+  description: string
+}) {
   const t = useTranslations("home")
   return (
     <section className="py-24 sm:py-36">
       <Container size="narrow">
         <div className="text-center">
-          <h1 className="text-5xl sm:text-6xl font-bold tracking-tight text-foreground mb-4">
-            {t("title")}
+          <h1 className="mb-3 text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
+            {name}
           </h1>
-          <p className="text-lg text-muted-foreground mb-8">
-            {description || t("description")}
+          <p className="mb-3 text-base font-medium text-foreground/80">{role}</p>
+          <p className="mb-8 text-lg text-muted-foreground">
+            {description}
           </p>
           <div className="flex items-center justify-center gap-3">
             <Link

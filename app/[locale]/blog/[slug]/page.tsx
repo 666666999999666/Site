@@ -1,65 +1,46 @@
+import type { Metadata } from "next"
+import { cache } from "react"
 import { notFound } from "next/navigation"
 import { getTranslations } from "next-intl/server"
 import { prisma } from "@/lib/db"
 import { Link } from "@/i18n/navigation"
 import { PostContent } from "@/components/blog/PostContent"
 import { TableOfContents } from "@/components/blog/TableOfContents"
+import { extractHeadings } from "@/lib/content"
+import { absoluteUrl } from "@/lib/site"
 
 export const dynamic = "force-dynamic"
 
-interface Heading {
-  id: string
-  text: string
-  level: number
-}
-
-function extractHeadings(content: string): Heading[] {
-  try {
-    const json = JSON.parse(content)
-    const headings: Heading[] = []
-
-    function walk(node: Record<string, unknown>) {
-      if (node.type === "heading" && node.attrs && typeof node.attrs === "object") {
-        const level = (node.attrs as { level: number }).level
-        // Extract text from the heading's content
-        let text = ""
-        if (Array.isArray(node.content)) {
-          for (const child of node.content as Record<string, unknown>[]) {
-            if (child.type === "text" && typeof child.text === "string") {
-              text += child.text
-            }
-          }
-        }
-        if (text) {
-          const id = text
-            .toLowerCase()
-            .replace(/[^\u4e00-\u9fa5a-zA-Z0-9\s-]/g, "")
-            .replace(/\s+/g, "-")
-            .replace(/-+/g, "-")
-            .replace(/^-|-$/g, "")
-          headings.push({ id, text, level })
-        }
-      }
-      if (Array.isArray(node.content)) {
-        for (const child of node.content as Record<string, unknown>[]) {
-          walk(child)
-        }
-      }
-    }
-
-    walk(json)
-    return headings
-  } catch {
-    return []
-  }
-}
-
-async function getPost(slug: string) {
+const getPost = cache(async (slug: string) => {
   const post = await prisma.post.findUnique({
     where: { slug },
     include: { category: true },
   })
   return post
+})
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string; slug: string }>
+}): Promise<Metadata> {
+  const { locale, slug } = await params
+  const post = await getPost(slug)
+  if (!post || post.status !== "PUBLISHED") return {}
+  const pathname = `/${locale}/blog/${post.slug}`
+  return {
+    title: post.title,
+    description: post.excerpt || `${post.title} - QZ Site`,
+    alternates: { canonical: pathname },
+    openGraph: {
+      type: "article",
+      title: post.title,
+      description: post.excerpt || undefined,
+      url: absoluteUrl(pathname),
+      publishedTime: post.publishedAt?.toISOString(),
+      tags: post.tags,
+    },
+  }
 }
 
 export default async function PostPage({
@@ -76,7 +57,7 @@ export default async function PostPage({
 
   const date = new Date(post.publishedAt ?? post.createdAt).toLocaleDateString(
     locale === "zh" ? "zh-CN" : "en-US",
-    { year: "numeric", month: "long", day: "numeric" }
+    { year: "numeric", month: "long", day: "numeric", timeZone: "Asia/Shanghai" }
   )
 
   return (
@@ -98,7 +79,7 @@ export default async function PostPage({
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 {post.category && <span>{post.category.name}</span>}
                 {post.category && <span>·</span>}
-                <time>{date}</time>
+                <time dateTime={(post.publishedAt ?? post.createdAt).toISOString()}>{date}</time>
                 <span>·</span>
                 <span>{t("minuteRead", { count: post.readTime })}</span>
               </div>

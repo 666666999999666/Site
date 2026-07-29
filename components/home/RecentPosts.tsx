@@ -12,6 +12,7 @@ function formatDate(d: Date, locale: string) {
     year: "numeric",
     month: "long",
     day: "numeric",
+    timeZone: "Asia/Shanghai",
   })
 }
 

@@ -3,15 +3,17 @@ import { prisma } from '../lib/db'
 import { hashPassword } from '../lib/auth/password'
 
 async function main() {
-  const password = process.env.SEED_PASSWORD
-  if (!password) throw new Error('SEED_PASSWORD environment variable is required')
-  const hash = await hashPassword(password)
-
-  await prisma.user.upsert({
-    where: { username: 'admin' },
-    update: { passwordHash: hash },
-    create: { username: 'admin', passwordHash: hash },
-  })
+  const existingAdmin = await prisma.user.findUnique({ where: { username: 'admin' } })
+  if (!existingAdmin) {
+    const password = process.env.SEED_PASSWORD
+    if (!password || password.length < 15) {
+      throw new Error('SEED_PASSWORD must contain at least 15 characters when creating admin')
+    }
+    const hash = await hashPassword(password)
+    await prisma.user.create({
+      data: { username: 'admin', passwordHash: hash },
+    })
+  }
 
   // 初始化默认设置
   await prisma.setting.upsert({
@@ -23,6 +25,11 @@ async function main() {
     where: { key: 'home_tagline' },
     update: {},
     create: { key: 'home_tagline', value: '记录思考、项目和对现代 Web 开发的探索。' },
+  })
+  await prisma.setting.upsert({
+    where: { key: 'home_role' },
+    update: {},
+    create: { key: 'home_role', value: '开发者 / 持续学习者' },
   })
   await prisma.setting.upsert({
     where: { key: 'about_intro' },
@@ -40,9 +47,9 @@ async function main() {
     create: { key: 'about_github', value: 'https://github.com/666666999999666' },
   })
   await prisma.setting.upsert({
-    where: { key: 'about_email' },
+    where: { key: 'email' },
     update: {},
-    create: { key: 'about_email', value: '' },
+    create: { key: 'email', value: '' },
   })
 
   await prisma.project.upsert({
@@ -72,4 +79,11 @@ async function main() {
   console.log('Seed completed')
 }
 
-main().catch(console.error).finally(() => prisma.$disconnect())
+main()
+  .catch((error) => {
+    console.error(error)
+    process.exitCode = 1
+  })
+  .finally(async () => {
+    await prisma.$disconnect()
+  })

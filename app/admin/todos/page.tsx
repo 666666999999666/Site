@@ -10,7 +10,14 @@ export default async function TodosPage() {
   return (
     <Container>
       <h1 className="text-3xl font-semibold mb-8">Todo</h1>
-      <TodoList todos={todos} categories={categories} />
+      <TodoList
+        key={[
+          ...todos.map((todo) => `${todo.id}:${todo.updatedAt.toISOString()}:${todo.categoryId}`),
+          ...categories.map((category) => `${category.id}:${category.name}:${category.sortOrder}`),
+        ].join("|")}
+        todos={todos}
+        categories={categories}
+      />
     </Container>
   )
 }

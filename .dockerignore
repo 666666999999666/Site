@@ -4,10 +4,10 @@ node_modules
 *.md
 docs
 data
+backups
 nginx
 docker-compose*.yml
 .env*
 !.env.example
 .superpowers
-scripts
-!scripts/collect-prisma-deps.js
+.tmp-pgtest

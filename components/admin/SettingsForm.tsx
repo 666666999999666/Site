@@ -1,10 +1,11 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState } from "react"
 import { useRouter } from "next/navigation"
+import { apiRequest, jsonRequest } from "@/lib/api-client"
+import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 
 export function SettingsForm({ initial }: { initial: Record<string, string> }) {
@@ -13,80 +14,128 @@ export function SettingsForm({ initial }: { initial: Record<string, string> }) {
     owner_name: initial.owner_name || "",
     email: initial.email || "",
     home_tagline: initial.home_tagline || "",
+    home_role: initial.home_role || "",
     about_intro: initial.about_intro || "",
     about_whatido: initial.about_whatido || "",
     about_skills: initial.about_skills || "",
     about_github: initial.about_github || "",
   })
-  const [pending, startTransition] = useTransition()
-  const [feedback, setFeedback] = useState<"saved" | "error" | null>(null)
+  const [pending, setPending] = useState(false)
+  const [feedback, setFeedback] = useState("")
+  const [error, setError] = useState("")
 
-  function set(key: string, value: string) {
-    setForm((f) => ({ ...f, [key]: value }))
+  function set(key: keyof typeof form, value: string) {
+    setForm((current) => ({ ...current, [key]: value }))
   }
 
-  async function save() {
-    startTransition(async () => {
-      try {
-        const res = await fetch("/api/settings", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        })
-        if (res.ok) {
-          setFeedback("saved")
-          router.refresh()
-        } else {
-          setFeedback("error")
-        }
-      } catch {
-        setFeedback("error")
-      }
-      setTimeout(() => setFeedback(null), 2000)
-    })
+  async function save(event: React.FormEvent) {
+    event.preventDefault()
+    setPending(true)
+    setFeedback("")
+    setError("")
+    try {
+      await apiRequest("/api/settings", jsonRequest("PUT", form))
+      setFeedback("已保存")
+      router.refresh()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "保存失败")
+    } finally {
+      setPending(false)
+    }
   }
 
   return (
-    <div className="space-y-4 max-w-md">
+    <form onSubmit={save} className="max-w-xl space-y-4">
       <div className="space-y-2">
-        <Label>姓名</Label>
-        <Input value={form.owner_name} onChange={(e) => set("owner_name", e.target.value)} placeholder="显示在页脚版权信息中" />
+        <Label htmlFor="owner-name">姓名或个人品牌名</Label>
+        <Input
+          id="owner-name"
+          value={form.owner_name}
+          onChange={(event) => set("owner_name", event.target.value)}
+          placeholder="显示在首页、导航和页脚"
+          maxLength={1000}
+        />
       </div>
       <div className="space-y-2">
-        <Label>邮箱</Label>
-        <Input type="email" value={form.email} onChange={(e) => set("email", e.target.value)} placeholder="关于页联系方式邮箱" />
+        <Label htmlFor="email">联系邮箱</Label>
+        <Input
+          id="email"
+          type="email"
+          value={form.email}
+          onChange={(event) => set("email", event.target.value)}
+          placeholder="name@example.com"
+          maxLength={320}
+        />
       </div>
-
       <div className="space-y-2">
-        <Label>首页标语</Label>
-        <Input value={form.home_tagline} onChange={(e) => set("home_tagline", e.target.value)} placeholder="首页 Hero 区域的描述文字" />
+        <Label htmlFor="home-role">当前方向</Label>
+        <Input
+          id="home-role"
+          value={form.home_role}
+          onChange={(event) => set("home_role", event.target.value)}
+          placeholder="例如：全栈开发 / 自动化测试"
+          maxLength={1000}
+        />
       </div>
-
       <div className="space-y-2">
-        <Label>关于页介绍</Label>
-        <Textarea value={form.about_intro} onChange={(e) => set("about_intro", e.target.value)} rows={3} placeholder="关于页的自我介绍" />
+        <Label htmlFor="home-tagline">首页简介</Label>
+        <Input
+          id="home-tagline"
+          value={form.home_tagline}
+          onChange={(event) => set("home_tagline", event.target.value)}
+          placeholder="一句话说明网站记录什么"
+          maxLength={1000}
+        />
       </div>
-
       <div className="space-y-2">
-        <Label>我做什么</Label>
-        <Textarea value={form.about_whatido} onChange={(e) => set("about_whatido", e.target.value)} rows={3} placeholder="描述你做什么工作/提供什么服务" />
+        <Label htmlFor="about-intro">个人介绍</Label>
+        <Textarea
+          id="about-intro"
+          value={form.about_intro}
+          onChange={(event) => set("about_intro", event.target.value)}
+          rows={4}
+          placeholder="具体介绍你的经历、关注方向和目标"
+          maxLength={5000}
+        />
       </div>
-
       <div className="space-y-2">
-        <Label>技能标签（逗号分隔）</Label>
-        <Input value={form.about_skills} onChange={(e) => set("about_skills", e.target.value)} placeholder="TypeScript,React,Next.js" />
+        <Label htmlFor="about-whatido">我在做什么</Label>
+        <Textarea
+          id="about-whatido"
+          value={form.about_whatido}
+          onChange={(event) => set("about_whatido", event.target.value)}
+          rows={4}
+          placeholder="当前学习、项目或求职方向"
+          maxLength={5000}
+        />
       </div>
-
       <div className="space-y-2">
-        <Label>GitHub 链接</Label>
-        <Input value={form.about_github} onChange={(e) => set("about_github", e.target.value)} placeholder="https://github.com/..." />
+        <Label htmlFor="about-skills">技能标签（逗号分隔）</Label>
+        <Input
+          id="about-skills"
+          value={form.about_skills}
+          onChange={(event) => set("about_skills", event.target.value)}
+          placeholder="TypeScript, React, Next.js"
+          maxLength={1000}
+        />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="about-github">GitHub 链接</Label>
+        <Input
+          id="about-github"
+          type="url"
+          value={form.about_github}
+          onChange={(event) => set("about_github", event.target.value)}
+          placeholder="https://github.com/..."
+          maxLength={1000}
+        />
       </div>
 
       <div className="flex items-center gap-3">
-        <Button onClick={save} disabled={pending}>保存</Button>
-        {feedback === "saved" && <span className="text-sm text-green-600">已保存</span>}
-        {feedback === "error" && <span className="text-sm text-red-600">保存失败</span>}
+        <Button type="submit" disabled={pending}>{pending ? "保存中..." : "保存"}</Button>
+        {feedback && <span className="text-sm text-emerald-600">{feedback}</span>}
       </div>
-    </div>
+      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+    </form>
   )
 }

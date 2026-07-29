@@ -26,13 +26,20 @@ export function MobileMenu() {
   return (
     <div className="sm:hidden">
       <button
+        type="button"
         onClick={() => setOpen(!open)}
+        aria-label={open ? "关闭导航菜单" : "打开导航菜单"}
+        aria-expanded={open}
+        aria-controls="mobile-site-navigation"
         className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
       >
         {open ? <X className="size-4" /> : <Menu className="size-4" />}
       </button>
       {open && (
-        <div className="absolute left-0 right-0 top-14 border-t border-border/50 bg-background/95 backdrop-blur-md p-4 space-y-1">
+        <div
+          id="mobile-site-navigation"
+          className="absolute left-0 right-0 top-14 space-y-1 border-t border-border/50 bg-background/95 p-4 backdrop-blur-md"
+        >
           {links.map((link) => (
             <Link
               key={link.href}

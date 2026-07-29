@@ -1,27 +1,31 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { getSession } from "@/lib/auth/session"
 import { handleApiError } from "@/lib/api/handler"
-import { AuthError } from "@/lib/errors"
-
-async function ensureAuth() {
-  const session = await getSession()
-  if (!session.isLoggedIn) throw new AuthError("未登录")
-}
+import { ConflictError, NotFoundError } from "@/lib/errors"
+import { ensureAuthenticated } from "@/lib/api/auth"
+import { readJsonObject, validateCategoryUpdate } from "@/lib/validation"
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await ensureAuth()
+    await ensureAuthenticated()
     const { id } = await params
-    const body = await req.json()
+    const current = await prisma.category.findUnique({ where: { id } })
+    if (!current) throw new NotFoundError("分区不存在")
+    const body = validateCategoryUpdate(await readJsonObject(req))
+    if (body.name) {
+      const duplicate = await prisma.category.findFirst({
+        where: {
+          id: { not: id },
+          type: current.type,
+          name: { equals: body.name, mode: "insensitive" },
+        },
+        select: { id: true },
+      })
+      if (duplicate) throw new ConflictError("同类型下已存在同名分区")
+    }
     const cat = await prisma.category.update({
       where: { id },
-      data: {
-        ...(body.name !== undefined && { name: body.name }),
-        ...(body.description !== undefined && { description: body.description }),
-        ...(body.color !== undefined && { color: body.color }),
-        ...(body.sortOrder !== undefined && { sortOrder: body.sortOrder }),
-      },
+      data: body,
     })
     return NextResponse.json(cat)
   } catch (e) {
@@ -31,7 +35,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await ensureAuth()
+    await ensureAuthenticated()
     const { id } = await params
     await prisma.category.delete({ where: { id } })
     return NextResponse.json({ ok: true })

@@ -1,19 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
-import { getSession } from "@/lib/auth/session"
 import { findUserByUsername } from "@/lib/auth/repository"
 import { verifyPassword, hashPassword } from "@/lib/auth/password"
 import { handleApiError } from "@/lib/api/handler"
-import { AuthError, ValidationError } from "@/lib/errors"
+import { AuthError } from "@/lib/errors"
 import { prisma } from "@/lib/db"
+import { ensureAuthenticated } from "@/lib/api/auth"
+import { readJsonObject, validatePasswordChange } from "@/lib/validation"
 
 export async function POST(req: NextRequest) {
   try {
-    const session = await getSession()
-    if (!session.isLoggedIn) throw new AuthError("未登录")
+    const session = await ensureAuthenticated()
 
-    const { currentPassword, newPassword } = await req.json()
-    if (!currentPassword || !newPassword) throw new ValidationError("参数缺失")
-    if (newPassword.length < 6) throw new ValidationError("新密码至少 6 位")
+    const { currentPassword, newPassword } = validatePasswordChange(
+      await readJsonObject(req)
+    )
 
     const user = await findUserByUsername(session.username!)
     if (!user || !(await verifyPassword(currentPassword, user.passwordHash))) {
@@ -25,8 +25,9 @@ export async function POST(req: NextRequest) {
       where: { id: user.id },
       data: { passwordHash: hash },
     })
+    session.destroy()
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json({ ok: true, loggedOut: true })
   } catch (e) {
     return handleApiError(e)
   }

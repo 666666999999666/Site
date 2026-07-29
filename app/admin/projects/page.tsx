@@ -1,9 +1,10 @@
 import Link from "next/link"
 import { prisma } from "@/lib/db"
 import { Container } from "@/components/layout/Container"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import { ProjectsTable } from "@/components/admin/ProjectsTable"
+import { cn } from "@/lib/utils"
 
 export default async function ProjectsAdminPage() {
   const projects = await prisma.project.findMany({
@@ -13,8 +14,8 @@ export default async function ProjectsAdminPage() {
     <Container>
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-semibold">项目管理</h1>
-        <Link href="/admin/projects/new">
-          <Button><Plus className="h-4 w-4 mr-1" /> 新建项目</Button>
+        <Link href="/admin/projects/new" className={cn(buttonVariants(), "gap-1.5")}>
+          <Plus className="size-4" /> 新建项目
         </Link>
       </div>
       <ProjectsTable initialProjects={projects} />

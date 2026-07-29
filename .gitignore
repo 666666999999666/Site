@@ -25,6 +25,7 @@ docker-compose.override.yml
 
 # db data
 data/
+.tmp-pgtest/
 
 # generated Prisma Client (Prisma 7 generates into project source)
 lib/generated/prisma/
@@ -64,6 +65,8 @@ docs/superpowers/
 *.tar
 *.tar.gz
 *.zip
+/backups/
+/.deploy-state
 
 # temp/debug files
 giteecicd*.md

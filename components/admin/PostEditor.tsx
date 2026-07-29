@@ -8,87 +8,7 @@ import { Slice } from "@milkdown/kit/prose/model"
 import { Selection } from "@milkdown/kit/prose/state"
 import "@milkdown/crepe/theme/common/style.css"
 import "@milkdown/crepe/theme/frame.css"
-
-/**
- * 检测内容是否为 Tiptap JSON 格式，如果是则转换为 Markdown
- * 旧文章可能存储的是 Tiptap JSON，新文章是 Markdown
- */
-function normalizeTiptapToMarkdown(raw: string): string {
-  const trimmed = raw.trim()
-  if (!trimmed) return ""
-
-  if (trimmed.startsWith('{"type":"doc"') || trimmed.startsWith('{"type": "doc"')) {
-    try {
-      const json = JSON.parse(trimmed)
-      const lines: string[] = []
-
-      function walk(node: Record<string, unknown>) {
-        if (node.type === "text" && typeof node.text === "string") {
-          if (Array.isArray(node.marks)) {
-            for (const mark of node.marks as Record<string, unknown>[]) {
-              if (mark.type === "bold") { lines.push(`**${node.text}**`); return }
-              if (mark.type === "italic") { lines.push(`*${node.text}*`); return }
-              if (mark.type === "code") { lines.push(`\`${node.text}\``); return }
-            }
-          }
-          lines.push(node.text)
-        } else if (node.type === "hardBreak") {
-          lines.push("\n")
-        } else if (node.type === "paragraph") {
-          if (Array.isArray(node.content)) {
-            for (const child of node.content as Record<string, unknown>[]) walk(child)
-          }
-          lines.push("\n")
-        } else if (node.type === "heading") {
-          const level = (node.attrs as { level?: number })?.level ?? 2
-          lines.push("#".repeat(level) + " ")
-          if (Array.isArray(node.content)) {
-            for (const child of node.content as Record<string, unknown>[]) walk(child)
-          }
-          lines.push("\n")
-        } else if (node.type === "bulletList" || node.type === "orderedList") {
-          if (Array.isArray(node.content)) {
-            for (const child of node.content as Record<string, unknown>[]) walk(child)
-          }
-        } else if (node.type === "listItem") {
-          lines.push("- ")
-          if (Array.isArray(node.content)) {
-            for (const child of node.content as Record<string, unknown>[]) walk(child)
-          }
-        } else if (node.type === "codeBlock") {
-          const lang = (node.attrs as { language?: string })?.language || ""
-          lines.push(`\n\`\`\`${lang}\n`)
-          if (Array.isArray(node.content)) {
-            for (const child of node.content as Record<string, unknown>[]) walk(child)
-          }
-          lines.push("\n```\n")
-        } else if (node.type === "blockquote") {
-          lines.push("> ")
-          if (Array.isArray(node.content)) {
-            for (const child of node.content as Record<string, unknown>[]) walk(child)
-          }
-          lines.push("\n")
-        } else if (node.type === "horizontalRule") {
-          lines.push("\n---\n")
-        } else if (node.type === "image") {
-          const attrs = node.attrs as { src?: string; alt?: string } | undefined
-          lines.push(`\n![${attrs?.alt || ""}](${attrs?.src || ""})\n`)
-        } else {
-          if (Array.isArray(node.content)) {
-            for (const child of node.content as Record<string, unknown>[]) walk(child)
-          }
-        }
-      }
-
-      walk(json)
-      return lines.join("").replace(/\n{3,}/g, "\n\n").trim()
-    } catch {
-      return raw
-    }
-  }
-
-  return raw
-}
+import { normalizeContent } from "@/lib/content"
 
 /**
  * Markdown 所见即所得编辑器（基于 Milkdown + Crepe）
@@ -100,17 +20,20 @@ function normalizeTiptapToMarkdown(raw: string): string {
 export function PostEditor({
   value,
   onChange,
+  onUpload,
 }: {
   value: string
   onChange: (value: string) => void
+  onUpload?: (url: string) => void
 }) {
   const divRef = useRef<HTMLDivElement>(null)
   const crepeRef = useRef<Crepe | null>(null)
   const onChangeRef = useRef(onChange)
+  const onUploadRef = useRef(onUpload)
   const loadingRef = useRef(false)
 
   // 将 Tiptap JSON 自动转换为 Markdown
-  const normalizedValue = normalizeTiptapToMarkdown(value || "")
+  const normalizedValue = normalizeContent(value || "")
 
   // 当前编辑器内容，避免外部 value 变化时回环更新
   const currentValueRef = useRef<string>(normalizedValue)
@@ -118,13 +41,15 @@ export function PostEditor({
   // 每次 render 同步 onChange 回调到 ref，避免渲染阶段直接写 ref
   useEffect(() => {
     onChangeRef.current = onChange
-  })
+    onUploadRef.current = onUpload
+  }, [onChange, onUpload])
 
   // 初始化 Crepe 编辑器（仅运行一次）
   useLayoutEffect(() => {
     if (!divRef.current) return
     if (loadingRef.current) return
     loadingRef.current = true
+    let cancelled = false
 
     const crepe = new Crepe({
       root: divRef.current,
@@ -138,10 +63,16 @@ export function PostEditor({
               method: "POST",
               body: fd,
             })
-            if (!res.ok) throw new Error("图片上传失败")
-            const { url } = await res.json()
+            const payload = await res.json().catch(() => ({})) as { url?: string; error?: string }
+            if (!res.ok || !payload.url) throw new Error(payload.error || "图片上传失败")
+            const url = payload.url
+            onUploadRef.current?.(url)
             return url
           },
+        },
+        [Crepe.Feature.Placeholder]: {
+          text: "开始写正文，输入 / 可打开命令菜单",
+          mode: "doc",
         },
       },
     })
@@ -156,11 +87,19 @@ export function PostEditor({
       .use(listener)
 
     crepe.create().then(() => {
+      if (cancelled) {
+        void crepe.destroy()
+        return
+      }
       crepeRef.current = crepe
       loadingRef.current = false
+    }).catch((error) => {
+      loadingRef.current = false
+      console.error("[MilkdownCreateFailed]", error)
     })
 
     return () => {
+      cancelled = true
       if (crepeRef.current) {
         crepeRef.current.destroy()
         crepeRef.current = null

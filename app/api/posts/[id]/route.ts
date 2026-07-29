@@ -1,19 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { getSession } from "@/lib/auth/session"
 import { calculateReadTime } from "@/lib/posts"
 import { handleApiError } from "@/lib/api/handler"
-import { AuthError, ValidationError, NotFoundError } from "@/lib/errors"
-
-async function ensureAuth() {
-  const session = await getSession()
-  if (!session.isLoggedIn) throw new AuthError("未登录")
-  return session
-}
+import { NotFoundError } from "@/lib/errors"
+import { ensureAuthenticated } from "@/lib/api/auth"
+import { readJsonObject, validatePostUpdate } from "@/lib/validation"
+import { normalizeContent } from "@/lib/content"
+import { resolvePublishedAt } from "@/lib/post-policy"
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await ensureAuth()
+    await ensureAuthenticated()
     const { id } = await params
     const post = await prisma.post.findUnique({ where: { id }, include: { category: true } })
     if (!post) throw new NotFoundError("未找到")
@@ -25,26 +22,34 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await ensureAuth()
+    await ensureAuthenticated()
     const { id } = await params
-    const body = await req.json()
-    const { title, content, excerpt, categoryId, tags, status, publishedAt } = body
-
-    if (status !== undefined && !["DRAFT", "PUBLISHED"].includes(status)) {
-      throw new ValidationError("status 只能是 DRAFT 或 PUBLISHED")
-    }
-    if (tags !== undefined && !Array.isArray(tags)) {
-      throw new ValidationError("tags 必须是数组")
-    }
+    const current = await prisma.post.findUnique({ where: { id } })
+    if (!current) throw new NotFoundError("文章不存在")
+    const input = validatePostUpdate(await readJsonObject(req))
+    const nextStatus = input.status ?? current.status
 
     const data: Record<string, unknown> = {}
-    if (title !== undefined) data.title = title
-    if (content !== undefined) { data.content = content; data.readTime = calculateReadTime(content) }
-    if (excerpt !== undefined) data.excerpt = excerpt
-    if (categoryId !== undefined) data.categoryId = categoryId || null
-    if (tags !== undefined) data.tags = tags
-    if (status !== undefined) data.status = status
-    if (publishedAt !== undefined) data.publishedAt = publishedAt ? new Date(publishedAt) : null
+    if (input.title !== undefined) data.title = input.title
+    if (input.content !== undefined) {
+      const content = normalizeContent(input.content)
+      data.content = content
+      data.readTime = calculateReadTime(content)
+    }
+    if (input.excerpt !== undefined) data.excerpt = input.excerpt
+    if (input.categoryId !== undefined) data.categoryId = input.categoryId
+    if (input.tags !== undefined) data.tags = input.tags
+    if (input.status !== undefined) data.status = input.status
+    if (input.status !== undefined || input.publishedAt !== undefined) {
+      data.publishedAt = resolvePublishedAt({
+        existing: {
+          status: current.status,
+          publishedAt: current.publishedAt,
+        },
+        nextStatus,
+        requestedPublishedAt: input.publishedAt,
+      })
+    }
     const post = await prisma.post.update({ where: { id }, data })
     return NextResponse.json(post)
   } catch (e) {
@@ -54,7 +59,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await ensureAuth()
+    await ensureAuthenticated()
     const { id } = await params
     await prisma.post.delete({ where: { id } })
     return NextResponse.json({ ok: true })

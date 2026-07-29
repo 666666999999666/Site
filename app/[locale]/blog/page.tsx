@@ -1,4 +1,5 @@
 import { Suspense } from "react"
+import type { Metadata } from "next"
 import { getTranslations } from "next-intl/server"
 import { prisma } from "@/lib/db"
 import { Container } from "@/components/layout/Container"
@@ -6,7 +7,15 @@ import { BlogFilters } from "@/components/blog/BlogFilters"
 import { BlogCard } from "@/components/blog/BlogCard"
 
 export const dynamic = "force-dynamic"
-export const revalidate = 3600
+export const metadata: Metadata = {
+  title: "博客",
+  description: "学习笔记、技术实践和长期思考。",
+  alternates: { canonical: "/zh/blog" },
+  openGraph: {
+    title: "博客",
+    description: "学习笔记、技术实践和长期思考。",
+  },
+}
 
 export default async function BlogPage({
   params,
@@ -41,7 +50,7 @@ export default async function BlogPage({
 
   const posts = await prisma.post.findMany({
     where,
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
     include: { category: true },
   })
 

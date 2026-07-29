@@ -1,17 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { getSession } from "@/lib/auth/session"
 import { handleApiError } from "@/lib/api/handler"
-import { AuthError, ValidationError } from "@/lib/errors"
-
-async function ensureAuth() {
-  const session = await getSession()
-  if (!session.isLoggedIn) throw new AuthError("未登录")
-}
+import { ensureAuthenticated } from "@/lib/api/auth"
+import { readJsonObject, validateTodoCreate } from "@/lib/validation"
 
 export async function GET() {
   try {
-    await ensureAuth()
+    await ensureAuthenticated()
     const todos = await prisma.todo.findMany({
       orderBy: [{ createdAt: "desc" }],
       include: { category: true },
@@ -24,11 +19,18 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   try {
-    await ensureAuth()
-    const { title, description, categoryId } = await req.json()
-    if (!title) throw new ValidationError("标题必填")
+    await ensureAuthenticated()
+    const input = validateTodoCreate(await readJsonObject(req))
     const todo = await prisma.todo.create({
-      data: { title, description, categoryId: categoryId || null },
+      data: {
+        title: input.title,
+        description: input.description ?? null,
+        categoryId: input.categoryId ?? null,
+        status: input.status ?? "TODO",
+        priority: input.priority ?? 0,
+        dueDate: input.dueDate ?? null,
+      },
+      include: { category: true },
     })
     return NextResponse.json(todo, { status: 201 })
   } catch (e) {

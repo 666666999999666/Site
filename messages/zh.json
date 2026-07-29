@@ -14,6 +14,7 @@
     "latestPosts": "最新文章",
     "viewAll": "查看全部",
     "latestProjects": "最新项目",
+    "source": "源码",
     "minuteRead": "{count}分钟阅读"
   },
   "blog": {

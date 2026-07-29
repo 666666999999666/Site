@@ -1,63 +1,96 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+/* eslint-disable @next/next/no-img-element -- The lightbox must preserve arbitrary article image URLs and dimensions. */
+
+import { useCallback, useEffect, useRef, useState } from "react"
 import { X } from "lucide-react"
 
-export function Lightbox() {
-  const [src, setSrc] = useState<string | null>(null)
+interface LightboxImage {
+  src: string
+  alt: string
+}
 
-  const close = useCallback(() => setSrc(null), [])
+export function Lightbox() {
+  const [image, setImage] = useState<LightboxImage | null>(null)
+  const triggerRef = useRef<HTMLElement | null>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+
+  const close = useCallback(() => {
+    setImage(null)
+    requestAnimationFrame(() => triggerRef.current?.focus())
+  }, [])
 
   useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement
-      if (target.tagName === "IMG" && target.classList.contains("cursor-zoom-in")) {
-        e.preventDefault()
-        setSrc((target as HTMLImageElement).src)
+    const openImage = (target: HTMLImageElement) => {
+      triggerRef.current = target
+      setImage({ src: target.currentSrc || target.src, alt: target.alt })
+    }
+    const handleClick = (event: MouseEvent) => {
+      const target = event.target
+      if (target instanceof HTMLImageElement && target.hasAttribute("data-lightbox-image")) {
+        event.preventDefault()
+        openImage(target)
+      }
+    }
+    const handleKey = (event: KeyboardEvent) => {
+      const target = event.target
+      if (
+        (event.key === "Enter" || event.key === " ") &&
+        target instanceof HTMLImageElement &&
+        target.hasAttribute("data-lightbox-image")
+      ) {
+        event.preventDefault()
+        openImage(target)
       }
     }
 
     document.addEventListener("click", handleClick)
-    return () => document.removeEventListener("click", handleClick)
+    document.addEventListener("keydown", handleKey)
+    return () => {
+      document.removeEventListener("click", handleClick)
+      document.removeEventListener("keydown", handleKey)
+    }
   }, [])
 
   useEffect(() => {
-    if (!src) return
-
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") close()
+    if (!image) return
+    const previousOverflow = document.body.style.overflow
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") close()
     }
-
     document.body.style.overflow = "hidden"
-    window.addEventListener("keydown", handleKey)
-
+    window.addEventListener("keydown", handleEscape)
+    closeButtonRef.current?.focus()
     return () => {
-      document.body.style.overflow = ""
-      window.removeEventListener("keydown", handleKey)
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener("keydown", handleEscape)
     }
-  }, [src, close])
+  }, [close, image])
 
-  if (!src) return null
+  if (!image) return null
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
       onClick={close}
       role="dialog"
       aria-modal="true"
+      aria-label="图片预览"
     >
       <button
+        ref={closeButtonRef}
+        type="button"
         onClick={close}
-        className="absolute top-4 right-4 rounded-full bg-white/10 p-2 text-white hover:bg-white/20 transition-colors"
-        aria-label="Close"
+        className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/20"
+        aria-label="关闭图片预览"
       >
-        <X className="h-5 w-5" />
+        <X className="size-5" />
       </button>
       <img
-        src={src}
-        alt=""
+        src={image.src}
+        alt={image.alt}
         className="max-h-[85vh] max-w-[90vw] rounded-lg shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
+        onClick={(event) => event.stopPropagation()}
       />
     </div>
   )

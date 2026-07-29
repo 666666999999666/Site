@@ -10,7 +10,7 @@ export default async function SettingsPage() {
 
   return (
     <Container>
-      <h1 className="text-3xl font-semibold mb-8">Settings</h1>
+      <h1 className="text-3xl font-semibold mb-8">设置</h1>
 
       <section className="mb-12">
         <h2 className="text-xl font-semibold mb-4">个人信息</h2>

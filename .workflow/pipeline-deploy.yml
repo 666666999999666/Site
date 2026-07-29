@@ -2,8 +2,8 @@ version: "1.0"
 name: pipeline-deploy
 displayName: 构建并部署
 stages:
-- name: Docker 镜像构建
-  displayName: Docker 镜像构建
+- name: 云端 Docker 镜像构建
+  displayName: 云端 Docker 镜像构建（不占用生产机）
   strategy: naturally
   trigger: auto
   executor: []
@@ -27,7 +27,7 @@ stages:
     strategy:
       retry: "0"
 - name: 部署到服务器
-  displayName: 部署到服务器
+  displayName: 生产机仅拉取并部署
   strategy: naturally
   trigger: auto
   executor: []
@@ -36,11 +36,11 @@ stages:
     name: deploy_shell
     displayName: Shell 脚本执行
     script: |-
+      set -eu
       cd /home/ubuntu/个人网站
-      docker login ccr.ccs.tencentyun.com -u ${TCR_USERNAME} -p ${TCR_PASSWORD}
-      docker compose pull
-      docker compose up -d
-      docker image prune -f || true
+      trap 'docker logout ccr.ccs.tencentyun.com >/dev/null 2>&1 || true' EXIT
+      printf '%s' "${TCR_PASSWORD}" | docker login ccr.ccs.tencentyun.com --username "${TCR_USERNAME}" --password-stdin >/dev/null
+      bash ops/deploy.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
     hostGroupID:
       ID: tencent-cloud
       hostID:

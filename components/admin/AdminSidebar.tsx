@@ -7,10 +7,10 @@ import { cn } from "@/lib/utils"
 
 const items = [
   { href: "/admin", label: "概览", icon: Home },
-  { href: "/admin/posts", label: "Blog", icon: FileText },
+  { href: "/admin/posts", label: "文章", icon: FileText },
   { href: "/admin/projects", label: "项目管理", icon: FolderKanban },
-  { href: "/admin/todos", label: "Todo", icon: ListTodo },
-  { href: "/admin/settings", label: "Settings", icon: Settings },
+  { href: "/admin/todos", label: "Todo / Idea", icon: ListTodo },
+  { href: "/admin/settings", label: "设置", icon: Settings },
 ]
 
 export function AdminSidebar() {

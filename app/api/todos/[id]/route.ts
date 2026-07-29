@@ -1,28 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { getSession } from "@/lib/auth/session"
 import { handleApiError } from "@/lib/api/handler"
-import { AuthError, NotFoundError } from "@/lib/errors"
-
-async function ensureAuth() {
-  const session = await getSession()
-  if (!session.isLoggedIn) throw new AuthError("未登录")
-}
+import { ensureAuthenticated } from "@/lib/api/auth"
+import { readJsonObject, validateTodoUpdate } from "@/lib/validation"
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await ensureAuth()
+    await ensureAuthenticated()
     const { id } = await params
-    const body = await req.json()
+    const body = validateTodoUpdate(await readJsonObject(req))
     const todo = await prisma.todo.update({
       where: { id },
-      data: {
-        ...(body.title !== undefined && { title: body.title }),
-        ...(body.description !== undefined && { description: body.description }),
-        ...(body.status !== undefined && { status: body.status }),
-        ...(body.categoryId !== undefined && { categoryId: body.categoryId || null }),
-        ...(body.priority !== undefined && { priority: body.priority }),
-      },
+      data: body,
+      include: { category: true },
     })
     return NextResponse.json(todo)
   } catch (e) {
@@ -32,7 +22,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await ensureAuth()
+    await ensureAuthenticated()
     const { id } = await params
     await prisma.todo.delete({ where: { id } })
     return NextResponse.json({ ok: true })

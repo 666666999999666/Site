@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth/session"
 import { AdminSidebar } from "@/components/admin/AdminSidebar"
 import { MobileAdminNav } from "@/components/admin/MobileAdminNav"
 import { LogoutButton, SignOutButton } from "@/components/admin/LogoutButton"
+import { ThemeToggle } from "@/components/layout/ThemeToggle"
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession()
@@ -17,6 +18,10 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <span className="font-sans text-lg text-foreground">QZ Site 后台</span>
           </div>
           <AdminSidebar />
+          <div className="mt-4 flex items-center justify-between px-3">
+            <span className="text-xs text-muted-foreground">主题</span>
+            <ThemeToggle />
+          </div>
           <div className="mt-4">
             <LogoutButton />
           </div>
@@ -24,7 +29,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <SignOutButton />
           </div>
         </aside>
-        <main className="flex-1 p-6 md:p-10 bg-background">{children}</main>
+        <main className="min-w-0 flex-1 bg-background p-4 sm:p-6 md:p-10">{children}</main>
       </div>
     </div>
   )

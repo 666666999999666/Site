@@ -1,9 +1,10 @@
 import Link from "next/link"
 import { prisma } from "@/lib/db"
 import { Container } from "@/components/layout/Container"
-import { Button } from "@/components/ui/button"
+import { buttonVariants } from "@/components/ui/button"
 import { Plus } from "lucide-react"
 import { PostsList } from "@/components/admin/PostsList"
+import { cn } from "@/lib/utils"
 
 export default async function PostsPage() {
   const [posts, categories] = await Promise.all([
@@ -17,11 +18,18 @@ export default async function PostsPage() {
     <Container>
       <div className="flex items-center justify-between mb-8">
         <h1 className="text-3xl font-semibold">Blog</h1>
-        <Link href="/admin/posts/new">
-          <Button><Plus className="h-4 w-4 mr-1" /> 新文章</Button>
+        <Link href="/admin/posts/new" className={cn(buttonVariants(), "gap-1.5")}>
+          <Plus className="size-4" /> 新文章
         </Link>
       </div>
-      <PostsList initialPosts={posts} categories={categories} />
+      <PostsList
+        key={[
+          ...posts.map((post) => `${post.id}:${post.updatedAt.toISOString()}:${post.categoryId}`),
+          ...categories.map((category) => `${category.id}:${category.name}:${category.sortOrder}`),
+        ].join("|")}
+        initialPosts={posts}
+        categories={categories}
+      />
     </Container>
   )
 }

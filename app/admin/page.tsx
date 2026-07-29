@@ -19,15 +19,15 @@ export default async function AdminHome() {
     <Container>
       <h1 className="text-3xl font-semibold mb-8">概览</h1>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-        <Link href="/admin/posts" className="p-6 rounded-xl bg-card border border-border/50 hover:border-primary transition-colors">
+        <Link href="/admin/posts" className="rounded-lg border border-border/50 bg-card p-6 transition-colors hover:border-primary">
           <div className="text-3xl font-semibold text-primary">{postCount}</div>
           <div className="text-sm text-muted-foreground mt-1">文章总数（{draftCount} 草稿）</div>
         </Link>
-        <Link href="/admin/todos" className="p-6 rounded-xl bg-card border border-border/50 hover:border-primary transition-colors">
+        <Link href="/admin/todos" className="rounded-lg border border-border/50 bg-card p-6 transition-colors hover:border-primary">
           <div className="text-3xl font-semibold text-primary">{todoCount}</div>
           <div className="text-sm text-muted-foreground mt-1">Todo 总数</div>
         </Link>
-        <Link href="/admin/posts/new" className="p-6 rounded-xl bg-card border border-border/50 hover:border-primary transition-colors">
+        <Link href="/admin/posts/new" className="rounded-lg border border-border/50 bg-card p-6 transition-colors hover:border-primary">
           <div className="text-3xl font-semibold text-primary">＋</div>
           <div className="text-sm text-muted-foreground mt-1">写新文章</div>
         </Link>
