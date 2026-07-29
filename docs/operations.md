@@ -89,6 +89,8 @@ GitHub Actions 的维护工作流只暴露以上固定选项，不接受任意 S
 - 后台密码曾经通过聊天传输时必须由站点所有者在后台改为新的独立长密码，不能写入仓库、脚本、日志或聊天。
 - 个人 SSH 公钥只在 CI/CD、备份恢复和线上回归全部通过后移除；保留平台专用部署密钥与云控制台应急路径。
 
+Gitee Go 自有 Agent 由主机的 `gitee-go-agent.service` 管理，并限制为 256MB 内存和 50% CPU。云控制台应急检查只需执行 `systemctl is-active gitee-go-agent.service`；服务异常时执行 `sudo systemctl restart gitee-go-agent.service`。Agent UUID 只保存在服务器 `/home/ubuntu/.gitee-agent/uuid`，权限为 `600`，不得复制到仓库或流水线日志。
+
 ## 8. 发布后检查
 
 ```text
