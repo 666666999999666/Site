@@ -6,7 +6,9 @@ action="${1:-status}"
 case "$action" in
   status)
     compose ps
-    curl --fail --silent --show-error https://liaoqizai.site/api/health
+    curl --fail --silent --show-error \
+      --resolve liaoqizai.site:443:127.0.0.1 \
+      https://liaoqizai.site/api/health
     printf '\n'
     ;;
   backup)

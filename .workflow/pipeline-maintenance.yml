@@ -1,0 +1,31 @@
+version: "1.0"
+name: pipeline-maintenance
+displayName: 生产维护
+stages:
+- name: 生产维护
+  displayName: 生产维护（固定动作）
+  strategy: naturally
+  trigger: auto
+  executor: []
+  steps:
+  - step: shell@agent
+    name: maintenance_shell
+    displayName: 执行受限维护动作
+    script: |-
+      set -eu
+      cd /home/ubuntu/个人网站
+      action="${MAINTENANCE_ACTION:-status}"
+      bash ops/maintenance.sh "$action"
+    hostGroupID:
+      ID: tencent-cloud
+      hostID:
+      - b57ee737-9ddd-4dba-bda2-0322378ea9f2
+    notify: []
+    strategy:
+      retry: "0"
+triggers:
+  trigger: manual
+notify: []
+variables:
+  global:
+  - MAINTENANCE_ACTION

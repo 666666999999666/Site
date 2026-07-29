@@ -10,6 +10,7 @@ openssl x509 -in "$certificate" -noout -checkend 2592000 \
 expiry="$(openssl x509 -in "$certificate" -noout -enddate)"
 
 curl --fail --silent --show-error --retry 3 \
+  --resolve liaoqizai.site:443:127.0.0.1 \
   https://liaoqizai.site/api/health > /dev/null
 
 log "TLS certificate and HTTPS health check passed: $expiry"

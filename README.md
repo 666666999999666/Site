@@ -8,7 +8,7 @@
 - **编辑器**：Milkdown Crepe，正文统一保存为 Markdown
 - **数据**：PostgreSQL 16、Prisma 7
 - **部署**：Docker Compose、Nginx、腾讯云镜像仓库
-- **流水线**：Gitee Go 主部署、GitHub Actions 备用部署与维护
+- **流水线**：Gitee Go 构建、部署与受限维护；GitHub 只同步仓库
 
 ## 本地开发
 
@@ -95,9 +95,11 @@ bash ops/deploy.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
 
 部署脚本会串行加锁、拉取代码、创建部署前备份、把镜像解析为不可变 digest、等待数据库/Web/Nginx 全部 Healthy，并请求正式域名健康接口。失败时输出诊断并恢复上一版本代码与镜像。数据库 migration 仍应设计为向后兼容，因为应用回滚不会自动逆转数据库变更。
 
-GitHub Actions 的 `Build and Deploy` 是手动备用链路，要求目标提交也已同步到 Gitee。`Production Maintenance` 只允许固定的状态、备份、恢复验证、证书和只读扫描操作。
+Gitee Go 的 `pipeline-maintenance` 是手动维护入口。`MAINTENANCE_ACTION` 只允许 `status`、`backup`、`verify-backup`、`ssl`、`content-dry-run` 和 `uploads-dry-run`；其他值会被 `ops/maintenance.sh` 拒绝。GitHub 当前只作为代码镜像仓库，不运行部署或生产维护工作流。
 
 生产机是 2 核 2G 规格，禁止在服务器执行 `docker build`、`npm ci`、`next build` 或全量测试。Compose 将数据库、Web 和 Nginx 分别限制为 512MB、768MB 和 128MB；主机保留 1GB、`swappiness=10` 的应急 Swap。镜像编译和完整质量检查只能在本地或托管 CI 完成。
+
+腾讯云 TCR 中的 `node` 是云端构建基础镜像，`web` 是每次发布生成的应用镜像。建议另建私有仓库 `postgres` 和 `nginx`，用于镜像 Docker Hub 的固定版本；在镜像实际推送成功并取得 digest 前，生产 Compose 继续使用已经验证并缓存的官方 digest，不能提前改成空仓库地址。
 
 ## 备份与恢复
 

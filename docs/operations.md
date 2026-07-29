@@ -13,11 +13,22 @@
 
 ## 2. 部署
 
-正常路径是推送 `main` 到 GitHub 和 Gitee。Gitee Go 构建完成后，自有 Agent 调用 `ops/deploy.sh`，不依赖个人电脑 SSH。
+正常路径是推送 `main` 到 Gitee，并将同一提交同步到 GitHub 作为仓库镜像。Gitee Go 构建完成后，自有 Agent 调用 `ops/deploy.sh`，不依赖个人电脑 SSH；GitHub 当前不执行部署或生产维护。
 
 生产机是 2 核 2G 规格。Gitee 的 `build@docker` 和 GitHub Hosted Runner 负责镜像编译；生产机 Agent 仅允许 `git fetch`、备份、拉取镜像、migration、Compose 切换和健康检查。禁止在生产机执行 `docker build`、`npm ci`、`next build` 或完整测试。
 
 Compose 的常驻内存上限为：PostgreSQL 512MB、Web 768MB、Nginx 128MB。主机配置 1GB 应急 Swap，`vm.swappiness=10`；Swap 只用于短时尖峰，不可作为在生产机编译的依据。备份恢复验证临时 PostgreSQL 上限为 384MB，且不得与部署、正文迁移或上传清理并发执行。
+
+TCR 镜像仓库分工如下：
+
+| 仓库 | 用途 | 当前要求 |
+|---|---|---|
+| `lqzzql/node` | Gitee 云端构建的 Node 基础镜像 | 保留 |
+| `lqzzql/web` | 本站运行镜像 | 保留，每次发布生成 |
+| `lqzzql/postgres` | PostgreSQL 16 固定版本镜像 | 建议创建私有仓库 |
+| `lqzzql/nginx` | Nginx Alpine 固定版本镜像 | 建议创建私有仓库 |
+
+`postgres` 和 `nginx` 是拉取加速与 Docker Hub 故障隔离，不是新增服务。仓库尚未创建或镜像尚未推送成功时，Compose 必须继续使用已经验证并缓存的官方 digest；切换 TCR 时同样固定到推送后的 digest，不使用浮动 tag。
 
 部署成功必须同时满足：
 
@@ -78,7 +89,7 @@ bash ops/maintenance.sh verify-backup
 | `content-dry-run` | 只读扫描旧正文 |
 | `uploads-dry-run` | 只读扫描孤儿上传 |
 
-GitHub Actions 的维护工作流只暴露以上固定选项，不接受任意 Shell 命令。
+Gitee Go 的 `pipeline-maintenance` 手动流水线通过 `MAINTENANCE_ACTION` 暴露以上固定选项，不接受任意 Shell 命令。未填写参数时只执行 `status`。
 
 ## 7. 密钥与权限
 
@@ -87,9 +98,11 @@ GitHub Actions 的维护工作流只暴露以上固定选项，不接受任意 S
 - 镜像仓库密码通过 `docker login --password-stdin` 传入，并在任务结束时 logout。
 - 轮换 `SESSION_SECRET` 后重启 Web，使旧 Session 全部失效。
 - 后台密码曾经通过聊天传输时必须由站点所有者在后台改为新的独立长密码，不能写入仓库、脚本、日志或聊天。
-- 个人 SSH 公钥只在 CI/CD、备份恢复和线上回归全部通过后移除；保留平台专用部署密钥与云控制台应急路径。
+- 个人 SSH 公钥只在 Gitee Go、备份恢复和线上回归全部通过后移除。Gitee Agent 使用出站连接，不依赖登录公钥；紧急操作走云控制台。
 
 Gitee Go 自有 Agent 由主机的 `gitee-go-agent.service` 管理，并限制为 256MB 内存和 50% CPU。云控制台应急检查只需执行 `systemctl is-active gitee-go-agent.service`；服务异常时执行 `sudo systemctl restart gitee-go-agent.service`。Agent UUID 只保存在服务器 `/home/ubuntu/.gitee-agent/uuid`，权限为 `600`，不得复制到仓库或流水线日志。
+
+`ops/check-ssl.sh` 通过 `127.0.0.1` 验证本机 Nginx 的正式域名虚拟主机、证书余量和健康接口，不替代公网监控。ICP备案完成前，云侧可能重置带正式域名 SNI 的外部 TLS 连接；备案接入完成后应再从境外和境内各保留一个外部可用性检查。
 
 ## 8. 发布后检查
 
