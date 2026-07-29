@@ -100,7 +100,7 @@ Gitee Go 的 `pipeline-maintenance` 手动流水线通过 `MAINTENANCE_ACTION` �
 - 后台密码曾经通过聊天传输时必须由站点所有者在后台改为新的独立长密码，不能写入仓库、脚本、日志或聊天。
 - 个人 SSH 公钥只在 Gitee Go、备份恢复和线上回归全部通过后移除。Gitee Agent 使用出站连接，不依赖登录公钥；紧急操作走云控制台。
 
-Gitee Go 自有 Agent 由主机的 `gitee-go-agent.service` 管理，并限制为 256MB 内存和 50% CPU。云控制台应急检查只需执行 `systemctl is-active gitee-go-agent.service`；服务异常时执行 `sudo systemctl restart gitee-go-agent.service`。Agent UUID 只保存在服务器 `/home/ubuntu/.gitee-agent/uuid`，权限为 `600`，不得复制到仓库或流水线日志。
+Gitee Go 自有 Agent 由主机的 `gitee-go-agent.service` 管理，并限制为 256MB 内存和 50% CPU。云控制台应急检查执行 `systemctl is-active gitee-go-agent.service`；服务异常时执行 `sudo systemctl restart gitee-go-agent.service`。Agent 正常停止会先向 Gitee 注销，服务端释放旧注册存在数分钟延迟；2026-07-29 实测 systemd 自动重试约 4 分 30 秒后恢复 Active。重启后先等待 6 分钟，再检查 `systemctl status gitee-go-agent.service`；连续 10 分钟仍未恢复才在 Gitee 主机组中重新绑定，不要提前删除 UUID。Agent UUID 只保存在服务器 `/home/ubuntu/.gitee-agent/uuid`，权限为 `600`，不得复制到仓库或流水线日志。
 
 `ops/check-ssl.sh` 通过 `127.0.0.1` 验证本机 Nginx 的正式域名虚拟主机、证书余量和健康接口，不替代公网监控。ICP备案完成前，云侧可能重置带正式域名 SNI 的外部 TLS 连接；备案接入完成后应再从境外和境内各保留一个外部可用性检查。
 
