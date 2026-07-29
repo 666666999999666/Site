@@ -6,14 +6,30 @@ import { getPublicSettings } from "@/lib/settings"
 import { GitHubIcon } from "@/components/icons/GitHubIcon"
 
 export const dynamic = "force-dynamic"
-export const metadata: Metadata = {
-  title: "关于",
-  description: "个人介绍、当前方向、技术栈和联系方式。",
-  alternates: { canonical: "/zh/about" },
-  openGraph: {
-    title: "关于",
-    description: "个人介绍、当前方向、技术栈和联系方式。",
-  },
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>
+}): Promise<Metadata> {
+  const { locale } = await params
+  const t = await getTranslations({ locale, namespace: "about" })
+  const pathname = `/${locale}/about`
+
+  return {
+    title: t("metadataTitle"),
+    description: t("metadataDescription"),
+    alternates: {
+      canonical: pathname,
+      languages: { zh: "/zh/about", en: "/en/about" },
+    },
+    openGraph: {
+      title: t("metadataTitle"),
+      description: t("metadataDescription"),
+      url: pathname,
+      locale: locale === "en" ? "en_US" : "zh_CN",
+    },
+  }
 }
 
 export default async function AboutPage() {

@@ -7,7 +7,7 @@ requested_image="${2:-ccr.ccs.tencentyun.com/lqzzql/web:latest}"
 [[ "$requested_image" =~ ^ccr\.ccs\.tencentyun\.com/lqzzql/web[:@][A-Za-z0-9._:@-]+$ ]] \
   || fail "Unexpected image reference"
 
-exec 9>"/tmp/qzsite-deploy.lock"
+exec 9>"/tmp/qzsite-operation.lock"
 flock -w 900 9 || fail "Another deployment is still running"
 [[ -d "$APP_DIR/.git" ]] || fail "$APP_DIR is not a Git worktree"
 
@@ -20,6 +20,8 @@ git merge-base --is-ancestor "$target_commit" "$origin_main" \
 
 previous_commit="$(git rev-parse --verify HEAD)"
 previous_image="$(awk -F= '$1 == "WEB_IMAGE" { print substr($0, index($0, "=") + 1) }' "$APP_DIR/.env" | tail -n 1)"
+previous_state="$(cat "$APP_DIR/.deploy-state" 2>/dev/null || true)"
+state_tmp=""
 
 log "Creating pre-deployment backup"
 bash "$APP_DIR/ops/backup.sh" predeploy
@@ -53,6 +55,7 @@ set_env_value() {
 
 rollback() {
   local exit_code=$?
+  [[ -n "$state_tmp" ]] && rm -f -- "$state_tmp"
   log "Deployment failed; collecting diagnostics"
   compose ps >&2 || true
   compose logs --tail 120 web nginx >&2 || true
@@ -67,11 +70,37 @@ rollback() {
       && compose exec --no-TTY nginx nginx -s reload > /dev/null 2>&1 \
       || true
   fi
+  if [[ -n "$previous_state" ]]; then
+    printf '%s\n' "$previous_state" > "$APP_DIR/.deploy-state"
+    chmod 600 "$APP_DIR/.deploy-state"
+  else
+    rm -f -- "$APP_DIR/.deploy-state"
+  fi
   exit "$exit_code"
 }
 trap rollback ERR
 
 git checkout --force -B main "$target_commit" > /dev/null
+
+image_fingerprint="$(
+  docker run --rm --read-only --network none \
+    --entrypoint cat \
+    "$immutable_image" \
+    /app/.source-fingerprint
+)"
+[[ "$image_fingerprint" =~ ^[0-9a-f]{64}$ ]] \
+  || fail "Candidate image has an invalid source fingerprint"
+
+source_fingerprint="$(
+  docker run --rm --read-only --network none \
+    --volume "$APP_DIR:/source:ro" \
+    --entrypoint node \
+    "$immutable_image" \
+    /prisma/tools/scripts/source-fingerprint.mjs /source
+)"
+[[ "$source_fingerprint" == "$image_fingerprint" ]] \
+  || fail "Candidate image does not match the requested Git revision"
+
 set_env_value WEB_IMAGE "$immutable_image"
 compose config --quiet
 compose pull db web nginx > /dev/null
@@ -83,16 +112,17 @@ log "Validating and reloading Nginx configuration"
 compose exec --no-TTY nginx nginx -t
 compose exec --no-TTY nginx nginx -s reload
 
-health="$(
-  curl --fail --silent --show-error --retry 5 --retry-delay 2 \
-    --resolve liaoqizai.site:443:127.0.0.1 \
-    https://liaoqizai.site/api/health
-)"
-[[ "$health" == *'"status":"ok"'* ]] || fail "Public health endpoint returned an unexpected response"
+bash "$APP_DIR/ops/smoke-test.sh"
 
-printf '%s %s\n' "$target_commit" "$immutable_image" > "$APP_DIR/.deploy-state"
+state_tmp="$(mktemp "$APP_DIR/.deploy-state.XXXXXX")"
+printf '%s %s %s\n' "$target_commit" "$immutable_image" "$image_fingerprint" > "$state_tmp"
+chmod 600 "$state_tmp"
+mv -- "$state_tmp" "$APP_DIR/.deploy-state"
+state_tmp=""
+bash "$APP_DIR/ops/verify-release.sh"
+
 chmod 600 "$APP_DIR/.deploy-state"
 trap - ERR
 docker image prune --force > /dev/null || true
 
-log "Deployment succeeded: ${target_commit:0:12} $immutable_image"
+log "Deployment succeeded: ${target_commit:0:12} $immutable_image $image_fingerprint"

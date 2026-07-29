@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { getTranslations } from "next-intl/server"
 import { HeroSection } from "@/components/home/HeroSection"
 import { RecentPosts } from "@/components/home/RecentPosts"
 import { LatestProjects, type Project } from "@/components/home/LatestProjects"
@@ -7,10 +8,30 @@ import { getRecentProjects } from "@/lib/projects"
 import { getPublicSettings } from "@/lib/settings"
 
 export const dynamic = "force-dynamic"
-export const metadata: Metadata = {
-  title: "首页",
-  description: "个人博客、Idea/Todo 与项目实践记录。",
-  alternates: { canonical: "/zh" },
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>
+}): Promise<Metadata> {
+  const { locale } = await params
+  const t = await getTranslations({ locale, namespace: "home" })
+  const pathname = `/${locale}`
+
+  return {
+    title: t("metadataTitle"),
+    description: t("metadataDescription"),
+    alternates: {
+      canonical: pathname,
+      languages: { zh: "/zh", en: "/en" },
+    },
+    openGraph: {
+      title: t("metadataTitle"),
+      description: t("metadataDescription"),
+      url: pathname,
+      locale: locale === "en" ? "en_US" : "zh_CN",
+    },
+  }
 }
 
 export default async function Home({ params }: { params: Promise<{ locale: string }> }) {

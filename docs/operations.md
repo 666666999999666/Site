@@ -1,63 +1,171 @@
-# 生产运维手册
+# QZ Site 生产运维手册
 
-## 1. 边界
+> **文档定位**：本文是当前生产操作的唯一常规手册，最后核对日期为 **2026-07-29**。整机或磁盘故障恢复见 [`disaster-recovery.md`](disaster-recovery.md)。
 
-**生产数据库和 `data/uploads` 是事实来源**。本地数据库只用于 migration、转换和恢复演练，不能反向覆盖生产数据。
+## 1. 运维边界
 
-以下操作必须先有同一时点的数据库与上传文件备份：
+**生产 PostgreSQL 和 `data/uploads` 是内容事实来源**。本地数据库、Seed 数据和本地上传不能覆盖生产数据。
 
-- Prisma migration 首次上线
-- Tiptap JSON 转 Markdown
-- 孤儿上传清理
-- 可能写入生产数据的人工修复
+生产机为 2 核 2G，只负责：
 
-## 2. 部署
+- 拉取 Git 提交和镜像。
+- 创建备份。
+- 执行 `prisma migrate deploy`。
+- 切换 Compose 服务。
+- 执行轻量健康、来源和冒烟检查。
 
-正常路径是推送 `main` 到 Gitee，并将同一提交同步到 GitHub 作为仓库镜像。Gitee Go 构建完成后，自有 Agent 调用 `ops/deploy.sh`，不依赖个人电脑 SSH；GitHub 当前不执行部署或生产维护。
+禁止在生产机执行 `docker build`、`npm ci`、`next build`、完整测试或压力测试。部署、备份、恢复验证和维护共享 `/tmp/qzsite-operation.lock`，不会并发运行。
 
-生产机是 2 核 2G 规格。Gitee 的 `build@docker` 负责镜像编译；生产机 Agent 仅允许 `git fetch`、备份、拉取镜像、migration、Compose 切换和健康检查。禁止在生产机执行 `docker build`、`npm ci`、`next build` 或完整测试。
+## 2. 流水线与仓库
 
-仓库中当前有 **2 份 Gitee Go 流水线定义**，但只有一份负责部署：
-
-| 流水线 | 配置文件 | 触发方式 | 用途 | 验证状态 |
-|---|---|---|---|---|
-| `pipeline-deploy` | `.workflow/pipeline-deploy.yml` | 推送 `main` | 云端构建 `web` 镜像并部署生产 | 已多次实际运行通过 |
-| `pipeline-maintenance` | `.workflow/pipeline-maintenance.yml` | 手动 | 执行固定白名单维护动作 | 配置已提交；需在 Gitee UI 手动执行 `status` 完成平台验证 |
-
-“配置已存在”和“平台已运行”必须分开记录。若 Gitee 流水线列表尚未显示 `pipeline-maintenance`，应在 Gitee Go 页面从仓库配置创建或导入该流水线；首次只运行默认 `status`，确认 Agent、变量和脚本路径正确。它不是第二条自动部署链路。
-
-Compose 的常驻内存上限为：PostgreSQL 512MB、Web 768MB、Nginx 128MB。主机配置 1GB 应急 Swap，`vm.swappiness=10`；Swap 只用于短时尖峰，不可作为在生产机编译的依据。备份恢复验证临时 PostgreSQL 上限为 384MB，且不得与部署、正文迁移或上传清理并发执行。
-
-TCR 镜像仓库分工如下：
-
-| 仓库 | 用途 | 当前要求 |
+| 流水线 | 触发 | 职责 |
 |---|---|---|
-| `lqzzql/node` | Gitee 云端构建的 Node 基础镜像 | 保留 |
-| `lqzzql/web` | 本站运行镜像 | 保留，每次发布生成 |
-| `lqzzql/postgres` | PostgreSQL 16 固定版本镜像 | 建议创建私有仓库 |
-| `lqzzql/nginx` | Nginx Alpine 固定版本镜像 | 建议创建私有仓库 |
+| `pipeline-deploy` | 推送 Gitee `main` | 云端构建、推送 Web 镜像、生产部署、自动 `status` 检查 |
+| `pipeline-maintenance` | 手动 | 故障、临时备份、恢复验证或证书轮换时执行固定动作 |
 
-`postgres` 和 `nginx` 是拉取加速与 Docker Hub 故障隔离，不是新增服务。仓库尚未创建或镜像尚未推送成功时，Compose 必须继续使用已经验证并缓存的官方 digest；切换 TCR 时同样固定到推送后的 digest，不使用浮动 tag。
+两条流水线不是两套部署方式。日常发布只走 `pipeline-deploy`；`pipeline-maintenance` 是不接受任意 Shell 的受限应急入口。GitHub 只同步仓库，不运行生产 Action。
 
-部署成功必须同时满足：
+TCR 当前只需要：
 
-1. `db`、`web`、`nginx` 为 Healthy。
-2. `GET https://liaoqizai.site/api/health` 返回 200。
-3. `.env` 中 `WEB_IMAGE` 已保存为 `@sha256:` digest。
-4. 部署前备份已经完成且通过结构校验。
+| 仓库 | 用途 | 结论 |
+|---|---|---|
+| `lqzzql/node` | Gitee 云端构建基础镜像 | 必需，Dockerfile 固定 digest |
+| `lqzzql/web` | 本站运行镜像 | 必需，构建推送 `latest`，运行使用 digest |
+| `postgres`、`nginx` | 官方镜像缓存 | 当前不必创建；Compose 已固定官方 digest |
 
-部署失败时脚本会恢复上一代码提交与镜像。migration 不自动回滚，因此 migration 必须优先采用新增 nullable 字段、兼容读写和后续清理的方式。
+PostgreSQL 和 Nginx 镜像只在版本变更或新机器恢复时拉取，不值得为当前单机额外维护 TCR 副本。若未来 Docker Hub 在实际恢复中不可用，再镜像到 TCR，并把 Compose 更新为新仓库的固定 digest。
 
-## 3. 当前 migration
+## 3. 自动部署
 
-`20260729030000_project_cover_and_setting_keys` 做两件事：
+Gitee Agent 执行：
 
-1. 为 `Project` 新增 nullable `coverImage`，旧应用可忽略。
-2. 当规范键 `email` 不存在或为空时，从旧键 `about_email` 复制值，不删除旧数据。
+```bash
+bash ops/deploy.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
+bash ops/maintenance.sh status
+```
 
-如必须回退旧应用，可保留这次数据库变更。若确认不再需要封面字段，先备份，再人工执行 `ALTER TABLE "Project" DROP COLUMN "coverImage"`；设置键不需要回滚。
+`ops/deploy.sh` 的顺序是：
 
-## 4. 正文转换
+1. 获取全局操作锁并确认目标提交属于 `origin/main`。
+2. 创建 PostgreSQL、uploads 和 SHA-256 同时点备份。
+3. 拉取候选 tag，并解析为不可变 `@sha256:` digest。
+4. 切换到目标提交。
+5. 对比目标源码与候选镜像内的 SHA-256 源码指纹。
+6. 以 digest 更新 Compose，执行 migration 并等待三个服务 Healthy。
+7. 验证 Nginx 配置并 reload。
+8. 执行中英文页面、健康接口、未登录 Todo 写保护、robots 和 sitemap 冒烟测试。
+9. 将 Git 提交、镜像 digest 和源码指纹写入 `.deploy-state`。
+10. 再次核对运行容器、镜像、源码和 `.deploy-state`。
+
+`latest` 只是候选镜像发现入口，不是生产运行标识。两次推送交错时，镜像与目标提交指纹不同会在容器切换前失败，避免部署错误代码。
+
+部署失败会恢复上一代码提交、上一镜像和上一 `.deploy-state`。Prisma migration 不会自动逆转，因此 migration 必须向后兼容，优先新增 nullable 字段、兼容读写和后续清理。
+
+部署成功至少满足：
+
+```bash
+bash ops/maintenance.sh status
+```
+
+该命令同时验证：
+
+- `db`、`web`、`nginx` 正在运行。
+- 当前 Git 提交与 `.deploy-state` 一致。
+- Web 容器使用记录的镜像 digest。
+- 运行镜像指纹与服务器源码一致。
+- `/api/health`、`/zh`、`/en`、`robots.txt`、`sitemap.xml` 正常。
+- 未登录 Todo 写请求返回 401。
+
+## 4. 固定维护入口
+
+`ops/maintenance.sh` 只接受以下动作：
+
+| 动作 | 影响 |
+|---|---|
+| `status` | 只读检查容器、发布来源和公开冒烟 |
+| `backup` | 创建完整生产备份集 |
+| `verify-backup` | 在隔离 PostgreSQL 容器恢复最新备份 |
+| `ssl` | 检查 30 天证书余量和本机 HTTPS |
+| `install-cron` | 幂等安装本项目定时任务并移除两条旧任务 |
+| `install-tls` | 校验证书和私钥后原子替换、测试并 reload |
+| `content-dry-run` | 只读扫描旧 Tiptap 正文 |
+| `uploads-dry-run` | 只读扫描孤儿上传 |
+
+其他值会被拒绝。不得增加 `eval`、任意命令变量或通用远程 Shell。
+
+## 5. 定时任务
+
+安装或更新：
+
+```bash
+bash ops/maintenance.sh install-cron
+```
+
+脚本使用带标记的 crontab 区块，重复执行不会产生重复任务，并会删除旧的 `/home/ubuntu/backup-db.sh` 和 `/home/ubuntu/check-ssl.sh` 条目。当前计划：
+
+| 时间 | 动作 | 资源控制 |
+|---|---|---|
+| 每日 03:00 | 完整数据库与 uploads 备份 | `nice -n 10` |
+| 每周日 03:30 | 在临时容器真实恢复最新备份 | `nice -n 10`，384MB/0.75 CPU |
+| 每周一 09:00 | 证书余量和 HTTPS 检查 | 轻量 |
+
+统一日志位于 `backups/maintenance.log`。定时任务异常时先保留日志和失败备份，不要直接删除。
+
+## 6. 备份与验证
+
+手动创建和验证：
+
+```bash
+bash ops/maintenance.sh backup
+bash ops/maintenance.sh verify-backup
+```
+
+每个 `BACKUP_SET` 包含：
+
+- `qzsite-<timestamp>-<label>.dump`：PostgreSQL custom-format dump。
+- `qzsite-<timestamp>-<label>-uploads.tar.gz`：同一时点的 uploads。
+- `qzsite-<timestamp>-<label>.sha256`：两份文件的校验值。
+
+备份默认保留 30 天。验证脚本会检查 SHA-256、uploads 归档结构，并在不映射端口的临时 PostgreSQL 16 容器中真实执行 `pg_restore`，读取文章、项目、设置、Todo、用户和 migration 数量后自动删除容器。
+
+验证失败时：
+
+1. 停止新 migration、正文转换、上传清理和人工修复。
+2. 保留失败备份与 `maintenance.log`。
+3. 检查磁盘、容器健康、dump 大小和 SHA-256。
+4. 修复后重新创建完整备份集并再次验证。
+
+本机备份不能抵御云盘或整机丢失。异地保护状态和完整恢复步骤见 [`disaster-recovery.md`](disaster-recovery.md)。
+
+## 7. 证书检查与更新
+
+常规检查：
+
+```bash
+bash ops/maintenance.sh ssl
+```
+
+`ops/check-ssl.sh` 校验证书至少还有 30 天，并通过 `127.0.0.1` 访问正式域名虚拟主机。它不等同于公网监控；备案接入稳定后仍应保留外部可用性检查。
+
+更新证书时，在 Gitee Go 将以下值设为受保护变量：
+
+- `TLS_CERT_B64`：完整证书链的 Base64。
+- `TLS_KEY_B64`：未加密私钥的 Base64。
+- `MAINTENANCE_ACTION=install-tls`。
+
+`ops/install-tls.sh` 会自动：
+
+1. 解码到权限为 `600` 的临时文件。
+2. 校验域名、30 天有效期、私钥格式和公私钥匹配。
+3. 将旧证书备份到 `backups/tls-<timestamp>/`。
+4. 安装新文件，执行 `nginx -t`、reload 和 HTTPS 检查。
+5. 任一步失败时恢复旧证书。
+
+证书签发和把新凭据写入 Gitee Secret 依赖域名/云账号所有权，不能由仓库代码自行取得；安装和回滚过程已经自动化。
+
+## 8. 数据与内容维护
+
+旧正文转换：
 
 ```bash
 bash ops/content-migration.sh --dry-run
@@ -65,72 +173,43 @@ bash ops/content-migration.sh --apply
 bash ops/content-migration.sh --dry-run
 ```
 
-最后一次 dry-run 应报告 0 篇 Tiptap JSON。转换脚本不会删除文章，发生异常时事务整体回滚。已经提交的转换只能通过 `content-migration` 或 `predeploy` 备份恢复原正文。
+最后一次应报告 0 篇 Tiptap JSON。`--apply` 会先备份并在事务中转换，不删除文章。
 
-## 5. 备份验证
-
-创建并验证最新备份：
+孤儿上传：
 
 ```bash
-bash ops/maintenance.sh backup
-bash ops/maintenance.sh verify-backup
+bash ops/cleanup-uploads.sh --dry-run
 ```
 
-验证失败时：
+只有确认报告正确后才允许 `--apply`；脚本会先备份，并保留 24 小时保护期。
 
-1. 不执行正文转换、上传清理或新 migration。
-2. 保留失败备份和日志。
-3. 检查磁盘空间、数据库健康状态、dump 大小和 SHA-256。
-4. 修复后重新创建完整备份集并再次恢复。
+禁止在生产执行 `prisma db push`。生产只使用已提交的 `prisma migrate deploy`。
 
-灾难恢复时，先恢复 PostgreSQL dump，再解压同一 `BACKUP_SET` 的 uploads 压缩包。不要混用不同时间点的数据库和上传备份。
+## 9. 密钥、Agent 与应急权限
 
-## 6. 固定维护入口
+- `.env`、备份、证书和私钥不进入 Git；文件权限为 `600`，目录为 `700`。
+- TCR 密码只通过 Gitee Secret 和 `docker login --password-stdin` 使用，任务结束自动 logout。
+- Web 使用非 Root `node` 用户，Nginx 只读挂载 uploads。
+- 后台密码若曾经通过聊天传输，站点所有者必须在后台改为新的独立长密码。
+- 当前两条 `authorized_keys` 保持不变，按站点所有者要求由其最后自行移除。
 
-`ops/maintenance.sh` 仅允许：
+Gitee Agent 由 `gitee-go-agent.service` 管理，限制为 256MB 内存和 50% CPU。云控制台应急检查：
 
-| 动作 | 影响 |
-|---|---|
-| `status` | 只读检查容器和 HTTPS 健康 |
-| `backup` | 创建新备份集 |
-| `verify-backup` | 在隔离容器恢复最新备份 |
-| `ssl` | 检查 30 天证书余量和 HTTPS |
-| `content-dry-run` | 只读扫描旧正文 |
-| `uploads-dry-run` | 只读扫描孤儿上传 |
-
-Gitee Go 的 `pipeline-maintenance` 手动流水线通过 `MAINTENANCE_ACTION` 暴露以上固定选项，不接受任意 Shell 命令。未填写参数时只执行 `status`。
-
-## 7. 密钥与权限
-
-- `.env`、备份文件、证书私钥权限为 `600`，目录为 `700`。
-- `data/uploads` 由容器内固定的非 Root `node` 用户写入。
-- 镜像仓库密码通过 `docker login --password-stdin` 传入，并在任务结束时 logout。
-- 轮换 `SESSION_SECRET` 后重启 Web，使旧 Session 全部失效。
-- 后台密码曾经通过聊天传输时必须由站点所有者在后台改为新的独立长密码，不能写入仓库、脚本、日志或聊天。
-- 个人 SSH 公钥只在 Gitee Go、备份恢复和线上回归全部通过后移除。Gitee Agent 使用出站连接，不依赖登录公钥；紧急操作走云控制台。
-
-Gitee Go 自有 Agent 由主机的 `gitee-go-agent.service` 管理，并限制为 256MB 内存和 50% CPU。云控制台应急检查执行 `systemctl is-active gitee-go-agent.service`；服务异常时执行 `sudo systemctl restart gitee-go-agent.service`。Agent 正常停止会先向 Gitee 注销，服务端释放旧注册存在数分钟延迟；2026-07-29 实测 systemd 自动重试约 4 分 30 秒后恢复 Active。重启后先等待 6 分钟，再检查 `systemctl status gitee-go-agent.service`；连续 10 分钟仍未恢复才在 Gitee 主机组中重新绑定，不要提前删除 UUID。Agent UUID 只保存在服务器 `/home/ubuntu/.gitee-agent/uuid`，权限为 `600`，不得复制到仓库或流水线日志。
-
-`ops/check-ssl.sh` 通过 `127.0.0.1` 验证本机 Nginx 的正式域名虚拟主机、证书余量和健康接口，不替代公网监控。ICP备案完成前，云侧可能重置带正式域名 SNI 的外部 TLS 连接；备案接入完成后应再从境外和境内各保留一个外部可用性检查。
-
-## 8. 发布后检查
-
-```text
-/zh
-/zh/blog
-/zh/projects
-/zh/about
-/admin
-/api/health
-/sitemap.xml
-/robots.txt
+```bash
+systemctl is-active gitee-go-agent.service
+sudo systemctl restart gitee-go-agent.service
 ```
 
-同时核对：
+Agent 正常重启后服务端释放旧注册可能延迟。先等待 6 分钟，连续 10 分钟仍未恢复再在 Gitee 主机组重新绑定，不要提前删除 UUID。UUID 只保存在服务器 `/home/ubuntu/.gitee-agent/uuid`，不得复制到仓库或日志。
+
+## 10. 发布后核对
+
+自动流水线已覆盖常规发布核对。涉及 Schema、正文或上传的高风险变更还需确认：
 
 - 生产文章、项目、Todo、用户数量未意外变化。
-- 旧正文扫描为 0。
-- 新 migration 只执行一次。
+- migration 只执行一次且状态为 applied。
 - 上传文件在容器重建后仍可读取。
-- 未登录管理写接口返回 401。
-- 安全响应头和正式域名证书正常。
+- 最新完整备份能够恢复。
+- Gitee 与 GitHub `main` 最终指向同一提交。
+
+ICP备案、云账号 Secret、后台密码轮换和异地快照属于所有权边界内的外部动作；其余常规部署、巡检、备份和恢复验证由脚本与流水线完成。

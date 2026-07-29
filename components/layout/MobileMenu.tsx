@@ -28,7 +28,7 @@ export function MobileMenu() {
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        aria-label={open ? "关闭导航菜单" : "打开导航菜单"}
+        aria-label={open ? t("closeMenu") : t("openMenu")}
         aria-expanded={open}
         aria-controls="mobile-site-navigation"
         className="rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"

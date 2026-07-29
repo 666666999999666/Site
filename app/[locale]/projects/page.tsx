@@ -7,14 +7,30 @@ import { getAllProjects } from "@/lib/projects"
 import { GitHubIcon } from "@/components/icons/GitHubIcon"
 
 export const dynamic = "force-dynamic"
-export const metadata: Metadata = {
-  title: "项目",
-  description: "可运行、可查看源码的个人项目与实践作品。",
-  alternates: { canonical: "/zh/projects" },
-  openGraph: {
-    title: "项目",
-    description: "可运行、可查看源码的个人项目与实践作品。",
-  },
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ locale: string }>
+}): Promise<Metadata> {
+  const { locale } = await params
+  const t = await getTranslations({ locale, namespace: "projects" })
+  const pathname = `/${locale}/projects`
+
+  return {
+    title: t("metadataTitle"),
+    description: t("metadataDescription"),
+    alternates: {
+      canonical: pathname,
+      languages: { zh: "/zh/projects", en: "/en/projects" },
+    },
+    openGraph: {
+      title: t("metadataTitle"),
+      description: t("metadataDescription"),
+      url: pathname,
+      locale: locale === "en" ? "en_US" : "zh_CN",
+    },
+  }
 }
 
 export default async function ProjectsPage() {
@@ -32,7 +48,7 @@ export default async function ProjectsPage() {
         </div>
 
         {projects.length === 0 ? (
-          <p className="py-12 text-center text-muted-foreground">项目整理中。</p>
+          <p className="py-12 text-center text-muted-foreground">{t("empty")}</p>
         ) : (
           <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
             {projects.map((project) => (
@@ -45,7 +61,7 @@ export default async function ProjectsPage() {
                 {project.coverImage && (
                   <Image
                     src={project.coverImage}
-                    alt={`${project.title} 项目封面`}
+                    alt={t("cover", { name: project.title })}
                     width={1600}
                     height={700}
                     className="aspect-[16/7] w-full object-cover"

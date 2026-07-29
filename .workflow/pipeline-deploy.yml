@@ -41,6 +41,7 @@ stages:
       trap 'docker logout ccr.ccs.tencentyun.com >/dev/null 2>&1 || true' EXIT
       printf '%s' "${TCR_PASSWORD}" | docker login ccr.ccs.tencentyun.com --username "${TCR_USERNAME}" --password-stdin >/dev/null
       bash ops/deploy.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
+      bash ops/maintenance.sh status
     hostGroupID:
       ID: tencent-cloud
       hostID:

@@ -13,6 +13,7 @@ WORKDIR /app
 ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+RUN node scripts/source-fingerprint.mjs /app > /tmp/source-fingerprint
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build?schema=public"
 ENV NEXT_PHASE="phase-production-build"
 RUN npx prisma validate
@@ -37,6 +38,7 @@ ENV NODE_ENV=production
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
+COPY --from=builder /tmp/source-fingerprint ./.source-fingerprint
 
 # Images bypass the Next optimizer, so the runtime omits libvips/sharp.
 RUN rm -rf /app/node_modules/sharp /app/node_modules/@img

@@ -1,6 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
+import { useTranslations } from "next-intl"
 
 interface Heading {
   id: string
@@ -10,6 +11,7 @@ interface Heading {
 
 export function TableOfContents({ headings }: { headings: Heading[] }) {
   const [activeId, setActiveId] = useState<string>("")
+  const t = useTranslations("blog")
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -34,8 +36,8 @@ export function TableOfContents({ headings }: { headings: Heading[] }) {
   if (headings.length === 0) return null
 
   return (
-    <nav className="sticky top-20" aria-label="文章目录">
-      <h4 className="text-sm font-medium text-foreground mb-3">目录</h4>
+    <nav className="sticky top-20" aria-label={t("contentsLabel")}>
+      <h4 className="text-sm font-medium text-foreground mb-3">{t("contents")}</h4>
       <ul className="space-y-0.5 border-l border-border">
         {headings.map((h) => (
           <li key={h.id}>

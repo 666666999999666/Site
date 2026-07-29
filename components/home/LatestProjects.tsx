@@ -34,7 +34,7 @@ export function LatestProjects({ projects }: { projects: Project[] }) {
               {project.coverImage && (
                 <Image
                   src={project.coverImage}
-                  alt={`${project.name} 项目封面`}
+                  alt={t("projectCover", { name: project.name })}
                   width={1600}
                   height={700}
                   className="aspect-[16/7] w-full object-cover"
@@ -76,7 +76,7 @@ export function LatestProjects({ projects }: { projects: Project[] }) {
                       className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
                     >
                       <ExternalLink className="size-3.5" />
-                      {t("viewProjects")}
+                      {t("demo")}
                     </a>
                   )}
                 </div>

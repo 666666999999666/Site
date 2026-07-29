@@ -58,8 +58,8 @@ flowchart LR
 | 数据维护工具 | `scripts/` | 旧正文转换和孤儿上传扫描 |
 | 生产运维 | `ops/` | 部署、备份、恢复验证、SSL 和受限维护入口 |
 | 入口代理 | `nginx/` | 正式域名/IP 虚拟主机、TLS、上传静态服务和安全头 |
-| 流水线 | `.workflow/` | Gitee Go 自动部署与手动维护定义 |
-| 自动化验证 | `tests/` | 纯逻辑、内容、校验和上传签名测试 |
+| 流水线 | `.workflow/` | Gitee Go 自动部署与受限维护定义 |
+| 自动化验证 | `tests/` | 业务规则、内容、校验、上传签名和语言包一致性测试 |
 
 ### 3.1 依赖方向
 
@@ -93,6 +93,10 @@ API Route Handler
 | `/api/health` | 公开 | 同时验证 Web 与数据库连接 |
 
 公开内容页使用 `force-dynamic`，后台修改后不依赖重新构建即可生效。当前数据量较小，直接从 PostgreSQL 查询比引入缓存失效机制更容易保证正确性。
+
+公开页面的系统文案和 Metadata 使用 `messages/zh.json`、`messages/en.json`，两份语言包必须保持同一组键。数据库中的文章、分类、项目和个人介绍属于所有者创作内容，当前保持原文，不增加重复的中英文字段。语言切换表示切换界面、导航、空状态、错误提示和 SEO 元信息，不承诺自动翻译用户内容。
+
+后台入口使用右下角固定猫图标，属于站点所有者快捷入口。`app/[locale]/layout.tsx` 为移动端主内容保留底部空间，并使用安全区偏移，避免按钮遮挡最后一项内容；Header 不再承担后台入口。
 
 ### 4.2 认证边界
 
@@ -224,6 +228,9 @@ Next.js 使用 `output: "standalone"`。镜像构建阶段会导入动态页面�
 - 在云端构建阶段执行 Prisma 校验、Lint、测试和生产构建。
 - 以非 Root `node` 用户运行。
 - 不包含 Sharp/libvips；图片走原始上传路径，Nginx 拒绝 `/_next/image`。
+- 在 `/app/.source-fingerprint` 保存构建输入的 SHA-256 指纹，并携带同版本的指纹计算脚本。
+
+源码指纹只覆盖会进入 Docker 构建上下文的代码和配置，排除 Git、依赖、构建产物、文档、数据库、备份、证书和真实上传文件。修改 `.dockerignore` 的排除规则时必须同步复核 `scripts/source-fingerprint.mjs`。
 
 ### 6.7 Nginx 统一拥有入口安全策略
 
@@ -240,12 +247,16 @@ push Gitee main
 -> 生产机 Agent 调用 ops/deploy.sh
 -> 部署前完整备份
 -> 将 tag 解析为不可变 digest
+-> 校验目标 Git 源码与镜像源码指纹
 -> Compose 更新与 migration
 -> db/web/nginx 健康检查
--> 正式域名回环 HTTPS 检查
+-> 中英文、未登录写保护和站点基础文件冒烟测试
+-> 运行提交、镜像 digest、源码指纹写入 .deploy-state
 ```
 
-部署失败会恢复上一代码提交和上一镜像，但不会自动逆转数据库 migration。数据库和上传恢复、证书、Agent 与维护操作以 [`operations.md`](operations.md) 为准。
+`web:latest` 只用于从仓库取得候选镜像，运行状态始终使用不可变 digest。若两次推送交错导致候选镜像与 `origin/main` 不一致，源码指纹校验会在切换容器前拒绝发布。部署失败会恢复上一代码提交、镜像和 `.deploy-state`，但不会自动逆转数据库 migration。
+
+数据库和上传恢复、证书、Agent 与维护操作以 [`operations.md`](operations.md) 为准；整机或磁盘故障恢复以 [`disaster-recovery.md`](disaster-recovery.md) 为准。
 
 生产机只有 2 核 2G，镜像构建、依赖安装、完整测试和压力任务只能在本地或 Gitee 托管构建环境执行。
 
@@ -282,6 +293,7 @@ push Gitee main
 |---|---|
 | [`development-guide.md`](development-guide.md) | 日常开发步骤、改动方法和测试矩阵 |
 | [`operations.md`](operations.md) | 生产部署、备份、恢复和故障处理 |
+| [`disaster-recovery.md`](disaster-recovery.md) | 整机故障、数据恢复、RPO/RTO 与演练步骤 |
 | [`site-audit-and-improvement-plan.md`](site-audit-and-improvement-plan.md) | 改造前问题基线与已实施项 |
 | [`dependency-audit.md`](dependency-audit.md) | 依赖风险和运行路径判断 |
 | [`session-summary.md`](session-summary.md) | 历史建站记录，不作为当前操作依据 |

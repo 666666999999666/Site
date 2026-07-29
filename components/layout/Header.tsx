@@ -1,7 +1,6 @@
 "use client"
 
 import { useLocale, useTranslations } from "next-intl"
-import { CatButton } from "@/components/auth/CatButton"
 import { GitHubIcon } from "@/components/icons/GitHubIcon"
 import { Link, usePathname } from "@/i18n/navigation"
 import { LanguageToggle } from "./LanguageToggle"
@@ -41,7 +40,7 @@ export function Header({
           {siteName}
         </Link>
 
-        <nav className="hidden items-center gap-1 sm:flex" aria-label="主导航">
+        <nav className="hidden items-center gap-1 sm:flex" aria-label={t("primaryNavigation")}>
           {links.map((link) => (
             <Link
               key={link.href}
@@ -65,13 +64,12 @@ export function Header({
               href={githubUrl}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label="访问 GitHub"
+              aria-label={t("visitGithub")}
               className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
             >
               <GitHubIcon className="size-4" />
             </a>
           )}
-          <CatButton />
           <LanguageToggle />
           <ThemeToggle />
           <MobileMenu />

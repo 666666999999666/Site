@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useTranslations } from "next-intl"
 import {
   Dialog,
   DialogContent,
@@ -26,6 +27,7 @@ export function LoginDialog({
   const [error, setError] = useState("")
   const [loading, setLoading] = useState(false)
   const router = useRouter()
+  const t = useTranslations("adminEntry")
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -37,8 +39,8 @@ export function LoginDialog({
       onOpenChange(false)
       router.push("/admin")
       router.refresh()
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "网络错误，请重试")
+    } catch {
+      setError(t("loginFailed"))
     } finally {
       setLoading(false)
     }
@@ -48,12 +50,12 @@ export function LoginDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>输入密码</DialogTitle>
-          <DialogDescription>私人空间，仅限本人。</DialogDescription>
+          <DialogTitle>{t("dialogTitle")}</DialogTitle>
+          <DialogDescription>{t("dialogDescription")}</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="p">密码</Label>
+            <Label htmlFor="p">{t("password")}</Label>
             <Input
               id="p"
               type="password"
@@ -66,7 +68,7 @@ export function LoginDialog({
           {error && <p className="text-sm text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="submit" disabled={loading || !password}>
-              {loading ? "进入中…" : "进入"}
+              {loading ? t("submitting") : t("submit")}
             </Button>
           </DialogFooter>
         </form>

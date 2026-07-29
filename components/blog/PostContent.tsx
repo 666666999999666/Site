@@ -11,6 +11,7 @@ import {
   useId,
   useState,
 } from "react"
+import { useTranslations } from "next-intl"
 import ReactMarkdown, { type Components } from "react-markdown"
 import rehypeHighlight from "rehype-highlight"
 import rehypeKatex from "rehype-katex"
@@ -25,6 +26,7 @@ function MermaidBlock({ code }: { code: string }) {
   const [error, setError] = useState("")
   const id = useId().replace(/:/g, "")
   const { theme } = useTheme()
+  const t = useTranslations("content")
 
   useEffect(() => {
     let cancelled = false
@@ -56,7 +58,7 @@ function MermaidBlock({ code }: { code: string }) {
   if (error) {
     return (
       <div className="my-6 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
-        <p className="mb-2 font-mono text-xs text-destructive">Mermaid 渲染失败</p>
+        <p className="mb-2 font-mono text-xs text-destructive">{t("mermaidError")}</p>
         <pre className="overflow-x-auto text-xs text-muted-foreground">
           <code>{code}</code>
         </pre>
@@ -67,7 +69,7 @@ function MermaidBlock({ code }: { code: string }) {
   return (
     <div
       className="my-6 flex min-h-20 justify-center overflow-x-auto"
-      aria-label="流程图"
+      aria-label={t("mermaidDiagram")}
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   )

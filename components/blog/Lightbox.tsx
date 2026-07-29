@@ -4,6 +4,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { X } from "lucide-react"
+import { useTranslations } from "next-intl"
 
 interface LightboxImage {
   src: string
@@ -14,6 +15,7 @@ export function Lightbox() {
   const [image, setImage] = useState<LightboxImage | null>(null)
   const triggerRef = useRef<HTMLElement | null>(null)
   const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const t = useTranslations("content")
 
   const close = useCallback(() => {
     setImage(null)
@@ -75,14 +77,14 @@ export function Lightbox() {
       onClick={close}
       role="dialog"
       aria-modal="true"
-      aria-label="图片预览"
+      aria-label={t("imagePreview")}
     >
       <button
         ref={closeButtonRef}
         type="button"
         onClick={close}
         className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/20"
-        aria-label="关闭图片预览"
+        aria-label={t("closeImagePreview")}
       >
         <X className="size-5" />
       </button>

@@ -75,8 +75,10 @@ Seed 是幂等初始化工具：已有管理员、设置、项目和分区不会
 2. 数据库驱动页面需要即时反映后台内容时，继续使用动态渲染。
 3. 对公开详情页同时处理 `Metadata`、canonical、Open Graph 和不存在状态。
 4. 公开文章查询必须限制 `status: "PUBLISHED"`。
-5. 新界面文案同步维护 `zh` 和 `en`。
-6. 在 390px、768px 和 1440px 宽度检查布局、文字换行和交互。
+5. 新界面文案同步维护 `zh` 和 `en`，`npm test` 会检查两份语言包的键完全一致。
+6. 页面级 Metadata 使用 `generateMetadata({params})` 按 locale 生成，不在双语路由中导出固定中文 `metadata`。
+7. 数据库创作内容保持原文；除非出现明确内容需求，不增加 `titleZh/titleEn` 一类重复字段。
+8. 在 390px、768px 和 1440px 宽度检查布局、文字换行和交互。
 
 ### 4.2 新增管理 API
 
@@ -177,6 +179,9 @@ npx prisma generate
 - 写操作应默认拒绝或先备份；手动维护入口只允许固定白名单动作。
 - TCR 凭据用平台 Secret 和 `docker login --password-stdin`，任务结束 logout。
 - 部署脚本修改后至少检查 Shell 语法、Compose 配置和失败回滚路径。
+- `.dockerignore` 与 `scripts/source-fingerprint.mjs` 必须保持相同排除语义；新增构建输入后要确认它会进入指纹。
+- 不删除 `.source-fingerprint`，也不绕过 `ops/verify-release.sh` 或 `ops/smoke-test.sh`。
+- `ops/maintenance.sh` 继续只接受固定动作，不允许把任意 Shell 文本作为变量执行。
 
 ## 5. 自动化验证
 
@@ -188,6 +193,8 @@ npm test
 npx tsc --noEmit
 npx prisma validate
 npm run build
+node scripts/source-fingerprint.mjs .
+bash -n ops/*.sh
 ```
 
 | 改动类型 | 最低验证 |
@@ -199,7 +206,7 @@ npm run build
 | 正文转换 | 完整门禁、转换测试、dry-run、备份后 apply |
 | 上传 | 完整门禁、文件签名测试、路径逃逸测试、持久化检查 |
 | Docker/Nginx | 完整门禁、镜像构建、容器用户、Healthcheck、`nginx -t` |
-| CI/CD | 本地静态检查、实际流水线运行、生产健康与部署状态 |
+| CI/CD | 完整门禁、Shell 语法、源码指纹、实际流水线、生产冒烟与发布来源状态 |
 
 不能把“配置文件已提交”写成“平台运行已验证”。流水线、镜像、容器和生产恢复都必须保留实际执行证据。
 
@@ -210,9 +217,9 @@ npm run build
 | 流水线 | 文件 | 触发方式 | 作用 | 当前验证状态 |
 |---|---|---|---|---|
 | `pipeline-deploy` | `.workflow/pipeline-deploy.yml` | 推送 `main` | 云端构建 Web 镜像并由 Agent 部署 | 已实际运行通过 |
-| `pipeline-maintenance` | `.workflow/pipeline-maintenance.yml` | 手动 | 执行固定白名单维护动作 | 定义已提交；仍需在 Gitee UI 手动运行 `status` 验证 |
+| `pipeline-maintenance` | `.workflow/pipeline-maintenance.yml` | 手动 | 故障或证书轮换时执行固定白名单动作 | 共用脚本路径由自动部署的 `status` 步骤持续验证 |
 
-这不是两条重复部署链路。自动流水线负责发布，手动流水线只负责状态、备份、恢复验证、SSL 和只读扫描。
+这不是两条重复部署链路。自动流水线负责日常发布，并在发布后自动执行维护入口的 `status`；手动流水线只在故障处理、临时备份、恢复验证或证书轮换时使用，不要求每次发布人工点击。
 
 GitHub 只作为仓库镜像，`.github/workflows/` 当前没有工作流。发布后应确认 Gitee 与 GitHub 的 `main` 指向同一提交，但生产部署只以 Gitee 链路为准。
 
@@ -256,3 +263,4 @@ GitHub 只作为仓库镜像，`.github/workflows/` 当前没有工作流。发�
 6. Gitee 与 GitHub 的目标提交一致。
 7. 需要发布时，Gitee 自动流水线成功且生产健康检查通过。
 8. 临时数据库、测试容器、调试文件和本地服务已清理。
+9. `.deploy-state` 的提交、镜像 digest 和源码指纹与运行容器一致。

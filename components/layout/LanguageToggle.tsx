@@ -1,6 +1,6 @@
 'use client';
 
-import { useLocale } from 'next-intl';
+import { useLocale, useTranslations } from 'next-intl';
 import { usePathname, useRouter } from '@/i18n/navigation';
 import { Languages } from 'lucide-react';
 
@@ -8,8 +8,9 @@ export function LanguageToggle() {
   const locale = useLocale();
   const pathname = usePathname();
   const router = useRouter();
+  const t = useTranslations('nav');
   const nextLocale = locale === 'zh' ? 'en' : 'zh';
-  const label = locale === 'zh' ? '切换到英文' : 'Switch to Chinese';
+  const label = t('switchLanguage');
 
   const toggleLocale = () => {
     router.replace(pathname, { locale: nextLocale });

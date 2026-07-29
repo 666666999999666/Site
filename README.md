@@ -17,9 +17,10 @@
 1. [`docs/architecture.md`](docs/architecture.md)：**当前架构、模块边界、数据流和设计原因**。
 2. [`docs/development-guide.md`](docs/development-guide.md)：开发步骤、常见改动方法、测试矩阵和交付清单。
 3. [`docs/operations.md`](docs/operations.md)：生产部署、备份恢复、Gitee Agent、证书和故障处理。
-4. [`docs/site-audit-and-improvement-plan.md`](docs/site-audit-and-improvement-plan.md)：改造前审计基线与已完成项，不是待办清单。
-5. [`docs/dependency-audit.md`](docs/dependency-audit.md)：依赖告警、处理方式与运行路径判断。
-6. [`docs/session-summary.md`](docs/session-summary.md)：历史建站过程，仅供追溯，不作为当前技术或运维依据。
+4. [`docs/disaster-recovery.md`](docs/disaster-recovery.md)：整机故障、数据恢复、RPO/RTO 和演练步骤。
+5. [`docs/site-audit-and-improvement-plan.md`](docs/site-audit-and-improvement-plan.md)：改造前审计基线与已完成项，不是待办清单。
+6. [`docs/dependency-audit.md`](docs/dependency-audit.md)：依赖告警、处理方式与运行路径判断。
+7. [`docs/session-summary.md`](docs/session-summary.md)：历史建站过程，仅供追溯，不作为当前技术或运维依据。
 
 ## 本地开发
 
@@ -44,7 +45,7 @@ npx prisma validate
 npm run build
 ```
 
-测试覆盖正文转换、目录 slug、发布时间规则、输入校验和上传文件签名。Dockerfile 在镜像构建时也会执行 lint、测试和生产构建。
+测试覆盖正文转换、目录 slug、发布时间规则、输入校验、上传文件签名和中英文语言包键一致性。Dockerfile 在镜像构建时也会执行 lint、测试和生产构建。
 
 ## 数据变更
 
@@ -104,13 +105,13 @@ Gitee `main` 推送由平台的 `build@docker` 步骤构建镜像，自有 Agent
 bash ops/deploy.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
 ```
 
-部署脚本会串行加锁、拉取代码、创建部署前备份、把镜像解析为不可变 digest、等待数据库/Web/Nginx 全部 Healthy，并请求正式域名健康接口。失败时输出诊断并恢复上一版本代码与镜像。数据库 migration 仍应设计为向后兼容，因为应用回滚不会自动逆转数据库变更。
+部署脚本会串行加锁、创建部署前备份、把候选镜像解析为不可变 digest，并校验镜像内源码指纹与目标 Git 提交一致。切换后等待数据库/Web/Nginx 全部 Healthy，执行中英文页面、未登录写保护和站点基础文件冒烟测试，再把提交、digest 和指纹写入 `.deploy-state`。失败时输出诊断并恢复上一版本代码、镜像和部署状态。数据库 migration 仍应设计为向后兼容，因为应用回滚不会自动逆转数据库变更。
 
-仓库中共有两份 Gitee Go 定义：`pipeline-deploy` 在 `main` 推送时自动构建并部署；`pipeline-maintenance` 只允许手动执行固定维护动作。后者的 `MAINTENANCE_ACTION` 只允许 `status`、`backup`、`verify-backup`、`ssl`、`content-dry-run` 和 `uploads-dry-run`，其他值会被 `ops/maintenance.sh` 拒绝。自动部署链路已经实际运行通过；手动维护定义提交后，仍应在 Gitee UI 执行一次默认 `status`，才能确认平台已识别并完成运行验证。GitHub 当前只作为代码镜像仓库，不运行部署或生产维护工作流。
+仓库中共有两份 Gitee Go 定义：`pipeline-deploy` 在 `main` 推送时自动构建、部署并执行维护入口的 `status`；`pipeline-maintenance` 只在故障、临时备份、恢复验证或证书轮换时手动执行固定动作。它不接受任意 Shell，也不需要日常人工点击。GitHub 当前只作为代码镜像仓库，不运行部署或生产维护工作流。
 
 生产机是 2 核 2G 规格，禁止在服务器执行 `docker build`、`npm ci`、`next build` 或全量测试。Compose 将数据库、Web 和 Nginx 分别限制为 512MB、768MB 和 128MB；主机保留 1GB、`swappiness=10` 的应急 Swap。镜像编译和完整质量检查只能在本地或托管 CI 完成。
 
-腾讯云 TCR 中的 `node` 是云端构建基础镜像，`web` 是每次发布生成的应用镜像。建议另建私有仓库 `postgres` 和 `nginx`，用于镜像 Docker Hub 的固定版本；在镜像实际推送成功并取得 digest 前，生产 Compose 继续使用已经验证并缓存的官方 digest，不能提前改成空仓库地址。
+腾讯云 TCR 中的 `node` 是云端构建基础镜像，`web` 是每次发布生成的应用镜像。PostgreSQL 与 Nginx 已固定官方 digest，当前不需要额外创建 TCR 仓库；只有新机器恢复时实际遇到 Docker Hub 不可用，才增加对应镜像副本。
 
 ## 备份与恢复
 
@@ -127,15 +128,13 @@ bash ops/verify-backup.sh
 
 恢复验证会启动不映射端口的临时 PostgreSQL 容器，真实执行 `pg_restore` 并读取文章、项目、设置、Todo、用户和 migration 表，然后自动删除临时容器。备份默认保留 30 天。
 
-建议服务器 cron：
+服务器定时任务由版本化脚本幂等安装：
 
-```cron
-0 3 * * * cd /home/ubuntu/个人网站 && bash ops/maintenance.sh backup >> backups/maintenance.log 2>&1
-30 3 * * 0 cd /home/ubuntu/个人网站 && bash ops/maintenance.sh verify-backup >> backups/maintenance.log 2>&1
-0 9 * * 1 cd /home/ubuntu/个人网站 && bash ops/maintenance.sh ssl >> backups/maintenance.log 2>&1
+```bash
+bash ops/maintenance.sh install-cron
 ```
 
-完整架构说明见 [`docs/architecture.md`](docs/architecture.md)，开发规范见 [`docs/development-guide.md`](docs/development-guide.md)，生产操作与故障恢复步骤见 [`docs/operations.md`](docs/operations.md)。
+它会配置每日完整备份、每周隔离恢复验证和每周证书检查，并移除旧的数据库-only 备份任务。完整架构说明见 [`docs/architecture.md`](docs/architecture.md)，生产操作见 [`docs/operations.md`](docs/operations.md)，整机恢复见 [`docs/disaster-recovery.md`](docs/disaster-recovery.md)。
 
 ## 安全边界
 

@@ -3,13 +3,15 @@
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 action="${1:-status}"
+
+exec 9>"/tmp/qzsite-operation.lock"
+flock -w 900 9 || fail "Another deployment or maintenance action is still running"
+
 case "$action" in
   status)
     compose ps
-    curl --fail --silent --show-error \
-      --resolve liaoqizai.site:443:127.0.0.1 \
-      https://liaoqizai.site/api/health
-    printf '\n'
+    bash "$APP_DIR/ops/verify-release.sh"
+    bash "$APP_DIR/ops/smoke-test.sh"
     ;;
   backup)
     bash "$APP_DIR/ops/backup.sh" scheduled
@@ -20,6 +22,12 @@ case "$action" in
   ssl)
     bash "$APP_DIR/ops/check-ssl.sh"
     ;;
+  install-cron)
+    bash "$APP_DIR/ops/install-maintenance-cron.sh"
+    ;;
+  install-tls)
+    bash "$APP_DIR/ops/install-tls.sh"
+    ;;
   content-dry-run)
     bash "$APP_DIR/ops/content-migration.sh" --dry-run
     ;;
@@ -27,6 +35,6 @@ case "$action" in
     bash "$APP_DIR/ops/cleanup-uploads.sh" --dry-run
     ;;
   *)
-    fail "Allowed actions: status, backup, verify-backup, ssl, content-dry-run, uploads-dry-run"
+    fail "Allowed actions: status, backup, verify-backup, ssl, install-cron, install-tls, content-dry-run, uploads-dry-run"
     ;;
 esac

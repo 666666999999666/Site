@@ -23,7 +23,7 @@ export function RecentPosts({ posts, locale }: { posts: PostWithCategory[]; loca
     return (
       <section className="py-16">
         <Container>
-          <p className="text-center text-muted-foreground">还没有文章，开始写下第一篇吧。</p>
+          <p className="text-center text-muted-foreground">{t("emptyPosts")}</p>
         </Container>
       </section>
     )

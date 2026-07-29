@@ -4,40 +4,92 @@
     "blog": "博客",
     "projects": "项目",
     "about": "关于",
-    "github": "GitHub"
+    "github": "GitHub",
+    "primaryNavigation": "主导航",
+    "visitGithub": "访问 GitHub",
+    "openMenu": "打开导航菜单",
+    "closeMenu": "关闭导航菜单",
+    "switchLight": "切换浅色模式",
+    "switchDark": "切换深色模式",
+    "switchLanguage": "切换到英文"
   },
   "home": {
     "title": "欢迎",
     "description": "记录思考、项目和对现代 Web 开发的探索。",
+    "metadataTitle": "首页",
+    "metadataDescription": "个人博客、Idea/Todo 与项目实践记录。",
     "readBlog": "阅读博客",
     "viewProjects": "查看项目",
     "latestPosts": "最新文章",
     "viewAll": "查看全部",
     "latestProjects": "最新项目",
+    "emptyPosts": "还没有文章，开始写下第一篇吧。",
     "source": "源码",
+    "demo": "在线演示",
+    "projectCover": "{name} 项目封面",
     "minuteRead": "{count}分钟阅读"
   },
   "blog": {
     "title": "博客",
     "description": "关于开发、设计和技术的思考。",
+    "metadataTitle": "博客",
+    "metadataDescription": "学习笔记、技术实践和长期思考。",
     "search": "搜索标题或内容...",
+    "clearSearch": "清除搜索",
     "all": "全部",
+    "empty": "还没有文章。",
     "readMore": "阅读更多",
     "minuteRead": "{count}分钟阅读",
-    "backLink": "返回博客"
+    "backLink": "返回博客",
+    "contents": "目录",
+    "contentsLabel": "文章目录"
   },
   "projects": {
     "title": "项目",
     "description": "个人项目和开源作品的集合。",
+    "metadataTitle": "项目",
+    "metadataDescription": "可运行、可查看源码的个人项目与实践作品。",
+    "empty": "项目整理中。",
+    "cover": "{name} 项目封面",
     "demo": "在线演示",
     "source": "源码"
   },
   "about": {
     "title": "关于",
     "description": "你好，我是一名热爱构建 Web 应用的开发者。",
+    "metadataTitle": "关于",
+    "metadataDescription": "个人介绍、当前方向、技术栈和联系方式。",
     "whatIDo": "我做什么",
     "techStack": "技术栈",
     "contact": "联系方式"
+  },
+  "common": {
+    "loading": "页面加载中",
+    "retry": "重试",
+    "backHome": "返回首页"
+  },
+  "errors": {
+    "pageTitle": "页面暂时无法加载",
+    "pageDescription": "请稍后重试，已发布内容不会因此丢失。",
+    "notFoundTitle": "页面不存在",
+    "notFoundDescription": "页面不存在或已被移除。"
+  },
+  "content": {
+    "imagePreview": "图片预览",
+    "closeImagePreview": "关闭图片预览",
+    "mermaidError": "Mermaid 渲染失败",
+    "mermaidDiagram": "流程图"
+  },
+  "adminEntry": {
+    "label": "管理入口",
+    "openAdmin": "进入后台",
+    "login": "管理登录",
+    "dialogTitle": "输入密码",
+    "dialogDescription": "私人空间，仅限本人。",
+    "password": "密码",
+    "submit": "进入",
+    "submitting": "进入中…",
+    "loginFailed": "登录失败，请检查密码或稍后重试。"
   },
   "footer": {
     "copyright": "© {year} {name}. All rights reserved."
