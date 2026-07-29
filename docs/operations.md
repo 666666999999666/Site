@@ -61,6 +61,8 @@ bash ops/maintenance.sh status
 
 部署失败会恢复上一代码提交、上一镜像和上一 `.deploy-state`。Prisma migration 不会自动逆转，因此 migration 必须向后兼容，优先新增 nullable 字段、兼容读写和后续清理。
 
+从旧版部署脚本首次升级时，`.deploy-state` 可能暂时只有提交和镜像两列。`verify-release.sh` 仅在运行镜像、目标源码和两列状态全部相符时兼容该格式；下一次部署会自动写入第三列源码指纹，不需要手工编辑服务器文件。
+
 部署成功至少满足：
 
 ```bash
