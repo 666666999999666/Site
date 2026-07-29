@@ -15,7 +15,16 @@
 
 正常路径是推送 `main` 到 Gitee，并将同一提交同步到 GitHub 作为仓库镜像。Gitee Go 构建完成后，自有 Agent 调用 `ops/deploy.sh`，不依赖个人电脑 SSH；GitHub 当前不执行部署或生产维护。
 
-生产机是 2 核 2G 规格。Gitee 的 `build@docker` 和 GitHub Hosted Runner 负责镜像编译；生产机 Agent 仅允许 `git fetch`、备份、拉取镜像、migration、Compose 切换和健康检查。禁止在生产机执行 `docker build`、`npm ci`、`next build` 或完整测试。
+生产机是 2 核 2G 规格。Gitee 的 `build@docker` 负责镜像编译；生产机 Agent 仅允许 `git fetch`、备份、拉取镜像、migration、Compose 切换和健康检查。禁止在生产机执行 `docker build`、`npm ci`、`next build` 或完整测试。
+
+仓库中当前有 **2 份 Gitee Go 流水线定义**，但只有一份负责部署：
+
+| 流水线 | 配置文件 | 触发方式 | 用途 | 验证状态 |
+|---|---|---|---|---|
+| `pipeline-deploy` | `.workflow/pipeline-deploy.yml` | 推送 `main` | 云端构建 `web` 镜像并部署生产 | 已多次实际运行通过 |
+| `pipeline-maintenance` | `.workflow/pipeline-maintenance.yml` | 手动 | 执行固定白名单维护动作 | 配置已提交；需在 Gitee UI 手动执行 `status` 完成平台验证 |
+
+“配置已存在”和“平台已运行”必须分开记录。若 Gitee 流水线列表尚未显示 `pipeline-maintenance`，应在 Gitee Go 页面从仓库配置创建或导入该流水线；首次只运行默认 `status`，确认 Agent、变量和脚本路径正确。它不是第二条自动部署链路。
 
 Compose 的常驻内存上限为：PostgreSQL 512MB、Web 768MB、Nginx 128MB。主机配置 1GB 应急 Swap，`vm.swappiness=10`；Swap 只用于短时尖峰，不可作为在生产机编译的依据。备份恢复验证临时 PostgreSQL 上限为 384MB，且不得与部署、正文迁移或上传清理并发执行。
 

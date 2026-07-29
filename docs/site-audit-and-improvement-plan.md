@@ -4,7 +4,7 @@
 >
 > 本文记录的是改造前审计基线，正文中的 `BUG-*`、`SEC-*`、`ENG-*`、`MANUAL-002` 和适合当前阶段的产品建议均已实施并完成本地/生产验证，包括 Todo/Idea 转博客草稿。文中明确列为“暂不建议实施”或达到内容规模后再做的分页、RSS、项目详情 CMS 等事项仍按原决策不实施。
 >
-> 当前仅保留站点所有者手工项 `MANUAL-001`：在后台将曾经通过聊天传输的密码更换为新的独立长密码。ICP备案和可选的 `postgres/nginx` TCR 镜像仓库属于外部运维事项，不是应用缺陷。最新部署、备份、恢复和 Gitee Agent 操作以 [`operations.md`](operations.md) 为准。
+> 当前仅保留站点所有者手工项 `MANUAL-001`：在后台将曾经通过聊天传输的密码更换为新的独立长密码。ICP备案和可选的 `postgres/nginx` TCR 镜像仓库属于外部运维事项，不是应用缺陷。当前系统结构以 [`architecture.md`](architecture.md) 为准，后续改动方法以 [`development-guide.md`](development-guide.md) 为准，最新部署、备份、恢复和 Gitee Agent 操作以 [`operations.md`](operations.md) 为准。
 
 ## 1. 文档目的
 

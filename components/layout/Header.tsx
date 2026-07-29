@@ -4,6 +4,7 @@ import { useLocale, useTranslations } from "next-intl"
 import { CatButton } from "@/components/auth/CatButton"
 import { GitHubIcon } from "@/components/icons/GitHubIcon"
 import { Link, usePathname } from "@/i18n/navigation"
+import { LanguageToggle } from "./LanguageToggle"
 import { MobileMenu } from "./MobileMenu"
 import { ThemeToggle } from "./ThemeToggle"
 
@@ -35,7 +36,7 @@ export function Header({
         <Link
           href="/"
           locale={locale}
-          className="max-w-48 truncate text-sm font-semibold tracking-tight transition-opacity hover:opacity-80"
+          className="max-w-32 truncate text-sm font-semibold tracking-tight transition-opacity hover:opacity-80 sm:max-w-48"
         >
           {siteName}
         </Link>
@@ -71,6 +72,7 @@ export function Header({
             </a>
           )}
           <CatButton />
+          <LanguageToggle />
           <ThemeToggle />
           <MobileMenu />
         </div>

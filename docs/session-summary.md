@@ -1,5 +1,11 @@
 # 个人网站v3 建站全记录
 
+> **历史记录警告（2026-07-29）**
+>
+> 本文保留建站过程、失败方案和当时状态，其中的 **Tiptap、GitHub Actions、服务器规格、密钥数量和旧部署命令均可能已经失效**，不得作为当前开发或生产操作依据。当前有效信息请依次查看 [`../README.md`](../README.md)、[`architecture.md`](architecture.md)、[`development-guide.md`](development-guide.md) 和 [`operations.md`](operations.md)。
+>
+> 本文只用于解释项目为什么演变成现在的方案，不要求将历史段落改写成当前状态。
+
 > 本文档记录从零开始搭建 QZ Site 个人网站，以及 CI/CD 部署的完整心路历程。
 > 所有内容来源于实际聊天对话，非 git 提交记录。
 > 第一轮对话记录了建站和前四次 CI/CD 尝试；第二轮对话完成了 CI/CD 最终打通和功能完善。
