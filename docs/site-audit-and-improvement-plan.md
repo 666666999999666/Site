@@ -4,6 +4,8 @@
 >
 > 本文记录的是改造前审计基线，正文中的 `BUG-*`、`SEC-*`、`ENG-*`、`MANUAL-002` 和适合当前阶段的产品建议均已实施，包括 Todo/Idea 转博客草稿。2026-07-29 的补充收尾还完成了公开系统文案国际化、右下角后台入口、Git/镜像源码指纹、自动冒烟、版本化 cron、证书安全安装脚本和灾备文档。文中明确列为“暂不建议实施”或达到内容规模后再做的分页、RSS、项目详情 CMS 等事项仍按原决策不实施。
 >
+> 同日上线回归发现：已登录访问 `/admin` 会返回 500。原因是公开端与后台共用的 `ThemeToggle` 在国际化改造后直接调用 `useTranslations()`，而 `/admin` 不在 `NextIntlClientProvider` 内。补丁已将翻译文案改为由公开端调用方传入，并增加无国际化 Provider 的服务端渲染测试。此前冒烟只覆盖未登录跳转，不能代表已登录后台可渲染；后续认证或共享布局改动必须补做完整登录回归。
+>
 > 当前仅保留所有权或云账号边界内的外部事项：`MANUAL-001` 后台密码轮换、ICP备案、异地云盘快照和最后移除个人 SSH 公钥。`postgres/nginx` TCR 副本经复核当前没有必要创建。当前系统结构以 [`architecture.md`](architecture.md) 为准，后续改动方法以 [`development-guide.md`](development-guide.md) 为准，最新部署、备份、恢复和 Gitee Agent 操作以 [`operations.md`](operations.md) 与 [`disaster-recovery.md`](disaster-recovery.md) 为准。
 
 ## 1. 文档目的

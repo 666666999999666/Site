@@ -71,7 +71,10 @@ export function Header({
             </a>
           )}
           <LanguageToggle />
-          <ThemeToggle />
+          <ThemeToggle
+            switchLightLabel={t("switchLight")}
+            switchDarkLabel={t("switchDark")}
+          />
           <MobileMenu />
         </div>
       </div>

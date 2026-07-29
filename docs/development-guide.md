@@ -79,6 +79,7 @@ Seed 是幂等初始化工具：已有管理员、设置、项目和分区不会
 6. 页面级 Metadata 使用 `generateMetadata({params})` 按 locale 生成，不在双语路由中导出固定中文 `metadata`。
 7. 数据库创作内容保持原文；除非出现明确内容需求，不增加 `titleZh/titleEn` 一类重复字段。
 8. 在 390px、768px 和 1440px 宽度检查布局、文字换行和交互。
+9. `next-intl` 的 Client Provider 只存在于 `app/[locale]/layout.tsx`。同时被 `/admin` 使用的共享组件不能直接调用 `useTranslations()`，应由公开页面调用方传入翻译后的文案，并回归测试已登录后台的完整页面渲染。
 
 ### 4.2 新增管理 API
 
@@ -171,6 +172,7 @@ npx prisma generate
 - 密码 Hash 继续使用经过验证的库，不自行实现加密算法。
 - 修改登录限流时，先判断是否真的需要多实例持久化，避免无需求引入 Redis。
 - 涉及 Cookie、代理头或登录入口时，回归登录、退出、改密后退出和未登录 401。
+- 修改后台布局所使用的共享组件时，必须在不提供 `NextIntlClientProvider` 的条件下验证渲染；`tests/component-boundaries.test.ts` 固化了这一边界。
 
 ### 4.8 修改部署或运维
 
