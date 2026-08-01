@@ -8,12 +8,13 @@ import { PostContent } from "@/components/blog/PostContent"
 import { TableOfContents } from "@/components/blog/TableOfContents"
 import { extractHeadings } from "@/lib/content"
 import { absoluteUrl } from "@/lib/site"
+import { decodeRouteSegment } from "@/lib/route-segment"
 
 export const dynamic = "force-dynamic"
 
 const getPost = cache(async (slug: string) => {
   const post = await prisma.post.findUnique({
-    where: { slug },
+    where: { slug: decodeRouteSegment(slug) },
     include: { category: true },
   })
   return post
