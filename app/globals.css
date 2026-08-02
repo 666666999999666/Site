@@ -197,6 +197,7 @@
  * Milkdown/Crepe 编辑器样式适配
  * ==================================== */
 .milkdown-editor-wrapper .milkdown {
+  --editor-caret: oklch(0.46 0.12 205);
   --crepe-color-background: var(--background);
   --crepe-color-on-background: var(--foreground);
   --crepe-color-surface: var(--card);
@@ -219,12 +220,31 @@
   --crepe-font-code: var(--font-mono);
 }
 
+.dark .milkdown-editor-wrapper .milkdown {
+  --editor-caret: oklch(0.8 0.13 205);
+}
+
 .milkdown-editor-wrapper .ProseMirror {
   background: var(--background);
   color: var(--foreground);
+  caret-color: var(--editor-caret);
   min-height: 500px;
   padding: 24px 32px;
   outline: none;
+}
+
+/* Keep the insertion point visible in both themes and in embedded code editors. */
+.milkdown-editor-wrapper .ProseMirror-focused {
+  --prosemirror-virtual-cursor-color: var(--editor-caret);
+}
+
+.milkdown-editor-wrapper :is(input, textarea, .cm-content) {
+  caret-color: var(--editor-caret);
+}
+
+.milkdown-editor-wrapper .cm-cursor,
+.milkdown-editor-wrapper .cm-dropCursor {
+  border-left-color: var(--editor-caret);
 }
 
 .milkdown-editor-wrapper pre code {
