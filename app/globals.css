@@ -197,7 +197,7 @@
  * Milkdown/Crepe 编辑器样式适配
  * ==================================== */
 .milkdown-editor-wrapper .milkdown {
-  --editor-caret: oklch(0.46 0.12 205);
+  --editor-caret: #005fcc;
   --crepe-color-background: var(--background);
   --crepe-color-on-background: var(--foreground);
   --crepe-color-surface: var(--card);
@@ -221,7 +221,7 @@
 }
 
 .dark .milkdown-editor-wrapper .milkdown {
-  --editor-caret: oklch(0.8 0.13 205);
+  --editor-caret: #ffd43b;
 }
 
 .milkdown-editor-wrapper .ProseMirror {
@@ -233,18 +233,47 @@
   outline: none;
 }
 
-/* Keep the insertion point visible in both themes and in embedded code editors. */
-.milkdown-editor-wrapper .ProseMirror-focused {
+/* Crepe replaces the native caret with a virtual one, so style that element directly. */
+.milkdown-editor-wrapper .milkdown .ProseMirror-focused {
   --prosemirror-virtual-cursor-color: var(--editor-caret);
 }
 
-.milkdown-editor-wrapper :is(input, textarea, .cm-content) {
+.milkdown-editor-wrapper .milkdown .ProseMirror .prosemirror-virtual-cursor {
+  border-left-width: 3px;
+}
+
+.milkdown-editor-wrapper .milkdown .ProseMirror .prosemirror-virtual-cursor-left {
+  border-right-width: 3px;
+  border-bottom-width: 3px;
+}
+
+.milkdown-editor-wrapper .milkdown .ProseMirror .prosemirror-virtual-cursor-right {
+  border-left-width: 3px;
+  border-bottom-width: 3px;
+}
+
+.milkdown-editor-wrapper .milkdown .ProseMirror-focused .prosemirror-virtual-cursor-animation {
+  animation: editor-caret-blink 1s step-end infinite;
+  animation-delay: 0s;
+}
+
+@keyframes editor-caret-blink {
+  0%, 49%, 100% { opacity: 1; }
+  50%, 99% { opacity: 0.35; }
+}
+
+.milkdown-editor-wrapper .milkdown :is(input, textarea, .cm-content) {
   caret-color: var(--editor-caret);
 }
 
-.milkdown-editor-wrapper .cm-cursor,
-.milkdown-editor-wrapper .cm-dropCursor {
+.milkdown-editor-wrapper .milkdown .milkdown-code-block :is(.cm-panel, .tools) input {
+  caret-color: var(--editor-caret);
+}
+
+.milkdown-editor-wrapper .milkdown .milkdown-code-block .cm-editor .cm-cursor,
+.milkdown-editor-wrapper .milkdown .milkdown-code-block .cm-editor .cm-dropCursor {
   border-left-color: var(--editor-caret);
+  border-left-width: 3px;
 }
 
 .milkdown-editor-wrapper pre code {
