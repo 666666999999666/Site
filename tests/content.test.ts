@@ -6,6 +6,7 @@ import {
   extractUploadUrls,
   isTiptapJson,
   normalizeContent,
+  normalizeContentForDisplay,
   tiptapToMarkdown,
 } from "../lib/content"
 
@@ -93,7 +94,11 @@ test("preserves readable text and finds referenced uploads", () => {
   assert.deepEqual(extractUploadUrls(legacyDocument), ["/uploads/example.webp"])
 })
 
-test("removes standalone HTML break tags without enabling raw HTML", () => {
+test("preserves Milkdown empty paragraph markers", () => {
   const markdown = "before\n\n<br />\n\nafter <br /> inline"
-  assert.equal(normalizeContent(markdown), "before\n\n\n\nafter <br /> inline")
+  assert.equal(normalizeContent(markdown), markdown)
+  assert.equal(
+    normalizeContentForDisplay(markdown),
+    "before\n\n&nbsp;\n\nafter <br /> inline"
+  )
 })

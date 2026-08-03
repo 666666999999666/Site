@@ -251,7 +251,11 @@ export function tiptapToMarkdown(raw: string): string {
 
 export function normalizeContent(raw: string): string {
   const markdown = isTiptapJson(raw) ? tiptapToMarkdown(raw) : raw
-  return markdown.replace(/^[\t ]*<br\s*\/?>[\t ]*$/gim, "")
+  return markdown.replace(/\r\n?/g, "\n")
+}
+
+export function normalizeContentForDisplay(raw: string): string {
+  return normalizeContent(raw).replace(/^[\t ]*<br\s*\/?>[\t ]*$/gim, "&nbsp;")
 }
 
 export function slugifyHeading(text: string): string {

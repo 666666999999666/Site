@@ -17,7 +17,7 @@ import rehypeHighlight from "rehype-highlight"
 import rehypeKatex from "rehype-katex"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
-import { createHeadingSlugger, normalizeContent } from "@/lib/content"
+import { createHeadingSlugger, normalizeContentForDisplay } from "@/lib/content"
 import { useTheme } from "@/components/theme/ThemeProvider"
 import { Lightbox } from "./Lightbox"
 
@@ -161,7 +161,7 @@ const baseComponents: Components = {
 }
 
 export const PostContent = memo(function PostContent({ content }: { content: string }) {
-  const normalized = normalizeContent(content)
+  const normalized = normalizeContentForDisplay(content)
   const slug = createHeadingSlugger()
   const components: Components = {
     ...baseComponents,

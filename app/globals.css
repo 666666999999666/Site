@@ -201,6 +201,10 @@
   --editor-handle-icon: color-mix(in srgb, var(--foreground) 68%, transparent);
   --editor-handle-hover: color-mix(in srgb, var(--foreground) 14%, var(--background));
   --editor-handle-active: color-mix(in srgb, var(--foreground) 24%, var(--background));
+  --editor-interaction: #2563eb;
+  --editor-control-icon: color-mix(in srgb, var(--foreground) 78%, transparent);
+  --editor-block-selected: color-mix(in srgb, var(--editor-interaction) 12%, var(--background));
+  --editor-block-dragging: color-mix(in srgb, var(--editor-interaction) 20%, var(--background));
   --crepe-color-background: var(--background);
   --crepe-color-on-background: var(--foreground);
   --crepe-color-surface: var(--card);
@@ -225,6 +229,10 @@
 
 .dark .milkdown-editor-wrapper .milkdown {
   --editor-caret: #ffd43b;
+  --editor-interaction: #60a5fa;
+  --editor-control-icon: color-mix(in srgb, var(--foreground) 82%, transparent);
+  --editor-block-selected: color-mix(in srgb, var(--editor-interaction) 18%, var(--background));
+  --editor-block-dragging: color-mix(in srgb, var(--editor-interaction) 26%, var(--background));
 }
 
 .milkdown-editor-wrapper .ProseMirror {
@@ -267,6 +275,59 @@
 .milkdown-editor-wrapper .milkdown:has(.ProseMirror-selectednode) .milkdown-block-handle .operation-item:last-child svg,
 .milkdown-editor-wrapper .milkdown .ProseMirror[data-dragging="true"] ~ .milkdown-block-handle .operation-item:last-child svg {
   fill: var(--foreground);
+}
+
+.milkdown-editor-wrapper .milkdown .crepe-drop-cursor {
+  z-index: 20;
+  min-width: 3px;
+  min-height: 3px;
+  border-radius: 2px;
+  background: var(--editor-interaction);
+  box-shadow: 0 1px 5px color-mix(in srgb, var(--editor-interaction) 45%, transparent);
+  opacity: 1;
+  transition: opacity 100ms ease, transform 100ms ease;
+}
+
+.milkdown-editor-wrapper .milkdown .ProseMirror .ProseMirror-selectednode:not(img) {
+  color: var(--foreground);
+  background: var(--editor-block-selected);
+  box-shadow: inset 3px 0 0 var(--editor-interaction);
+  border-radius: 4px;
+}
+
+.milkdown-editor-wrapper .milkdown .ProseMirror[data-dragging="true"] .ProseMirror-selectednode:not(img) {
+  color: var(--foreground);
+  background: var(--editor-block-dragging);
+  box-shadow:
+    inset 3px 0 0 var(--editor-interaction),
+    0 4px 12px color-mix(in srgb, var(--foreground) 16%, transparent);
+  opacity: 1;
+}
+
+.milkdown-editor-wrapper .milkdown .ProseMirror .ProseMirror-selectednode:not(img)::selection,
+.milkdown-editor-wrapper .milkdown .ProseMirror .ProseMirror-selectednode:not(img) *::selection,
+.milkdown-editor-wrapper .milkdown .ProseMirror[data-dragging="true"]::selection,
+.milkdown-editor-wrapper .milkdown .ProseMirror[data-dragging="true"] *::selection {
+  color: var(--foreground);
+  background: transparent;
+}
+
+.milkdown-editor-wrapper .milkdown .milkdown-top-bar .top-bar-item:not(.active) svg,
+.milkdown-editor-wrapper .milkdown .milkdown-toolbar .toolbar-item:not(.active) svg,
+.milkdown-editor-wrapper .milkdown .milkdown-slash-menu .menu-groups .menu-group li svg {
+  color: var(--editor-control-icon);
+  fill: var(--editor-control-icon);
+}
+
+.milkdown-editor-wrapper .milkdown .milkdown-top-bar .top-bar-heading-button .top-bar-chevron svg {
+  color: var(--editor-control-icon);
+  fill: none;
+  stroke: var(--editor-control-icon);
+}
+
+.milkdown-editor-wrapper .milkdown :is(button, [role="button"]):focus-visible {
+  outline: 2px solid var(--editor-interaction);
+  outline-offset: 2px;
 }
 
 .milkdown-editor-wrapper .milkdown :is(input, textarea, .cm-content) {
