@@ -198,6 +198,9 @@
  * ==================================== */
 .milkdown-editor-wrapper .milkdown {
   --editor-caret: #005fcc;
+  --editor-handle-icon: color-mix(in srgb, var(--foreground) 68%, transparent);
+  --editor-handle-hover: color-mix(in srgb, var(--foreground) 14%, var(--background));
+  --editor-handle-active: color-mix(in srgb, var(--foreground) 24%, var(--background));
   --crepe-color-background: var(--background);
   --crepe-color-on-background: var(--foreground);
   --crepe-color-surface: var(--card);
@@ -233,33 +236,37 @@
   outline: none;
 }
 
-/* Crepe replaces the native caret with a virtual one, so style that element directly. */
-.milkdown-editor-wrapper .milkdown .ProseMirror-focused {
-  --prosemirror-virtual-cursor-color: var(--editor-caret);
+.milkdown-editor-wrapper .milkdown .milkdown-block-handle .operation-item {
+  transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
 }
 
-.milkdown-editor-wrapper .milkdown .ProseMirror .prosemirror-virtual-cursor {
-  border-left-width: 3px;
+.milkdown-editor-wrapper .milkdown .milkdown-block-handle .operation-item svg {
+  fill: var(--editor-handle-icon);
+  transition: fill 120ms ease;
 }
 
-.milkdown-editor-wrapper .milkdown .ProseMirror .prosemirror-virtual-cursor-left {
-  border-right-width: 3px;
-  border-bottom-width: 3px;
+.milkdown-editor-wrapper .milkdown .milkdown-block-handle .operation-item:hover {
+  background: var(--editor-handle-hover);
 }
 
-.milkdown-editor-wrapper .milkdown .ProseMirror .prosemirror-virtual-cursor-right {
-  border-left-width: 3px;
-  border-bottom-width: 3px;
+.milkdown-editor-wrapper .milkdown .milkdown-block-handle .operation-item:hover svg {
+  fill: var(--foreground);
 }
 
-.milkdown-editor-wrapper .milkdown .ProseMirror-focused .prosemirror-virtual-cursor-animation {
-  animation: editor-caret-blink 1s step-end infinite;
-  animation-delay: 0s;
+.milkdown-editor-wrapper .milkdown .milkdown-block-handle .operation-item:active,
+.milkdown-editor-wrapper .milkdown .milkdown-block-handle .operation-item.active,
+.milkdown-editor-wrapper .milkdown:has(.ProseMirror-selectednode) .milkdown-block-handle .operation-item:last-child,
+.milkdown-editor-wrapper .milkdown .ProseMirror[data-dragging="true"] ~ .milkdown-block-handle .operation-item:last-child {
+  background: var(--editor-handle-active);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 10%, transparent);
+  transform: scale(0.96);
 }
 
-@keyframes editor-caret-blink {
-  0%, 49%, 100% { opacity: 1; }
-  50%, 99% { opacity: 0.35; }
+.milkdown-editor-wrapper .milkdown .milkdown-block-handle .operation-item:active svg,
+.milkdown-editor-wrapper .milkdown .milkdown-block-handle .operation-item.active svg,
+.milkdown-editor-wrapper .milkdown:has(.ProseMirror-selectednode) .milkdown-block-handle .operation-item:last-child svg,
+.milkdown-editor-wrapper .milkdown .ProseMirror[data-dragging="true"] ~ .milkdown-block-handle .operation-item:last-child svg {
+  fill: var(--foreground);
 }
 
 .milkdown-editor-wrapper .milkdown :is(input, textarea, .cm-content) {

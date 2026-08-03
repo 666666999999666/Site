@@ -55,6 +55,9 @@ export function PostEditor({
       root: divRef.current,
       defaultValue: normalizedValue || "",
       featureConfigs: {
+        [Crepe.Feature.Cursor]: {
+          virtual: false,
+        },
         [Crepe.Feature.ImageBlock]: {
           onUpload: async (file: File) => {
             const fd = new FormData()
