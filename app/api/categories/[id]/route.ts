@@ -37,6 +37,18 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   try {
     await ensureAuthenticated()
     const { id } = await params
+
+    // #27: 删除前检查关联的 Post/Todo，避免 schema onDelete:SetNull 静默清空分类
+    const [postCount, todoCount] = await Promise.all([
+      prisma.post.count({ where: { categoryId: id } }),
+      prisma.todo.count({ where: { categoryId: id } }),
+    ])
+    if (postCount > 0 || todoCount > 0) {
+      throw new ConflictError(
+        `无法删除：仍有 ${postCount} 篇文章和 ${todoCount} 个 Todo 关联此分类`,
+      )
+    }
+
     await prisma.category.delete({ where: { id } })
     return NextResponse.json({ ok: true })
   } catch (e) {
