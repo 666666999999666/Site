@@ -27,6 +27,9 @@ interface MarkdownNode {
   children?: MarkdownNode[]
 }
 
+// #1: 递归遍历节点树的最大深度，防止恶意构造的超深嵌套触发 RangeError DoS。
+const MAX_CONTENT_DEPTH = 50
+
 function parseTiptapDocument(raw: string): TiptapNode | null {
   const trimmed = raw.trim()
   if (!trimmed.startsWith("{")) return null
@@ -52,10 +55,11 @@ function childrenOf(node: TiptapNode): TiptapNode[] {
   return Array.isArray(node.content) ? node.content : []
 }
 
-function rawText(node: TiptapNode): string {
+function rawText(node: TiptapNode, depth = 0): string {
+  if (depth > MAX_CONTENT_DEPTH) return ""
   if (node.type === "text") return node.text ?? ""
   if (node.type === "hardBreak") return "\n"
-  return childrenOf(node).map(rawText).join("")
+  return childrenOf(node).map((child) => rawText(child, depth + 1)).join("")
 }
 
 function escapeInlineText(text: string): string {
@@ -106,7 +110,8 @@ function renderTextNode(node: TiptapNode): string {
   return rendered
 }
 
-function renderInline(nodes: TiptapNode[]): string {
+function renderInline(nodes: TiptapNode[], depth = 0): string {
+  if (depth > MAX_CONTENT_DEPTH) return ""
   return nodes.map((node) => {
     if (node.type === "text") return renderTextNode(node)
     if (node.type === "hardBreak") return "<br>\n"
@@ -117,7 +122,7 @@ function renderInline(nodes: TiptapNode[]): string {
         : ""
       return src ? `![${alt}](${src})` : ""
     }
-    return renderInline(childrenOf(node))
+    return renderInline(childrenOf(node), depth + 1)
   }).join("")
 }
 
@@ -130,7 +135,8 @@ function indentLines(value: string, indent: string): string {
   return value.split("\n").map((line) => `${indent}${line}`).join("\n")
 }
 
-function renderList(node: TiptapNode, indent = ""): string {
+function renderList(node: TiptapNode, indent = "", depth = 0): string {
+  if (depth > MAX_CONTENT_DEPTH) return ""
   const ordered = node.type === "orderedList"
   const start = typeof node.attrs?.start === "number" && Number.isInteger(node.attrs.start)
     ? node.attrs.start
@@ -149,7 +155,7 @@ function renderList(node: TiptapNode, indent = ""): string {
 
     for (const child of itemChildren) {
       if (child.type === "paragraph") {
-        const paragraph = renderInline(childrenOf(child))
+        const paragraph = renderInline(childrenOf(child), depth + 1)
         if (!hasFirstBlock) {
           output += paragraph
           hasFirstBlock = true
@@ -161,10 +167,10 @@ function renderList(node: TiptapNode, indent = ""): string {
         child.type === "orderedList" ||
         child.type === "taskList"
       ) {
-        output += `\n${renderList(child, `${indent}  `)}`
+        output += `\n${renderList(child, `${indent}  `, depth + 1)}`
         hasFirstBlock = true
       } else {
-        const block = renderBlock(child).trim()
+        const block = renderBlock(child, depth + 1).trim()
         if (block) {
           output += `\n${indentLines(block, continuation)}`
           hasFirstBlock = true
@@ -176,15 +182,16 @@ function renderList(node: TiptapNode, indent = ""): string {
   }).join("\n")
 }
 
-function tableCellText(node: TiptapNode): string {
-  return rawText(node).replace(/\s+/g, " ").trim().replace(/\|/g, "\\|")
+function tableCellText(node: TiptapNode, depth = 0): string {
+  return rawText(node, depth).replace(/\s+/g, " ").trim().replace(/\|/g, "\\|")
 }
 
-function renderTable(node: TiptapNode): string {
+function renderTable(node: TiptapNode, depth = 0): string {
+  if (depth > MAX_CONTENT_DEPTH) return ""
   const rows = childrenOf(node).filter((row) => row.type === "tableRow")
   if (rows.length === 0) return ""
 
-  const cells = rows.map((row) => childrenOf(row).map(tableCellText))
+  const cells = rows.map((row) => childrenOf(row).map((cell) => tableCellText(cell, depth + 1)))
   const columnCount = Math.max(...cells.map((row) => row.length), 1)
   const normalized = cells.map((row) => [
     ...row,
@@ -196,27 +203,28 @@ function renderTable(node: TiptapNode): string {
   return [rowLine(normalized[0]), separator, ...normalized.slice(1).map(rowLine)].join("\n")
 }
 
-function renderBlock(node: TiptapNode): string {
+function renderBlock(node: TiptapNode, depth = 0): string {
+  if (depth > MAX_CONTENT_DEPTH) return ""
   switch (node.type) {
     case "doc":
-      return childrenOf(node).map(renderBlock).filter(Boolean).join("\n\n")
+      return childrenOf(node).map((child) => renderBlock(child, depth + 1)).filter(Boolean).join("\n\n")
     case "paragraph":
-      return renderInline(childrenOf(node))
+      return renderInline(childrenOf(node), depth + 1)
     case "heading": {
       const rawLevel = typeof node.attrs?.level === "number" ? node.attrs.level : 2
       const level = Math.min(6, Math.max(1, Math.trunc(rawLevel)))
-      return `${"#".repeat(level)} ${renderInline(childrenOf(node))}`
+      return `${"#".repeat(level)} ${renderInline(childrenOf(node), depth + 1)}`
     }
     case "bulletList":
     case "orderedList":
     case "taskList":
-      return renderList(node)
+      return renderList(node, "", depth + 1)
     case "blockquote": {
-      const content = childrenOf(node).map(renderBlock).filter(Boolean).join("\n\n")
+      const content = childrenOf(node).map((child) => renderBlock(child, depth + 1)).filter(Boolean).join("\n\n")
       return content.split("\n").map((line) => `> ${line}`).join("\n")
     }
     case "codeBlock": {
-      const text = rawText(node)
+      const text = rawText(node, depth + 1)
       const language = typeof node.attrs?.language === "string"
         ? node.attrs.language.replace(/[^\w+-]/g, "")
         : ""
@@ -226,15 +234,15 @@ function renderBlock(node: TiptapNode): string {
     case "horizontalRule":
       return "---"
     case "image":
-      return renderInline([node])
+      return renderInline([node], depth + 1)
     case "table":
-      return renderTable(node)
+      return renderTable(node, depth + 1)
     case "hardBreak":
       return "<br>"
     case "text":
       return renderTextNode(node)
     default:
-      return childrenOf(node).map(renderBlock).filter(Boolean).join("\n\n")
+      return childrenOf(node).map((child) => renderBlock(child, depth + 1)).filter(Boolean).join("\n\n")
   }
 }
 
@@ -280,12 +288,13 @@ export function createHeadingSlugger() {
   }
 }
 
-function markdownNodeText(node: MarkdownNode): string {
+function markdownNodeText(node: MarkdownNode, depth = 0): string {
+  if (depth > MAX_CONTENT_DEPTH) return ""
   if (node.type === "text" || node.type === "inlineCode" || node.type === "code") {
     return node.value ?? ""
   }
   if (node.type === "image") return node.alt ?? ""
-  return (node.children ?? []).map(markdownNodeText).join("")
+  return (node.children ?? []).map((child) => markdownNodeText(child, depth + 1)).join("")
 }
 
 export function extractHeadings(raw: string, levels = [2, 3, 4]): ContentHeading[] {
@@ -296,12 +305,13 @@ export function extractHeadings(raw: string, levels = [2, 3, 4]): ContentHeading
     const root = fromMarkdown(markdown) as MarkdownNode
     const headings: ContentHeading[] = []
 
-    const visit = (node: MarkdownNode) => {
+    const visit = (node: MarkdownNode, depth = 0) => {
+      if (depth > MAX_CONTENT_DEPTH) return
       if (node.type === "heading" && typeof node.depth === "number" && levels.includes(node.depth)) {
         const text = markdownNodeText(node).trim()
         if (text) headings.push({ id: slug(text), text, level: node.depth })
       }
-      for (const child of node.children ?? []) visit(child)
+      for (const child of node.children ?? []) visit(child, depth + 1)
     }
 
     visit(root)
