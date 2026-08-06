@@ -1,16 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import createIntlMiddleware from 'next-intl/middleware'
 import { routing } from './i18n/routing'
+import { getProxySession } from "@/lib/auth/session"
 
 // next-intl i18n middleware
 const intlMiddleware = createIntlMiddleware(routing)
 
-export function proxy(req: NextRequest) {
+export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl
 
-  // 保护 /admin 路径（页面与 API）
+  // 保护 /admin 路径（页面路由；API 路由由 handler 级 ensureAuthenticated 保护）
   if (pathname.startsWith("/admin")) {
-    const session = req.cookies.get("blog_session")?.value
+    const sessionCookie = req.cookies.get("blog_session")?.value
+    const session = await getProxySession(sessionCookie)
     if (!session) {
       const loginUrl = req.nextUrl.clone()
       loginUrl.pathname = "/"
@@ -20,13 +22,20 @@ export function proxy(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // 跳过 API 路由
-  if (pathname.startsWith("/api")) {
-    return NextResponse.next()
+  // i18n 路由处理
+  const response = intlMiddleware(req)
+
+  // R2-U4: 为 NEXT_LOCALE cookie 添加 Secure 属性
+  const localeCookie = req.cookies.get("NEXT_LOCALE")?.value
+  if (localeCookie) {
+    response.cookies.set("NEXT_LOCALE", localeCookie, {
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      path: "/",
+    })
   }
 
-  // i18n 路由处理
-  return intlMiddleware(req)
+  return response
 }
 
 export const config = {
