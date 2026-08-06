@@ -46,6 +46,12 @@ async function main() {
     update: {},
     create: { key: 'about_github', value: 'https://github.com/666666999999666' },
   })
+  // #22: about_whatido 在 PUBLIC_SETTING_KEYS 白名单但 seed 未初始化
+  await prisma.setting.upsert({
+    where: { key: 'about_whatido' },
+    update: {},
+    create: { key: 'about_whatido', value: '' },
+  })
   await prisma.setting.upsert({
     where: { key: 'email' },
     update: {},
