@@ -9,6 +9,10 @@ export async function POST(req: NextRequest) {
     if (!validateOrigin(req, { requireOrigin: true })) {
       return NextResponse.json({ error: "跨域请求被拒" }, { status: 403 })
     }
+    const contentType = req.headers.get("content-type") || ""
+    if (!contentType.startsWith("application/json")) {
+      return NextResponse.json({ error: "仅支持 application/json" }, { status: 415 })
+    }
     const body = validateLogin(await readJsonObject(req))
     const ip = req.headers.get("x-real-ip")
       || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
