@@ -6,6 +6,7 @@ export interface SessionData {
   userId?: string
   username?: string
   isLoggedIn: boolean
+  passwordVersion?: number
 }
 
 function getSessionOptions(): SessionOptions {

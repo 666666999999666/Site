@@ -13,6 +13,8 @@ const nextConfig: NextConfig = {
       "./node_modules/iron-session/**/*",
       "./node_modules/iron-webcrypto/**/*",
       "./node_modules/uncrypto/**/*",
+      "./node_modules/@prisma/adapter-pg/**/*",
+      "./node_modules/pg/**/*",
     ],
   },
   outputFileTracingExcludes: {

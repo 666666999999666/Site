@@ -76,6 +76,7 @@ export async function login(password: string, ip: string) {
   session.userId = user.id
   session.username = user.username
   session.isLoggedIn = true
+  session.passwordVersion = user.passwordVersion
   await session.save()
 
   return { userId: user.id, username: user.username }

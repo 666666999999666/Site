@@ -23,7 +23,10 @@ export async function POST(req: NextRequest) {
     const hash = await hashPassword(newPassword)
     await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: hash },
+      data: {
+        passwordHash: hash,
+        passwordVersion: { increment: 1 },
+      },
     })
     session.destroy()
 
