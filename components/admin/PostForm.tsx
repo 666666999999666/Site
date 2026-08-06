@@ -87,7 +87,14 @@ export function PostForm({
     tags,
     publishedAt,
   }), [categoryId, content, excerpt, publishedAt, tags, title])
-  const dirty = JSON.stringify(currentData) !== JSON.stringify(initialData)
+  // #21: 按字段比较 dirty 状态，避免大内容每次按键都 JSON.stringify 两次
+  const dirty =
+    currentData.title !== initialData.title ||
+    currentData.content !== initialData.content ||
+    currentData.excerpt !== initialData.excerpt ||
+    currentData.categoryId !== initialData.categoryId ||
+    currentData.tags !== initialData.tags ||
+    currentData.publishedAt !== initialData.publishedAt
 
   useEffect(() => {
     let cancelled = false
