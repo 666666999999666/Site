@@ -2,9 +2,13 @@ import { NextRequest, NextResponse } from "next/server"
 import { login } from "@/lib/auth/service"
 import { handleApiError } from "@/lib/api/handler"
 import { readJsonObject, validateLogin } from "@/lib/validation"
+import { validateOrigin } from "@/lib/csrf"
 
 export async function POST(req: NextRequest) {
   try {
+    if (!validateOrigin(req, { requireOrigin: true })) {
+      return NextResponse.json({ error: "跨域请求被拒" }, { status: 403 })
+    }
     const body = validateLogin(await readJsonObject(req))
     const ip = req.headers.get("x-real-ip")
       || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
