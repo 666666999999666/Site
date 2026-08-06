@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useSyncExternalStore } from "react"
 import { Check, ChevronDown, FilePlus2, Pencil, Plus, Search, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type { Category, Post, Todo } from "@/lib/generated/prisma/client"
@@ -14,6 +14,28 @@ import { Textarea } from "@/components/ui/textarea"
 
 type TodoWithCategory = Todo & { category: Category | null }
 type StatusFilter = "TODO" | "DONE" | "ALL"
+
+// #29: 用 useSyncExternalStore 在 hydration 后读取 localStorage 记住的新建分类，
+// 避免 useState 初始化访问 localStorage 导致 hydration mismatch，
+// 也避免 useEffect 里 setState 触发 react-hooks/set-state-in-effect lint。
+const TODO_CATEGORY_EVENT = "qz-todo-category-change"
+
+function subscribeToTodoCategory(callback: () => void) {
+  window.addEventListener(TODO_CATEGORY_EVENT, callback)
+  window.addEventListener("storage", callback)
+  return () => {
+    window.removeEventListener(TODO_CATEGORY_EVENT, callback)
+    window.removeEventListener("storage", callback)
+  }
+}
+
+function getTodoCategorySnapshot(): string {
+  return localStorage.getItem("qz-todo-category") ?? ""
+}
+
+function getTodoCategoryServerSnapshot(): string {
+  return ""
+}
 
 function dueDateInput(value: Date | string | null): string {
   if (!value) return ""
@@ -43,13 +65,16 @@ export function TodoList({
   const [todos, setTodos] = useState(initialTodos)
   const [categories, setCategories] = useState(initialCategories)
   const [newTitle, setNewTitle] = useState("")
-  const [newCategoryId, setNewCategoryId] = useState(() => {
-    if (typeof window === "undefined") return initialCategories[0]?.id || ""
-    const remembered = localStorage.getItem("qz-todo-category")
-    return remembered && initialCategories.some((category) => category.id === remembered)
-      ? remembered
+  // #29: newCategoryId 由 useSyncExternalStore 派生，hydration 后自动用 localStorage 值
+  const rememberedCategory = useSyncExternalStore(
+    subscribeToTodoCategory,
+    getTodoCategorySnapshot,
+    getTodoCategoryServerSnapshot,
+  )
+  const newCategoryId =
+    rememberedCategory && initialCategories.some((category) => category.id === rememberedCategory)
+      ? rememberedCategory
       : initialCategories[0]?.id || ""
-  })
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null)
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("TODO")
   const [query, setQuery] = useState("")
@@ -58,9 +83,9 @@ export function TodoList({
   const router = useRouter()
 
   function selectNewCategory(id: string) {
-    setNewCategoryId(id)
     if (id) localStorage.setItem("qz-todo-category", id)
     else localStorage.removeItem("qz-todo-category")
+    window.dispatchEvent(new Event(TODO_CATEGORY_EVENT))
   }
 
   async function add() {
