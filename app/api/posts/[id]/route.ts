@@ -5,7 +5,8 @@ import { handleApiError } from "@/lib/api/handler"
 import { NotFoundError } from "@/lib/errors"
 import { ensureAuthenticated } from "@/lib/api/auth"
 import { readJsonObject, validatePostUpdate } from "@/lib/validation"
-import { normalizeContent } from "@/lib/content"
+import { extractUploadUrls, normalizeContent } from "@/lib/content"
+import { deleteUploadFiles } from "@/lib/uploads-cleanup"
 import { resolvePublishedAt } from "@/lib/post-policy"
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -61,7 +62,12 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   try {
     await ensureAuthenticated()
     const { id } = await params
+    // #30: 先查询内容提取图片 URL，删除记录后清理关联文件（excludeId 防误删共享图片）
+    const post = await prisma.post.findUnique({ where: { id }, select: { content: true } })
     await prisma.post.delete({ where: { id } })
+    if (post) {
+      await deleteUploadFiles(extractUploadUrls(post.content), id)
+    }
     return NextResponse.json({ ok: true })
   } catch (e) {
     return handleApiError(e)
