@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { headers } from "next/headers";
 import { getLocale } from "next-intl/server";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { getSiteUrl } from "@/lib/site";
@@ -24,6 +25,8 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const locale = await getLocale().catch(() => "zh")
+  // U14: 读取 proxy.ts 注入的 nonce，给内联主题脚本加 nonce 属性
+  const nonce = (await headers()).get("x-nonce") ?? undefined
 
   return (
     <html
@@ -32,9 +35,12 @@ export default async function RootLayout({
       suppressHydrationWarning
     >
       <body>
-        <script dangerouslySetInnerHTML={{ __html: `
+        <script
+          nonce={nonce}
+          dangerouslySetInnerHTML={{ __html: `
           (function(){try{var t=localStorage.getItem('theme');var d=t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme:dark)').matches);document.documentElement.classList.toggle('dark',d);document.documentElement.style.colorScheme=d?'dark':'light'}catch(e){}})()
-        `}} />
+        `}}
+        />
         <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
