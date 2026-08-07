@@ -11,6 +11,10 @@ RUN --mount=type=cache,target=/root/.npm \
 FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
+# Task 23: 构建时注入站点域名（NEXT_PUBLIC_* 会被内联进产物，运行时设置无效）。
+# 默认值为生产域名，确保即使 CI 不传 buildArgs 也不会泄露 localhost。
+ARG NEXT_PUBLIC_SITE_URL=https://liaoqizai.site
+ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN node scripts/source-fingerprint.mjs /app > /tmp/source-fingerprint
