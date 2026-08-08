@@ -6,7 +6,7 @@ import { uploadFilePath } from "@/lib/uploads"
  * #30: 删除上传文件，仅删除不被其他记录引用的文件，防误删共享图片。
  *
  * 引用检查（跨表字段不同，不能混用）：
- * - Post：content 字段用 contains 模糊匹配（content 是 Markdown 文本），excludeId 仅此表生效
+ * - Post：content 用 contains 匹配，coverImage 用 equals 匹配，excludeId 仅此表生效
  * - Project：coverImage 字段用 equals 精确匹配（coverImage 是单个 URL），不传 excludeId
  *
  * @param urls 要删除的 URL 列表
@@ -19,8 +19,11 @@ export async function deleteUploadFiles(urls: string[], excludeId?: string): Pro
 
     const postCount = await prisma.post.count({
       where: {
-        content: { contains: url },
         ...(excludeId ? { id: { not: excludeId } } : {}),
+        OR: [
+          { content: { contains: url } },
+          { coverImage: url },
+        ],
       },
     })
     const projectCount = await prisma.project.count({

@@ -4,7 +4,8 @@ import type { PostStatusValue } from "@/lib/post-policy"
 type JsonObject = Record<string, unknown>
 
 const POST_KEYS = [
-  "title", "content", "excerpt", "categoryId", "tags", "status", "publishedAt",
+  "title", "content", "excerpt", "categoryId", "tags", "coverImage", "draftMetadata",
+  "status", "publishedAt",
 ] as const
 const TODO_KEYS = [
   "title", "description", "categoryId", "status", "priority", "dueDate",
@@ -171,8 +172,31 @@ export interface PostInput {
   excerpt?: string | null
   categoryId?: string | null
   tags?: string[]
+  coverImage?: string | null
+  draftMetadata?: JsonObject | null
   status?: PostStatusValue
   publishedAt?: Date | null
+}
+
+function optionalJsonObject(
+  value: unknown,
+  label: string,
+  maxBytes: number
+): JsonObject | null | undefined {
+  if (value === undefined) return undefined
+  if (value === null) return null
+  if (!isObject(value)) throw new ValidationError(`${label}必须是 JSON 对象或 null`)
+
+  let serialized: string
+  try {
+    serialized = JSON.stringify(value)
+  } catch {
+    throw new ValidationError(`${label}必须可序列化为 JSON`)
+  }
+  if (Buffer.byteLength(serialized, "utf8") > maxBytes) {
+    throw new ValidationError(`${label}不能超过 ${Math.floor(maxBytes / 1024)}KB`)
+  }
+  return JSON.parse(serialized) as JsonObject
 }
 
 function parsePost(value: JsonObject, partial: boolean): PostInput {
@@ -193,6 +217,10 @@ function parsePost(value: JsonObject, partial: boolean): PostInput {
   if (value.excerpt !== undefined) result.excerpt = optionalString(value.excerpt, "摘要", 1000)
   if (value.categoryId !== undefined) result.categoryId = optionalString(value.categoryId, "分区", 128)
   if (value.tags !== undefined) result.tags = optionalTags(value.tags)
+  if (value.coverImage !== undefined) result.coverImage = optionalUploadPath(value.coverImage)
+  if (value.draftMetadata !== undefined) {
+    result.draftMetadata = optionalJsonObject(value.draftMetadata, "草稿 metadata", 64 * 1024)
+  }
   if (value.status !== undefined) {
     result.status = optionalEnum(value.status, "文章状态", ["DRAFT", "PUBLISHED"])
   }

@@ -8,3 +8,10 @@ export async function findUserByUsername(username: string): Promise<User | null>
 export async function findFirstUser(): Promise<User | null> {
   return prisma.user.findFirst()
 }
+
+export function findUserSessionState(id: string) {
+  return prisma.user.findUnique({
+    where: { id },
+    select: { passwordVersion: true },
+  })
+}

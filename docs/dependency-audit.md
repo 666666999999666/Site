@@ -33,3 +33,15 @@ Next.js 上游仍有公开问题跟踪 Sharp 告警：
 再次执行同一命令，结果为 **2 项 High**，均来自 `next@16.2.12` 间接安装的 `sharp@0.34.5`。npm 当前建议的自动修复会把 Next.js 强制降到 `14.2.35`，属于破坏性变更，不应执行。
 
 复核时 Next.js 最新稳定版仍为 `16.2.12`，其 `optionalDependencies` 仍声明 `sharp: ^0.34.5`；Sharp 无告警版本已经进入 `0.35.x`，超出 Next.js 当前声明的兼容范围。继续保留上面的运行时隔离措施，等待 Next.js 官方更新依赖约束后再常规升级。该告警是明确接受的构建期残余风险，不应表述为“依赖审计清零”。
+
+## 2026-08-04 MCP 依赖复核
+
+引入官方 `@modelcontextprotocol/sdk@1.30.0` 后，首次审计发现其 HTTP 传输依赖中的 Hono、`@hono/node-server`、`fast-uri` 和 `ip-address` 告警。执行非破坏性的 `npm audit fix` 后，这些传递依赖均更新到修复版本；随后重新通过 TypeScript、Lint、单元测试、真实 stdio MCP 集成测试和生产构建。
+
+当前仍为 **2 项 High**，均是上文记录的 Next.js optional Sharp 链路。MCP 只启用 stdio transport，不启动 SDK 的 Hono/Express HTTP 服务；禁止使用 `npm audit fix --force` 把 Next 强升到当前版本约束之外。
+
+## 2026-08-08 安全同步复核
+
+同步安全修复与 MCP 后，`npm audit fix` 在现有 semver 范围内更新了 Mermaid、DOMPurify、js-yaml 与 nanoid，清除了对应的 XSS、原型污染和 DoS 告警。随后重新通过单元测试、Lint、TypeScript、生产构建和真实浏览器 CSP/Mermaid 验证。
+
+`npm audit --omit=dev --registry=https://registry.npmjs.org` 仍报告 **2 项 High**，均来自 `next@16.2.12` 的 optional `sharp@0.34.x`。生产继续使用既有隔离：`images.unoptimized=true`、Nginx 拒绝 `/_next/image`，最终镜像删除 `sharp` 与 `@img`。自动强制修复会把 Next.js 改到当前固定版本之外，未在本次安全同步中执行。

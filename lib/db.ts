@@ -55,3 +55,7 @@ export const prisma: PrismaClient = globalForPrisma.prisma ??
 if (process.env.NODE_ENV !== 'production' && !isBuildTime) {
   globalForPrisma.prisma = prisma
 }
+
+export function disconnectDatabase() {
+  return prisma.$disconnect()
+}

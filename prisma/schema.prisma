@@ -26,20 +26,28 @@ enum CategoryType {
   TODO
 }
 
+enum McpApprovalStatus {
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
 model Post {
-  id          String     @id @default(cuid())
-  title       String
-  content     String     @db.Text
-  excerpt     String?
-  slug        String     @unique
-  categoryId  String?
-  category    Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  tags        String[]
-  status      PostStatus @default(DRAFT)
-  readTime    Int        @default(1)
-  publishedAt DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id            String     @id @default(cuid())
+  title         String
+  content       String     @db.Text
+  excerpt       String?
+  slug          String     @unique
+  categoryId    String?
+  category      Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags          String[]
+  coverImage    String?
+  draftMetadata Json?
+  status        PostStatus @default(DRAFT)
+  readTime      Int        @default(1)
+  publishedAt   DateTime?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
 
   @@index([status, createdAt])
   @@index([categoryId])
@@ -103,4 +111,79 @@ model Project {
   updatedAt   DateTime @updatedAt
 
   @@index([sortOrder])
+}
+
+model McpCredential {
+  id         String    @id
+  name       String
+  secretHash String
+  scopes     String[]
+  revokedAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  approvals  McpApproval[]
+  auditLogs  McpAuditLog[]
+  rateLimits McpRateLimit[]
+
+  @@index([revokedAt])
+}
+
+model McpApproval {
+  id               String            @id @default(cuid())
+  credentialId     String
+  credential       McpCredential     @relation(fields: [credentialId], references: [id], onDelete: Restrict)
+  toolName         String
+  requiredScope    String
+  status           McpApprovalStatus @default(PENDING_APPROVAL)
+  payload          Json
+  parameterSummary Json
+  resultSummary    Json?
+  executionError   String?
+  processingAt     DateTime?
+  reviewedAt       DateTime?
+  executedAt       DateTime?
+  expiresAt        DateTime
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  execution        McpExecution?
+
+  @@index([status, createdAt])
+  @@index([credentialId, createdAt])
+}
+
+model McpExecution {
+  approvalId    String      @id
+  approval      McpApproval @relation(fields: [approvalId], references: [id], onDelete: Restrict)
+  toolName      String
+  resultSummary Json
+  createdAt     DateTime    @default(now())
+}
+
+model McpAuditLog {
+  id               String         @id @default(cuid())
+  credentialId     String?
+  credential       McpCredential? @relation(fields: [credentialId], references: [id], onDelete: SetNull)
+  toolName         String
+  parameterSummary Json
+  resultSummary    Json?
+  success          Boolean
+  errorCode        String?
+  errorMessage     String?
+  createdAt        DateTime       @default(now())
+
+  @@index([credentialId, createdAt])
+  @@index([toolName, createdAt])
+}
+
+model McpRateLimit {
+  credentialId String
+  credential   McpCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  toolName     String
+  windowStart  DateTime
+  count        Int           @default(0)
+
+  @@id([credentialId, toolName, windowStart])
+  @@index([windowStart])
 }

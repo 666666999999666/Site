@@ -21,6 +21,7 @@
 5. [`docs/site-audit-and-improvement-plan.md`](docs/site-audit-and-improvement-plan.md)：改造前审计基线与已完成项，不是待办清单。
 6. [`docs/dependency-audit.md`](docs/dependency-audit.md)：依赖告警、处理方式与运行路径判断。
 7. [`docs/session-summary.md`](docs/session-summary.md)：历史建站过程，仅供追溯，不作为当前技术或运维依据。
+8. [`docs/local-mcp.md`](docs/local-mcp.md)：本地 stdio MCP、独立 credential、审批、审计与客户端配置。
 
 ## 本地开发
 
@@ -46,6 +47,20 @@ npm run build
 ```
 
 测试覆盖正文转换、目录 slug、发布时间规则、输入校验、上传文件签名和中英文语言包键一致性。Dockerfile 在镜像构建时也会执行 lint、测试和生产构建。
+
+## 本地博客 MCP
+
+本地 stdio MCP 只负责导入用户已有 Markdown、搜索文章、修改草稿 metadata、创建分区和 Todo 转草稿。它不提供正文生成、发布或删除工具，所有写操作必须先进入人工审批。
+
+```bash
+npx prisma migrate deploy
+npm run mcp:admin -- credential create --name claude-desktop --scopes draft:create,draft:read,draft:update,category:create,todo:convert
+npm run mcp:admin -- approval list --status pending_approval
+npm run mcp:admin -- approval approve --id <approval-id>
+npm run mcp:admin -- audit list --limit 50
+```
+
+每个 MCP client 必须创建单独 credential。完整的 Claude Desktop、Cursor 和 Windows 配置见 [`docs/local-mcp.md`](docs/local-mcp.md)。
 
 ## 数据变更
 

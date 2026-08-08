@@ -10,6 +10,7 @@ const ignoredDirectories = new Set([
   ".tmp-pgtest",
   "backups",
   "data",
+  "drafts",
   "docs",
   "nginx",
   "node_modules",

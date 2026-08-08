@@ -22,6 +22,18 @@ export class AuthError extends AppError {
   }
 }
 
+export class PermissionError extends AppError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super(message, "PERMISSION_DENIED", 403, context)
+  }
+}
+
+export class RateLimitError extends AppError {
+  constructor(message: string, context?: Record<string, unknown>) {
+    super(message, "RATE_LIMITED", 429, context)
+  }
+}
+
 export class NotFoundError extends AppError {
   constructor(message: string, context?: Record<string, unknown>) {
     super(message, "NOT_FOUND", 404, context)

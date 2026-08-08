@@ -28,6 +28,27 @@ test("post validation trims fields and requires timezone-aware dates", () => {
   }), /必须包含时区/)
 })
 
+test("post validation accepts bounded draft metadata and upload covers", () => {
+  const post = validatePostCreate({
+    title: "草稿",
+    content: "正文",
+    coverImage: "/uploads/cover.webp",
+    draftMetadata: { source: "mcp", nested: { reviewed: false } },
+  })
+  assert.equal(post.coverImage, "/uploads/cover.webp")
+  assert.deepEqual(post.draftMetadata, { source: "mcp", nested: { reviewed: false } })
+  assert.throws(() => validatePostCreate({
+    title: "草稿",
+    content: "",
+    coverImage: "../cover.webp",
+  }), /路径无效/)
+  assert.throws(() => validatePostCreate({
+    title: "草稿",
+    content: "",
+    draftMetadata: "not-an-object",
+  }), /JSON 对象/)
+})
+
 test("todo validation rejects invalid status and priority", () => {
   assert.throws(() => validateTodoUpdate({ status: "UNKNOWN" }), /状态无效/)
   assert.throws(() => validateTodoUpdate({ priority: 3 }), /0 到 2/)

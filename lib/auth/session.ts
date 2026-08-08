@@ -9,6 +9,8 @@ export interface SessionData {
   passwordVersion?: number
 }
 
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 14
+
 function getSessionOptions(): SessionOptions {
   const password = process.env.SESSION_SECRET
   if (!password || password.length < 32) {
@@ -18,11 +20,11 @@ function getSessionOptions(): SessionOptions {
   return {
     password,
     cookieName: 'blog_session',
+    ttl: SESSION_TTL_SECONDS,
     cookieOptions: {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 14,
       path: '/',
     },
   }
@@ -35,7 +37,7 @@ export async function getSession() {
 /**
  * 在 proxy.ts（Node.js runtime）中解密验证 cookie 有效性。
  * 使用 unsealData 直接解密 cookie 值，无需 getIronSession 的 Request 对象。
- * ttl 单位为毫秒，与 getSessionOptions 的 maxAge（秒）保持一致。
+ * unsealData 的 ttl 单位为秒，与普通会话使用同一有效期。
  */
 export async function getProxySession(cookieValue: string | undefined): Promise<SessionData | null> {
   if (!cookieValue) return null
@@ -45,7 +47,7 @@ export async function getProxySession(cookieValue: string | undefined): Promise<
   try {
     const session = await unsealData<SessionData>(cookieValue, {
       password,
-      ttl: 60 * 60 * 24 * 14 * 1000, // 14 天（毫秒），与 getSessionOptions 的 maxAge 一致
+      ttl: SESSION_TTL_SECONDS,
     })
     return session.isLoggedIn ? session : null
   } catch {

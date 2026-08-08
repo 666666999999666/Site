@@ -1,24 +1,43 @@
 import { NextRequest } from "next/server"
 
-const ALLOWED_ORIGINS = [
+const PRODUCTION_ORIGINS = [
   "https://liaoqizai.site",
   "https://www.liaoqizai.site",
-  // 开发环境
-  "http://localhost:3000",
 ]
+
+function allowedOrigins(): Set<string> {
+  const origins = new Set(PRODUCTION_ORIGINS)
+  const configured = process.env.NEXT_PUBLIC_SITE_URL
+  if (configured) {
+    try {
+      const url = new URL(configured)
+      if (process.env.NODE_ENV !== "production" || url.protocol === "https:") {
+        origins.add(url.origin)
+      }
+    } catch {
+      // Invalid deployment configuration must not broaden the allowlist.
+    }
+  }
+  if (process.env.NODE_ENV !== "production") {
+    origins.add("http://localhost:3000")
+    origins.add("http://127.0.0.1:3000")
+  }
+  return origins
+}
 
 export function validateOrigin(req: NextRequest, options?: { requireOrigin?: boolean }): boolean {
   const origin = req.headers.get("origin")
   const referer = req.headers.get("referer")
+  const allowed = allowedOrigins()
 
   // 如果有 Origin 头，校验是否在白名单中
-  if (origin) return ALLOWED_ORIGINS.includes(origin)
+  if (origin) return allowed.has(origin)
 
   // 如果没有 Origin 但有 Referer，校验 Referer
   if (referer) {
     try {
       const refererOrigin = new URL(referer).origin
-      return ALLOWED_ORIGINS.includes(refererOrigin)
+      return allowed.has(refererOrigin)
     } catch {
       return false
     }

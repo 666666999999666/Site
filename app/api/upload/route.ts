@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { handleApiError } from "@/lib/api/handler"
 import { NotFoundError, ValidationError } from "@/lib/errors"
-import { writeFile, mkdir, unlink } from "fs/promises"
-import path from "path"
-import { randomUUID } from "crypto"
+import { unlink } from "fs/promises"
 import { ensureAuthenticated } from "@/lib/api/auth"
 import { readJsonObject } from "@/lib/validation"
 import {
-  detectImageExtension,
   MAX_UPLOAD_BYTES,
+  storeImageBuffer,
   uploadFilePath,
 } from "@/lib/uploads"
 
@@ -28,15 +26,8 @@ export async function POST(req: NextRequest) {
     }
 
     const buf = Buffer.from(await file.arrayBuffer())
-    const ext = detectImageExtension(buf)
-    if (!ext) throw new ValidationError("文件内容不是有效的 JPG/PNG/GIF/WebP 图片")
-
-    const filename = `${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`
-    const uploadDir = path.join(process.cwd(), "public", "uploads")
-    await mkdir(uploadDir, { recursive: true })
-    await writeFile(path.join(uploadDir, filename), buf)
-
-    return NextResponse.json({ url: `/uploads/${filename}` })
+    const url = await storeImageBuffer(buf)
+    return NextResponse.json({ url })
   } catch (e) {
     return handleApiError(e)
   }

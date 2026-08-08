@@ -29,6 +29,10 @@ docker-compose.override.yml
 data/
 .tmp-pgtest/
 
+# local Markdown import sandbox (owner content stays private)
+/drafts/*
+!/drafts/.gitkeep
+
 # generated Prisma Client (Prisma 7 generates into project source)
 lib/generated/prisma/
 

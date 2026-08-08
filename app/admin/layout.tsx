@@ -1,13 +1,18 @@
 import { redirect } from "next/navigation"
-import { getSession } from "@/lib/auth/session"
+import { ensureAuthenticated } from "@/lib/api/auth"
+import { AuthError } from "@/lib/errors"
 import { AdminSidebar } from "@/components/admin/AdminSidebar"
 import { MobileAdminNav } from "@/components/admin/MobileAdminNav"
 import { LogoutButton, SignOutButton } from "@/components/admin/LogoutButton"
 import { ThemeToggle } from "@/components/layout/ThemeToggle"
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const session = await getSession()
-  if (!session.isLoggedIn) redirect("/")
+  try {
+    await ensureAuthenticated()
+  } catch (error) {
+    if (error instanceof AuthError) redirect("/")
+    throw error
+  }
 
   return (
     <div className="min-h-screen flex flex-col">

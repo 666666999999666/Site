@@ -1,6 +1,6 @@
 # QZ Site 项目架构与设计说明
 
-> **文档定位**：本文描述当前有效的系统结构、模块边界和关键设计约束，是后续开发理解项目的首要技术文档。最后核对日期为 **2026-07-29**。代码行为、数据模型或部署拓扑变化时，应在同一提交中更新本文。
+> **文档定位**：本文描述当前有效的系统结构、模块边界和关键设计约束，是后续开发理解项目的首要技术文档。最后核对日期为 **2026-08-08**。代码行为、数据模型或部署拓扑变化时，应在同一提交中更新本文。
 
 ## 1. 项目目标与范围
 
@@ -11,6 +11,8 @@ QZ Site 是一个面向单一站点所有者的个人网站，当前服务三个
 3. 用首页、关于页和项目列表展示个人能力与项目证据。
 
 当前架构按个人站点的小数据量、单管理员和单机部署设计。它不是多人博客平台、团队任务系统或通用 CMS，不需要为尚不存在的多租户、微服务和高并发需求提前扩展。
+
+本地 `mcp/` 提供独立 stdio 入口，供站点所有者通过 MCP Client 搬运和管理草稿。MCP 复用 `lib/` 业务函数，不直接访问文章、分类或 Todo 的 Prisma CRUD；MCP 自身 credential、审批、审计和限流由 `lib/mcp/` 管理。它不进入生产 Web 运行时，也不暴露发布、删除或正文生成能力。
 
 ## 2. 系统全景
 
@@ -60,6 +62,7 @@ flowchart LR
 | 入口代理 | `nginx/` | 正式域名/IP 虚拟主机、TLS、上传静态服务和安全头 |
 | 流水线 | `.workflow/` | Gitee Go 自动部署与受限维护定义 |
 | 自动化验证 | `tests/` | 业务规则、内容、校验、上传签名和语言包一致性测试 |
+| 本地 MCP | `mcp/`、`lib/mcp/` | stdio tools、独立 credential、审批、审计和持久化限流 |
 
 ### 3.1 依赖方向
 
@@ -75,6 +78,11 @@ API Route Handler
   ├─ lib/validation：请求白名单与类型校验
   ├─ lib/*：可复用业务规则
   └─ Prisma：持久化
+
+MCP stdio 入口
+  ├─ lib/mcp：credential、scope、审批、审计和限流
+  ├─ lib/validation：与 HTTP API 相同的参数白名单
+  └─ lib/*：与 HTTP API 共用的文章、分类、Todo、上传业务函数
 ```
 
 部分简单 CRUD 仍直接写在 Route Handler 中，这是有意保留的轻量结构。只有当逻辑需要复用、需要独立测试或一个路由已难以理解时，才应继续抽到 `lib/`，不要为了“分层完整”增加空壳 service/repository。
@@ -104,11 +112,11 @@ API Route Handler
 
 后台是**单管理员 Session 模型**：
 
-1. `proxy.ts` 对 `/admin` 做 Cookie 存在性快速跳转。
-2. `app/admin/layout.tsx` 读取并验证 iron-session，决定是否真正展示后台。
+1. `proxy.ts` 对 `/admin` 解密 iron-session，并核对用户存在性与 `passwordVersion`，在页面查询前拒绝过期会话。
+2. `app/admin/layout.tsx` 再次执行完整认证，作为路由层防御纵深。
 3. 所有管理 API 必须调用 `ensureAuthenticated()`；不能依赖页面路由保护代替 API 鉴权。
 4. Session Cookie 使用 `HttpOnly`、`SameSite=Lax`，生产环境使用 `Secure`。
-5. 修改密码后销毁当前 Session，要求重新登录。
+5. 修改密码会递增 `passwordVersion` 并销毁当前 Session，所有旧 Session 随即失效。
 
 登录失败限制目前保存在 Web 进程内存中，适用于单实例个人站点。容器重启会清空计数，未来只有在多实例或实际遭遇持续攻击时才需要改为 Redis、数据库或 Nginx 限流。
 
@@ -176,6 +184,11 @@ erDiagram
 | `Project` | 求职展示项目 | 轻量卡片模型，封面只允许站内 `/uploads` 路径 |
 | `Setting` | 公开站点信息 | API 只允许固定白名单键，不能变成任意配置存储 |
 | `User` | 单一管理员 | Seed 仅在管理员不存在时创建，不覆盖现有密码 |
+| `McpCredential` | 本地 MCP client 身份 | 每个 client 独立；只保存 scrypt hash；支持 scope 与撤销 |
+| `McpApproval` | MCP 写操作审批 | 写请求默认 `PENDING_APPROVAL`，批准后才调用业务函数 |
+| `McpExecution` | 审批执行幂等记录 | 与业务写入同事务落库，进程中断后的重试不会重复创建资源 |
+| `McpAuditLog` | MCP 操作审计 | 保存参数/结果摘要，不保存 Markdown 正文或 token |
+| `McpRateLimit` | MCP 固定窗口限流 | 同时按 credential 总量和 credential+tool 计数 |
 
 Todo 转草稿会复制标题和描述，创建独立 `DRAFT` Post；当前不保留 Todo/Post 外键关系，也不会自动同步后续修改。这符合“把临时想法送入正式写作流程”的语义，避免两个对象互相覆盖。
 
@@ -208,7 +221,7 @@ Todo 转草稿会复制标题和描述，创建独立 `DRAFT` Post；当前不�
 - Web 接收文件，限制 5MB，并按实际文件签名识别 JPG、PNG、GIF、WebP。
 - 数据库只保存 `/uploads/<filename>` 路径。
 - Web 写入 `data/uploads` 挂载目录，Nginx 只读并直接提供静态文件。
-- 孤儿清理同时扫描文章正文和项目封面，默认只报告超过 24 小时的未引用文件。
+- 孤儿清理同时扫描文章正文、文章封面和项目封面，默认只报告超过 24 小时的未引用文件。
 
 当前单机磁盘方案足够。只有在迁移到多实例或对象存储成为真实需求时，才重构上传层。
 
@@ -237,6 +250,17 @@ Next.js 使用 `output: "standalone"`。镜像构建阶段会导入动态页面�
 ### 6.7 Nginx 统一拥有入口安全策略
 
 TLS、HTTP 到 HTTPS 跳转、安全响应头、上传静态服务和请求体上限由 Nginx 管理。不要再在 Next.js 重复配置同名安全头，否则可能产生重复或冲突响应头。
+
+HTML 的 CSP 由 `proxy.ts` 按请求生成：脚本只允许同一 nonce 与受信动态加载，禁止内联事件处理器；Mermaid 渲染期间必须创建临时样式节点，因此 CSS 保留 `unsafe-inline`，不能把它误写成脚本也允许 `unsafe-inline`。`NEXT_LOCALE` 的 `Secure` 属性直接配置在 `i18n/routing.ts`，保证首次写入和后续更新一致。
+
+### 6.8 本地 MCP 使用独立安全边界
+
+- MCP credential 与后台 Session 完全分离，每个客户端使用独立 token 和最小 scope。
+- token 只在创建时显示，数据库只保存 scrypt hash；每次 tool 调用重新检查撤销状态。
+- 搜索可立即执行；导入草稿、更新 metadata、创建分区和 Todo 转草稿只创建审批请求。
+- 人工批准时再次检查 credential/scope，并调用 HTTP API 同一套 `lib/` 业务函数；MCP 不直接操作文章、分类或 Todo 的 Prisma CRUD。
+- Markdown 与图片使用真实路径沙箱、大小/签名检查和审批前后 SHA-256 对比。
+- `drafts/` 同时被 Git 与 Docker 构建上下文排除，所有者本地内容不进入仓库或镜像。
 
 ## 7. 部署与数据安全
 

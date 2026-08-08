@@ -6,6 +6,7 @@ import { extractUploadUrls } from "../lib/content"
 
 interface PostRow {
   content: string
+  coverImage: string | null
 }
 
 interface ProjectRow {
@@ -34,13 +35,14 @@ async function main() {
 
   try {
     const [posts, projects] = await Promise.all([
-      client.query<PostRow>(`SELECT "content" FROM "Post"`),
+      client.query<PostRow>(`SELECT "content", "coverImage" FROM "Post"`),
       client.query<ProjectRow>(`SELECT "coverImage" FROM "Project"`),
     ])
 
     const referenced = new Set<string>()
     for (const post of posts.rows) {
       for (const url of extractUploadUrls(post.content)) referenced.add(path.basename(url))
+      if (post.coverImage) referenced.add(path.basename(post.coverImage))
     }
     for (const project of projects.rows) {
       if (project.coverImage) referenced.add(path.basename(project.coverImage))
