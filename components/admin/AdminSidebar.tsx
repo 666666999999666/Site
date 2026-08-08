@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { FileText, ListTodo, Settings, Home, FolderKanban } from "lucide-react"
+import { Bot, FileText, ListTodo, Settings, Home, FolderKanban } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const items = [
@@ -10,6 +10,7 @@ const items = [
   { href: "/admin/posts", label: "文章", icon: FileText },
   { href: "/admin/projects", label: "项目管理", icon: FolderKanban },
   { href: "/admin/todos", label: "Todo / Idea", icon: ListTodo },
+  { href: "/admin/mcp", label: "MCP", icon: Bot },
   { href: "/admin/settings", label: "设置", icon: Settings },
 ]
 

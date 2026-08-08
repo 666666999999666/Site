@@ -1,25 +1,37 @@
 import "dotenv/config"
 import { fileURLToPath } from "url"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
-import { disconnectDatabase } from "../lib/db"
 import { loadMcpRuntimeConfig } from "../lib/mcp/config"
-import { authenticateMcpCredential } from "../lib/mcp/credential-service"
-import { cleanupMcpRateLimits } from "../lib/mcp/rate-limit-service"
-import { createBlogMcpServer } from "./tools"
 
 process.chdir(fileURLToPath(new URL("../", import.meta.url)))
 
 async function main() {
   const config = loadMcpRuntimeConfig()
-  await authenticateMcpCredential(config.credential)
-  await cleanupMcpRateLimits()
+  let disconnect: () => Promise<void> = async () => {}
+  let server
 
-  const server = createBlogMcpServer(config)
+  if (config.remoteUrl) {
+    const { createRemoteBlogMcpServer, verifyRemoteGateway } = await import("./remote-tools")
+    await verifyRemoteGateway(config)
+    server = createRemoteBlogMcpServer(config)
+  } else {
+    const [tools, credentials, rateLimits, database] = await Promise.all([
+      import("./tools"),
+      import("../lib/mcp/credential-service"),
+      import("../lib/mcp/rate-limit-service"),
+      import("../lib/db"),
+    ])
+    await credentials.authenticateMcpCredential(config.credential)
+    await rateLimits.cleanupMcpRateLimits()
+    disconnect = database.disconnectDatabase
+    server = tools.createBlogMcpServer(config)
+  }
+
   const transport = new StdioServerTransport()
 
   const shutdown = async () => {
     await server.close()
-    await disconnectDatabase()
+    await disconnect()
     process.exit(0)
   }
   process.once("SIGINT", shutdown)
@@ -29,8 +41,7 @@ async function main() {
   console.error("QZ Blog MCP Server running on stdio")
 }
 
-main().catch(async (error) => {
+main().catch((error) => {
   console.error("QZ Blog MCP Server failed to start:", error instanceof Error ? error.message : error)
-  await disconnectDatabase().catch(() => undefined)
   process.exit(1)
 })

@@ -7,6 +7,8 @@ import { ValidationError } from "./errors"
 import { detectImageExtension, MAX_UPLOAD_BYTES, storeImageBuffer, uploadFilePath } from "./uploads"
 import { validatePostCreate } from "./validation"
 
+export const MAX_MARKDOWN_BYTES = 2_000_000
+
 interface MarkdownPosition {
   start?: { offset?: number }
   end?: { offset?: number }
@@ -236,19 +238,51 @@ async function inspectImageReference(
   return { kind: "local", path: actual, buffer, digest: digest(buffer) }
 }
 
+function draftImageReferences(draft: ParsedMarkdownDraft): string[] {
+  const references = new Set(imageOccurrences(draft.content).map((item) => item.reference))
+  if (draft.coverReference) references.add(draft.coverReference)
+  return [...references].sort((left, right) => left.localeCompare(right, "en"))
+}
+
+export function markdownLocalImageReferences(draft: ParsedMarkdownDraft): string[] {
+  const local: string[] = []
+  for (const reference of draftImageReferences(draft)) {
+    if (/^https?:\/\//i.test(reference)) {
+      if (reference === draft.coverReference) {
+        throw new ValidationError("frontmatter cover 只允许本地图片或 /uploads/ 路径")
+      }
+      continue
+    }
+    if (reference.startsWith("/uploads/")) {
+      if (!uploadFilePath(reference)) throw new ValidationError(`图片引用无效：${reference}`)
+      continue
+    }
+    if (/^[a-z][a-z\d+.-]*:/i.test(reference) || reference.startsWith("//")) {
+      throw new ValidationError(`图片引用协议不允许：${reference}`)
+    }
+    const pathPart = reference.split(/[?#]/, 1)[0]
+    let decoded: string
+    try {
+      decoded = decodeURIComponent(pathPart)
+    } catch {
+      throw new ValidationError(`图片路径编码无效：${reference}`)
+    }
+    if (!decoded || path.isAbsolute(decoded)) {
+      throw new ValidationError(`本地图片必须使用相对路径：${reference}`)
+    }
+    local.push(reference)
+  }
+  return local
+}
+
 async function snapshotLocalImages(
   draft: ParsedMarkdownDraft,
   sourcePath: string,
   imageRoot: string
 ): Promise<MarkdownImageSnapshot[]> {
-  const references = new Set(imageOccurrences(draft.content).map((item) => item.reference))
-  if (draft.coverReference) references.add(draft.coverReference)
   const snapshots: MarkdownImageSnapshot[] = []
-  for (const reference of references) {
+  for (const reference of markdownLocalImageReferences(draft)) {
     const inspected = await inspectImageReference(reference, sourcePath, imageRoot)
-    if (reference === draft.coverReference && inspected.kind === "remote") {
-      throw new ValidationError("frontmatter cover 只允许本地图片或 /uploads/ 路径")
-    }
     if (inspected.kind === "local") {
       snapshots.push({ reference, path: inspected.path, digest: inspected.digest })
     }
@@ -292,7 +326,7 @@ export async function prepareMarkdownImport(
     throw new ValidationError("只允许导入 .md 或 .markdown 文件")
   }
   const sourceBuffer = await readFile(sourcePath)
-  if (sourceBuffer.length > 2_000_000) throw new ValidationError("Markdown 文件不能超过 2MB")
+  if (sourceBuffer.length > MAX_MARKDOWN_BYTES) throw new ValidationError("Markdown 文件不能超过 2MB")
   const raw = sourceBuffer.toString("utf8")
   const draft = parseMarkdownDraft(sourcePath, raw)
   const images = await snapshotLocalImages(draft, sourcePath, config.imageRoot)

@@ -2,19 +2,13 @@ import { randomBytes, randomUUID, scrypt, timingSafeEqual } from "crypto"
 import { promisify } from "util"
 import { prisma } from "../db"
 import { AuthError, NotFoundError, PermissionError, ValidationError } from "../errors"
+import { MCP_SCOPES, type McpScope } from "./scopes"
+
+export { MCP_SCOPES }
+export type { McpScope }
 
 const scryptAsync = promisify(scrypt)
 const TOKEN_PREFIX = "qzmcp_v1"
-
-export const MCP_SCOPES = [
-  "draft:create",
-  "draft:read",
-  "draft:update",
-  "category:create",
-  "todo:convert",
-] as const
-
-export type McpScope = typeof MCP_SCOPES[number]
 
 function validateScopes(scopes: readonly string[]): McpScope[] {
   if (scopes.length === 0) throw new ValidationError("至少需要一个 MCP scope")

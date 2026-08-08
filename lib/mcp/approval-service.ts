@@ -22,6 +22,11 @@ const markdownPayloadSchema = z.object({
   }).strict()).max(200),
 }).strict()
 
+const stagedMarkdownPayloadSchema = z.object({
+  kind: z.literal("create_draft_from_staged_markdown"),
+  bundleId: z.string().uuid(),
+}).strict()
+
 const updatePayloadSchema = z.object({
   kind: z.literal("update_draft_metadata"),
   postId: z.string().min(1).max(128),
@@ -54,6 +59,7 @@ const todoPayloadSchema = z.object({
 
 const actionPayloadSchema = z.discriminatedUnion("kind", [
   markdownPayloadSchema,
+  stagedMarkdownPayloadSchema,
   updatePayloadSchema,
   categoryPayloadSchema,
   todoPayloadSchema,
@@ -73,10 +79,12 @@ export async function createMcpApproval(input: {
   payload: McpApprovalPayload
   parameterSummary: JsonSummary
   ttlHours: number
+  database?: Pick<Prisma.TransactionClient, "mcpApproval">
 }) {
   const payload = actionPayloadSchema.parse(input.payload)
   const expiresAt = new Date(Date.now() + input.ttlHours * 60 * 60 * 1000)
-  return prisma.mcpApproval.create({
+  const database = input.database ?? prisma
+  return database.mcpApproval.create({
     data: {
       credentialId: input.credentialId,
       toolName: input.toolName,
@@ -164,7 +172,15 @@ async function dispatchApproval(
 ) {
   const payload = actionPayloadSchema.parse(payloadValue)
   const completed = await existingExecution(approvalId, toolName)
-  if (completed) return completed
+  if (completed) {
+    if (payload.kind === "create_draft_from_staged_markdown") {
+      const { cleanupStagedImportBundle } = await import("./import-staging-service")
+      await cleanupStagedImportBundle(payload.bundleId, true).catch((error) => {
+        console.error("[MCP staging cleanup failure]", error)
+      })
+    }
+    return completed
+  }
 
   switch (payload.kind) {
     case "create_draft_from_markdown": {
@@ -182,7 +198,56 @@ async function dispatchApproval(
         if (execution.reused) await materialized.cleanup()
         return execution.result
       } catch (error) {
-        await materialized.cleanup()
+        let completedAfterError: JsonSummary | null = null
+        let executionStateKnown = true
+        try {
+          completedAfterError = await existingExecution(approvalId, toolName)
+        } catch (lookupError) {
+          executionStateKnown = false
+          console.error("[MCP execution reconciliation failure]", lookupError)
+        }
+        if (completedAfterError) return completedAfterError
+        if (executionStateKnown) await materialized.cleanup()
+        throw error
+      }
+    }
+    case "create_draft_from_staged_markdown": {
+      const { cleanupStagedImportBundle, materializeStagedMarkdownImport } = await import("./import-staging-service")
+      const materialized = await materializeStagedMarkdownImport(payload.bundleId)
+      try {
+        const execution = await runDatabaseExecution(approvalId, toolName, async (transaction) => {
+          const post = await createPost(materialized.input, transaction)
+          return {
+            postId: post.id,
+            title: post.title,
+            status: post.status,
+            importedImageCount: materialized.importedImages.length,
+          }
+        })
+        if (execution.reused) await materialized.cleanup()
+        await cleanupStagedImportBundle(payload.bundleId, true).catch((error) => {
+          console.error("[MCP staging cleanup failure]", error)
+        })
+        return execution.result
+      } catch (error) {
+        let completedAfterError: JsonSummary | null = null
+        let executionStateKnown = true
+        try {
+          completedAfterError = await existingExecution(approvalId, toolName)
+        } catch (lookupError) {
+          executionStateKnown = false
+          console.error("[MCP execution reconciliation failure]", lookupError)
+        }
+        if (completedAfterError) {
+          await cleanupStagedImportBundle(payload.bundleId, true).catch((cleanupError) => {
+            console.error("[MCP staging cleanup failure]", cleanupError)
+          })
+          return completedAfterError
+        }
+        // If the database is unreachable, preserve files until orphan cleanup can
+        // prove they are unreferenced. This avoids deleting images after an
+        // ambiguous transaction commit.
+        if (executionStateKnown) await materialized.cleanup()
         throw error
       }
     }
@@ -233,6 +298,13 @@ export async function approveMcpApproval(id: string) {
       },
     })
     if (expired.count !== 1) throw new ConflictError("审批请求正在执行")
+    const payload = actionPayloadSchema.parse(approval.payload)
+    if (payload.kind === "create_draft_from_staged_markdown") {
+      const { cleanupStagedImportBundle } = await import("./import-staging-service")
+      await cleanupStagedImportBundle(payload.bundleId).catch((error) => {
+        console.error("[MCP staging cleanup failure]", error)
+      })
+    }
     throw new ValidationError("审批请求已过期")
   }
   if (approval.credential.revokedAt) {
@@ -317,6 +389,13 @@ export async function rejectMcpApproval(id: string, reasonValue?: string) {
     where: { id },
     select: { id: true, status: true, reviewedAt: true },
   })
+  const payload = actionPayloadSchema.parse(approval.payload)
+  if (payload.kind === "create_draft_from_staged_markdown") {
+    const { cleanupStagedImportBundle } = await import("./import-staging-service")
+    await cleanupStagedImportBundle(payload.bundleId).catch((error) => {
+      console.error("[MCP staging cleanup failure]", error)
+    })
+  }
   await recordMcpAudit({
     credentialId: approval.credentialId,
     toolName: approval.toolName,

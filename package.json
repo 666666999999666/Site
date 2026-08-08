@@ -11,6 +11,7 @@
     "test": "tsx --test tests/*.test.ts",
     "test:editor": "playwright test --config=playwright.config.ts",
     "test:mcp": "tsx tests/mcp-stdio-smoke.ts",
+    "test:mcp:gateway": "tsx tests/mcp-gateway-smoke.ts",
     "mcp:start": "tsx mcp/server.ts",
     "mcp:admin": "tsx mcp/admin.ts",
     "db:seed": "tsx prisma/seed.ts",

@@ -48,19 +48,13 @@ npm run build
 
 测试覆盖正文转换、目录 slug、发布时间规则、输入校验、上传文件签名和中英文语言包键一致性。Dockerfile 在镜像构建时也会执行 lint、测试和生产构建。
 
-## 本地博客 MCP
+## 线上博客 MCP
 
-本地 stdio MCP 只负责导入用户已有 Markdown、搜索文章、修改草稿 metadata、创建分区和 Todo 转草稿。它不提供正文生成、发布或删除工具，所有写操作必须先进入人工审批。
+Claude Desktop、Cursor 等客户端在本机启动 stdio MCP；本机只读取受限草稿目录，并通过 `https://liaoqizai.site/api/mcp/gateway` 管理线上博客。MCP 不直连生产数据库，也不需要生产上传卷。
 
-```bash
-npx prisma migrate deploy
-npm run mcp:admin -- credential create --name claude-desktop --scopes draft:create,draft:read,draft:update,category:create,todo:convert
-npm run mcp:admin -- approval list --status pending_approval
-npm run mcp:admin -- approval approve --id <approval-id>
-npm run mcp:admin -- audit list --limit 50
-```
+它只负责导入用户已有 Markdown、搜索线上文章、修改草稿 metadata、创建分区和 Todo 转草稿，不提供正文生成、发布或删除工具。所有写操作先进入 `/admin/mcp`，由站长批准后在线上执行。
 
-每个 MCP client 必须创建单独 credential。完整的 Claude Desktop、Cursor 和 Windows 配置见 [`docs/local-mcp.md`](docs/local-mcp.md)。
+每个 MCP client 必须在后台创建独立 credential。完整的 Claude Desktop、Cursor 和 Windows 配置见 [`docs/local-mcp.md`](docs/local-mcp.md)。
 
 ## 数据变更
 

@@ -123,9 +123,10 @@ model McpCredential {
   createdAt  DateTime  @default(now())
   updatedAt  DateTime  @updatedAt
 
-  approvals  McpApproval[]
-  auditLogs  McpAuditLog[]
-  rateLimits McpRateLimit[]
+  approvals     McpApproval[]
+  auditLogs     McpAuditLog[]
+  rateLimits    McpRateLimit[]
+  importBundles McpImportBundle[]
 
   @@index([revokedAt])
 }
@@ -148,9 +149,30 @@ model McpApproval {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
   execution        McpExecution?
+  importBundle     McpImportBundle?
 
   @@index([status, createdAt])
   @@index([credentialId, createdAt])
+}
+
+model McpImportBundle {
+  id              String        @id
+  credentialId    String
+  credential      McpCredential @relation(fields: [credentialId], references: [id], onDelete: Cascade)
+  sourceFile      String
+  sourceDigest    String
+  manifest        Json
+  uploadTokenHash String
+  approvalId      String?       @unique
+  approval        McpApproval?  @relation(fields: [approvalId], references: [id], onDelete: Restrict)
+  expiresAt       DateTime
+  consumedAt      DateTime?
+  cleanedAt       DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([credentialId, createdAt])
+  @@index([expiresAt, cleanedAt])
 }
 
 model McpExecution {
