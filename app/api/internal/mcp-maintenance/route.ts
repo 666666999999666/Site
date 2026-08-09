@@ -1,15 +1,9 @@
 import { NextRequest, NextResponse } from "next/server"
+import { isDirectLoopbackRequest } from "@/lib/mcp/internal-request"
 import { runMcpMaintenance } from "@/lib/mcp/maintenance-service"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
-
-function isDirectLoopbackRequest(request: NextRequest): boolean {
-  const host = request.headers.get("host")?.toLowerCase()
-  return (host === "127.0.0.1:3000" || host === "localhost:3000")
-    && !request.headers.has("x-forwarded-for")
-    && !request.headers.has("x-forwarded-host")
-}
 
 export async function POST(request: NextRequest) {
   if (!isDirectLoopbackRequest(request)) {

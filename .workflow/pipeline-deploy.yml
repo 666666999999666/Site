@@ -39,7 +39,9 @@ stages:
       set -eu
       cd /home/ubuntu/个人网站
       trap 'docker logout ccr.ccs.tencentyun.com >/dev/null 2>&1 || true' EXIT
+      set +x
       printf '%s' "${TCR_PASSWORD}" | docker login ccr.ccs.tencentyun.com --username "${TCR_USERNAME}" --password-stdin >/dev/null
+      set -x
       bash ops/deploy.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
       bash ops/maintenance.sh status
     hostGroupID:

@@ -9,7 +9,7 @@ flock -w 900 9 || fail "Another deployment or maintenance action is still runnin
 
 run_mcp_maintenance() {
   compose exec --no-TTY web node -e \
-    "fetch('http://127.0.0.1:3000/api/internal/mcp-maintenance',{method:'POST'}).then(async r=>{if(!r.ok)throw new Error(await r.text());console.log(await r.text())})"
+    "fetch('http://127.0.0.1:3000/api/internal/mcp-maintenance',{method:'POST'}).then(async r=>{const body=await r.text();if(!r.ok)throw new Error('MCP maintenance HTTP '+r.status+(body?': '+body:''));console.log(body)}).catch(error=>{console.error(error);process.exit(1)})"
 }
 
 case "$action" in
