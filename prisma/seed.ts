@@ -3,17 +3,36 @@ import { prisma } from '../lib/db'
 import { hashPassword } from '../lib/auth/password'
 
 async function main() {
-  const existingAdmin = await prisma.user.findUnique({ where: { username: 'admin' } })
-  if (!existingAdmin) {
+  let admin = await prisma.user.findUnique({ where: { username: 'admin' } })
+  if (!admin) {
     const password = process.env.SEED_PASSWORD
     if (!password || password.length < 15) {
       throw new Error('SEED_PASSWORD must contain at least 15 characters when creating admin')
     }
     const hash = await hashPassword(password)
-    await prisma.user.create({
-      data: { username: 'admin', passwordHash: hash },
+    admin = await prisma.user.create({
+      data: {
+        username: 'admin',
+        passwordHash: hash,
+        name: 'admin',
+        email: 'admin@liaoqizai.site',
+        emailVerified: true,
+      },
     })
   }
+
+  await prisma.account.upsert({
+    where: {
+      providerId_accountId: { providerId: 'credential', accountId: admin.id },
+    },
+    create: {
+      accountId: admin.id,
+      providerId: 'credential',
+      userId: admin.id,
+      password: admin.passwordHash,
+    },
+    update: { password: admin.passwordHash },
+  })
 
   // 初始化默认设置
   await prisma.setting.upsert({

@@ -1,7 +1,7 @@
 "use client"
 
 import { useMemo, useState, useSyncExternalStore } from "react"
-import { Check, ChevronDown, FilePlus2, Pencil, Plus, Search, Trash2 } from "lucide-react"
+import { Check, ChevronDown, Copy, FilePlus2, Pencil, Plus, Search, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type { Category, Post, Todo } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
@@ -350,6 +350,7 @@ function TodoItem({
   const [priority, setPriority] = useState(todo.priority)
   const [dueDate, setDueDate] = useState(dueDateInput(todo.dueDate))
   const [error, setError] = useState("")
+  const [copiedId, setCopiedId] = useState(false)
   const done = todo.status === "DONE"
 
   function beginEdit() {
@@ -385,6 +386,16 @@ function TodoItem({
     if (!window.confirm(`将“${todo.title}”创建为博客草稿？`)) return
     const markDone = !done && window.confirm("创建草稿后，同时将该 Todo 标记为已完成？")
     await onCreateDraft(markDone)
+  }
+
+  async function copyTodoId() {
+    try {
+      await navigator.clipboard.writeText(todo.id)
+      setCopiedId(true)
+      window.setTimeout(() => setCopiedId(false), 1500)
+    } catch {
+      setError("浏览器未允许复制 Todo ID")
+    }
   }
 
   return (
@@ -434,6 +445,17 @@ function TodoItem({
           )}
         </div>
 
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={copyTodoId}
+          disabled={disabled}
+          aria-label={`复制 Todo ID：${todo.title}`}
+          title={copiedId ? "已复制 Todo ID" : `复制 Todo ID：${todo.id}`}
+        >
+          {copiedId ? <Check className="size-4" /> : <Copy className="size-4" />}
+        </Button>
         <Button
           type="button"
           variant="ghost"

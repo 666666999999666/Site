@@ -43,6 +43,7 @@ npm run lint
 npm test
 npx tsc --noEmit
 npx prisma validate
+npm run test:mcp
 npm run build
 ```
 
@@ -50,11 +51,11 @@ npm run build
 
 ## 线上博客 MCP
 
-Claude Desktop、Cursor 等客户端在本机启动 stdio MCP；本机只读取受限草稿目录，并通过 `https://liaoqizai.site/api/mcp/gateway` 管理线上博客。MCP 不直连生产数据库，也不需要生产上传卷。
+Cursor、Trae、Claude Code 等客户端通过 `https://liaoqizai.site/api/mcp` 的 Streamable HTTP 直接管理线上博客。只有导入本机 Markdown/图片时才启动受限 stdio 导入器；MCP Client 不直连生产数据库。
 
-它只负责导入用户已有 Markdown、搜索线上文章、修改草稿 metadata、创建分区和 Todo 转草稿，不提供正文生成、发布或删除工具。所有写操作先进入 `/admin/mcp`，由站长批准后在线上执行。
+它只负责导入用户已有 Markdown、搜索线上文章、修改草稿 metadata、创建分区、Todo 转草稿和查询审批状态，不提供正文生成、发布或删除工具。所有写操作先进入 `/admin/mcp`，由站长批准后在线上执行。
 
-每个 MCP client 必须在后台创建独立 credential。完整的 Claude Desktop、Cursor 和 Windows 配置见 [`docs/local-mcp.md`](docs/local-mcp.md)。
+远程客户端只需配置 MCP URL，首次连接时通过浏览器完成管理员登录、Agent 名称与权限确认；每个 Agent 会获得独立 OAuth 身份，可单独撤销、审计和限流。固定 credential 只用于本地 Markdown/图片导入。完整配置见 [`docs/local-mcp.md`](docs/local-mcp.md)。
 
 ## 数据变更
 
@@ -147,7 +148,8 @@ bash ops/maintenance.sh install-cron
 
 ## 安全边界
 
-- 后台是单用户 Session 登录，生产 Cookie 强制 `Secure`。
+- 后台是单用户 Better Auth 数据库 Session，生产 Cookie 强制 `HttpOnly`、`Secure` 和 `SameSite=Lax`。
+- 远程 MCP 使用 OAuth 2.1、公开客户端 DCR、强制 S256 PKCE、15 分钟 ES256 JWT 和轮换 Refresh Token。
 - 新密码长度为 15–128 个字符，修改密码后当前 Session 立即失效。
 - 上传文件检查真实文件签名，不信任浏览器 MIME。
 - 生产 Web 以非 Root 用户运行。

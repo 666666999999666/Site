@@ -1,68 +1,93 @@
-import { verifyPassword } from "./password"
-import { findFirstUser } from "./repository"
-import { getSession } from "./session"
+import { AuthError, ValidationError } from "../errors"
+import { prisma } from "../db"
+import { auth } from "./better-auth"
 import { LoginAttemptLimiter } from "./login-attempt-limiter"
-import { AuthError, ValidationError } from "@/lib/errors"
+import { hashPassword, verifyPassword } from "./password"
+import { findFirstUser } from "./repository"
 
-// 失败次数限流（内存版，单进程够用）
 const MAX_FAIL_COUNT = 5
 const LOCKOUT_MS = 5 * 60 * 1000
 const loginAttemptLimiter = new LoginAttemptLimiter(MAX_FAIL_COUNT, LOCKOUT_MS)
 
-function checkRateLimit(ip: string) {
-  if (loginAttemptLimiter.isBlocked(ip)) {
-    throw new AuthError("失败次数过多，请稍后再试")
-  }
-}
-
-function recordFailedAttempt(ip: string) {
-  loginAttemptLimiter.recordFailure(ip)
-}
-
-function clearFailedAttempts(ip: string) {
-  loginAttemptLimiter.clear(ip)
-}
-
-// 每 10 分钟清理过期的部分计数和锁定记录，限制单进程内存占用。
-// unref 防止 interval 阻止进程优雅退出。
 if (typeof setInterval !== "undefined") {
-  const handle = setInterval(() => {
-    loginAttemptLimiter.cleanup()
-  }, 10 * 60 * 1000)
+  const handle = setInterval(() => loginAttemptLimiter.cleanup(), 10 * 60 * 1000)
   if (handle.unref) handle.unref()
 }
 
-export async function login(password: string, ip: string) {
-  if (!password) {
-    throw new ValidationError("密码必填")
+export async function login(password: string, ip: string, requestHeaders: Headers) {
+  if (!password) throw new ValidationError("密码必填")
+  if (loginAttemptLimiter.isBlocked(ip)) {
+    throw new AuthError("失败次数过多，请稍后再试")
   }
-
-  checkRateLimit(ip)
 
   const user = await findFirstUser()
-  if (!user) {
-    throw new AuthError("用户不存在")
-  }
-
-  const isValid = await verifyPassword(password, user.passwordHash)
-  if (!isValid) {
-    recordFailedAttempt(ip)
+  if (!user || !await verifyPassword(password, user.passwordHash)) {
+    loginAttemptLimiter.recordFailure(ip)
     throw new AuthError("密码错误")
   }
 
-  clearFailedAttempts(ip)
+  let response: Response
+  try {
+    response = await auth.api.signInEmail({
+      body: {
+        email: user.email,
+        password,
+        rememberMe: true,
+      },
+      headers: requestHeaders,
+      asResponse: true,
+    })
+  } catch (error) {
+    loginAttemptLimiter.recordFailure(ip)
+    throw error
+  }
 
-  const session = await getSession()
-  session.userId = user.id
-  session.username = user.username
-  session.isLoggedIn = true
-  session.passwordVersion = user.passwordVersion
-  await session.save()
+  if (!response.ok) {
+    loginAttemptLimiter.recordFailure(ip)
+    throw new AuthError("密码错误")
+  }
 
-  return { userId: user.id, username: user.username }
+  loginAttemptLimiter.clear(ip)
+  return { response, userId: user.id, username: user.username }
 }
 
-export async function logout() {
-  const session = await getSession()
-  session.destroy()
+export function logout(requestHeaders: Headers) {
+  return auth.api.signOut({ headers: requestHeaders, asResponse: true })
+}
+
+export async function changeAdminPassword(input: {
+  userId: string
+  currentPassword: string
+  newPassword: string
+}) {
+  const user = await prisma.user.findUnique({ where: { id: input.userId } })
+  if (!user || !(await verifyPassword(input.currentPassword, user.passwordHash))) {
+    throw new AuthError("当前密码错误")
+  }
+
+  const passwordHash = await hashPassword(input.newPassword)
+  await prisma.$transaction(async (transaction) => {
+    await transaction.user.update({
+      where: { id: user.id },
+      data: {
+        passwordHash,
+        passwordVersion: { increment: 1 },
+      },
+    })
+    await transaction.account.upsert({
+      where: {
+        providerId_accountId: { providerId: "credential", accountId: user.id },
+      },
+      create: {
+        userId: user.id,
+        providerId: "credential",
+        accountId: user.id,
+        password: passwordHash,
+      },
+      update: { password: passwordHash },
+    })
+    await transaction.session.deleteMany({ where: { userId: user.id } })
+  })
+
+  return { userId: user.id, passwordHash }
 }

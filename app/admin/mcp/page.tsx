@@ -3,8 +3,10 @@ import { McpManager } from "@/components/admin/McpManager"
 import { listMcpApprovals } from "@/lib/mcp/approval-service"
 import { listMcpAuditLogs } from "@/lib/mcp/audit-service"
 import { listMcpCredentials } from "@/lib/mcp/credential-service"
+import { runMcpMaintenance } from "@/lib/mcp/maintenance-service"
 
 export default async function McpPage() {
+  await runMcpMaintenance().catch((error) => console.error("[MCP maintenance failure]", error))
   const [credentials, approvals, auditLogs] = await Promise.all([
     listMcpCredentials(),
     listMcpApprovals({ limit: 100 }),
@@ -17,7 +19,7 @@ export default async function McpPage() {
         <div>
           <h1 className="text-3xl font-semibold">MCP 管理</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            线上客户端凭证、人工审批与操作审计
+            已连接 Agent、本地导入器、人工审批与操作审计
           </p>
         </div>
         <span className="text-sm text-muted-foreground">
@@ -27,10 +29,15 @@ export default async function McpPage() {
 
       <McpManager
         credentials={credentials.map((credential) => ({
-          ...credential,
+          id: credential.id,
+          kind: credential.kind,
+          name: credential.name,
+          oauthClientId: credential.oauthClientId,
+          scopes: credential.scopes,
           revokedAt: credential.revokedAt?.toISOString() ?? null,
           lastUsedAt: credential.lastUsedAt?.toISOString() ?? null,
           createdAt: credential.createdAt.toISOString(),
+          approvalCount: credential._count.approvals,
         }))}
         approvals={approvals.map((approval) => ({
           ...approval,
@@ -51,10 +58,12 @@ export default async function McpPage() {
           toolName: entry.toolName,
           parameterSummary: entry.parameterSummary,
           resultSummary: entry.resultSummary,
+          status: entry.status,
           success: entry.success,
           errorCode: entry.errorCode,
           errorMessage: entry.errorMessage,
           createdAt: entry.createdAt.toISOString(),
+          completedAt: entry.completedAt?.toISOString() ?? null,
         }))}
       />
     </Container>

@@ -280,6 +280,20 @@ CI/CD 打通后，继续完善了网站功能。
 - `.env` 文件在 `.gitignore` 中，不会提交到仓库
 - 服务器上的 `.env` 通过 `cat << 'EOF'` 方式创建
 
+### 7.5 全量安全修复与 OAuth MCP（2026-08-09）
+
+此前基于白盒与黑盒报告完成了认证、CSRF、CSP、TLS、上传引用、分类唯一约束和部署校验等修复。本轮在此基线上完成 Better Auth 数据库 Session 与多 Agent OAuth MCP：
+
+| 类别 | 当前实现 |
+|------|------|
+| 后台认证 | Better Auth 数据库 Session；密码界面保持单密码输入；改密同步兼容 Hash 并撤销全部后台 Session |
+| OAuth | 公开客户端 DCR、S256 PKCE、首次 Consent、15 分钟 ES256 Access Token、30 天轮换 Refresh Token |
+| MCP | URL-only Streamable HTTP；每个 Agent 独立身份、scope、限流、审批、审计与撤销 |
+| 本地导入 | 固定凭证只保留 `draft:create`，仅用于受限目录中的 Markdown/图片上传 |
+| 运维 | OAuth discovery/MCP Challenge smoke；每小时清理过期审批、暂存、限流、审计和未完成 DCR Client |
+
+`iron-session` 已从当前代码和镜像依赖移除；`User.passwordHash` 与 `passwordVersion` 仅保留为密码兼容及旧镜像回滚字段。仓库保持公开是明确选择，因此真实密码、Token、`.env`、私钥和本地报告不得进入 Git。
+
 ---
 
 ## 八、当前状态总结
@@ -295,7 +309,8 @@ CI/CD 打通后，继续完善了网站功能。
 | 数据库持久化 + 自动备份 | ✅ 完成 |
 | CI/CD 自动部署（Gitee Go + TCR） | ✅ 完成 |
 | HTTPS（自签 + 域名证书） | ✅ 完成 |
-| Session 30天免登录 | ✅ 完成 |
+| Better Auth Session 14 天免登录 | ✅ 完成 |
+| 多 Agent OAuth MCP | ✅ 代码与集成测试完成 |
 | SSH 安全加固 | ✅ 完成 |
 | GitHub Actions 备用部署 | ✅ yml 就绪（需配置 Secrets） |
 
@@ -323,6 +338,6 @@ CI/CD 打通后，继续完善了网站功能。
 - **Prisma 引擎镜像**：`PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma`
 - **ACR 内网**：基础镜像 `ccr.ccs.tencentyun.com/lqzzql/node:22-alpine`，3.5 秒拉取
 - **Gitee Go**：`shell@agent` 不下载构建产物，`deploy@agent` 会强制下载（不适合 Docker 部署）
-- **Session**：iron-session 加密 cookie，有效期 30 天，secure 标志根据 SITE_URL 自动判断
+- **Session**：Better Auth 数据库会话，有效期 14 天，Cookie 使用 HttpOnly、SameSite=Lax，生产环境强制 Secure
 - **数据持久化**：postgres 数据在 `./data/postgres/`，上传文件在 `./data/uploads/`
 - **服务器 docker-compose.yml**：web 镜像从 TCR 拉取（`ccr.ccs.tencentyun.com/lqzzql/web:latest`）

@@ -2,7 +2,6 @@ import path from "path"
 import { ConfigurationError } from "../errors"
 
 export interface McpSecurityConfig {
-  credential: string
   approvalTtlHours: number
   credentialRateLimit: number
   searchRateLimit: number
@@ -10,6 +9,7 @@ export interface McpSecurityConfig {
 }
 
 export interface McpRuntimeConfig extends McpSecurityConfig {
+  credential: string
   markdownRoot: string
   imageRoot: string
   remoteUrl: string | null
@@ -50,9 +50,8 @@ export function loadMcpRuntimeConfig(): McpRuntimeConfig {
   }
 }
 
-export function loadMcpSecurityConfig(credential: string): McpSecurityConfig {
+export function loadMcpSecurityConfig(): McpSecurityConfig {
   return {
-    credential,
     approvalTtlHours: positiveInteger("MCP_APPROVAL_TTL_HOURS", 24),
     credentialRateLimit: positiveInteger("MCP_CREDENTIAL_RATE_LIMIT_PER_MINUTE", 60),
     searchRateLimit: positiveInteger("MCP_SEARCH_RATE_LIMIT_PER_MINUTE", 30),

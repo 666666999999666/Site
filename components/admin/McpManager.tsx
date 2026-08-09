@@ -9,14 +9,16 @@ import {
   Clipboard,
   Clock3,
   KeyRound,
+  Laptop,
   Plus,
   RefreshCw,
   ShieldCheck,
+  Trash2,
   X,
   XCircle,
 } from "lucide-react"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
-import { MCP_SCOPES, type McpScope } from "@/lib/mcp/scopes"
+import { type McpScope } from "@/lib/mcp/scopes"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -35,11 +37,14 @@ type ApprovalStatus = "PENDING_APPROVAL" | "APPROVED" | "REJECTED"
 
 interface CredentialView {
   id: string
+  kind: "STATIC" | "OAUTH"
   name: string
+  oauthClientId: string | null
   scopes: string[]
   revokedAt: string | null
   lastUsedAt: string | null
   createdAt: string
+  approvalCount: number
 }
 
 interface ApprovalView {
@@ -69,10 +74,12 @@ interface AuditLogView {
   toolName: string
   parameterSummary: unknown
   resultSummary: unknown
+  status: "IN_PROGRESS" | "SUCCESS" | "FAILURE" | "INTERRUPTED"
   success: boolean
   errorCode: string | null
   errorMessage: string | null
   createdAt: string
+  completedAt: string | null
 }
 
 const scopeLabels: Record<McpScope, string> = {
@@ -90,6 +97,7 @@ const toolLabels: Record<string, string> = {
   update_draft_metadata: "修改草稿元数据",
   create_category: "创建分类",
   todo_to_draft: "Todo 转草稿",
+  get_approval_status: "查询审批状态",
 }
 
 const statusLabels: Record<ApprovalStatus, string> = {
@@ -139,7 +147,6 @@ export function McpManager({
   const [createOpen, setCreateOpen] = useState(false)
   const [tokenOpen, setTokenOpen] = useState(false)
   const [credentialName, setCredentialName] = useState("")
-  const [selectedScopes, setSelectedScopes] = useState<McpScope[]>([...MCP_SCOPES])
   const [oneTimeToken, setOneTimeToken] = useState("")
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [error, setError] = useState("")
@@ -151,17 +158,16 @@ export function McpManager({
   )
 
   async function createCredential() {
-    if (!credentialName.trim() || selectedScopes.length === 0) return
+    if (!credentialName.trim()) return
     setBusyKey("create")
     setError("")
     try {
       const result = await apiRequest<{ token: string }>(
         "/api/mcp/admin/credentials",
-        jsonRequest("POST", { name: credentialName.trim(), scopes: selectedScopes })
+        jsonRequest("POST", { name: credentialName.trim() })
       )
       setOneTimeToken(result.token)
       setCredentialName("")
-      setSelectedScopes([...MCP_SCOPES])
       setCreateOpen(false)
       setTokenOpen(true)
       router.refresh()
@@ -183,7 +189,10 @@ export function McpManager({
   }
 
   async function revokeCredential(credential: CredentialView) {
-    if (!window.confirm(`撤销“${credential.name}”？该客户端会立即失去线上访问权限。`)) return
+    const effect = credential.kind === "OAUTH"
+      ? "该 Agent 的授权、令牌和客户端注册会立即失效。"
+      : "该本地导入器会立即无法继续上传 Markdown。"
+    if (!window.confirm(`撤销“${credential.name}”？${effect}`)) return
     setBusyKey(`credential:${credential.id}`)
     setError("")
     try {
@@ -191,6 +200,30 @@ export function McpManager({
       router.refresh()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "撤销 MCP credential 失败")
+    } finally {
+      setBusyKey(null)
+    }
+  }
+
+  async function deleteRecord(
+    kind: "credential" | "approval" | "audit",
+    id: string,
+    label: string
+  ) {
+    if (!window.confirm(`永久删除${label}？此操作不可撤销。`)) return
+    const endpoints = {
+      credential: `/api/mcp/admin/credentials/${id}`,
+      approval: `/api/mcp/admin/approvals/${id}`,
+      audit: `/api/mcp/admin/audit/${id}`,
+    }
+    const busy = `delete:${kind}:${id}`
+    setBusyKey(busy)
+    setError("")
+    try {
+      await apiRequest(endpoints[kind], { method: "DELETE" })
+      router.refresh()
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : `删除${label}失败`)
     } finally {
       setBusyKey(null)
     }
@@ -222,13 +255,6 @@ export function McpManager({
     }
   }
 
-  function toggleScope(scope: McpScope) {
-    setSelectedScopes((current) => current.includes(scope)
-      ? current.filter((item) => item !== scope)
-      : [...current, scope]
-    )
-  }
-
   return (
     <>
       {error && (
@@ -242,27 +268,27 @@ export function McpManager({
 
       <Tabs defaultValue={pendingApprovals.length > 0 ? "approvals" : "credentials"}>
         <TabsList variant="line" className="mb-5 border-b border-border">
-          <TabsTrigger value="credentials">凭证 {credentials.length}</TabsTrigger>
+          <TabsTrigger value="credentials">连接 {credentials.length}</TabsTrigger>
           <TabsTrigger value="approvals">审批 {pendingApprovals.length}</TabsTrigger>
           <TabsTrigger value="audit">审计 {auditLogs.length}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="credentials">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="font-medium">客户端凭证</h2>
+            <h2 className="font-medium">已连接 Agent 与本地导入器</h2>
             <Button type="button" onClick={() => setCreateOpen(true)}>
               <Plus className="size-4" />
-              新建凭证
+              创建本地导入凭证
             </Button>
           </div>
           {credentials.length === 0 ? (
-            <EmptyState icon={KeyRound} text="尚未创建 MCP credential" />
+            <EmptyState icon={KeyRound} text="暂无 Agent 连接或本地导入器" />
           ) : (
             <div className="overflow-x-auto rounded-md border border-border">
               <table className="w-full min-w-[760px] text-left text-sm">
                 <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
                   <tr>
-                    <th className="px-3 py-2 font-medium">名称</th>
+                    <th className="px-3 py-2 font-medium">名称与方式</th>
                     <th className="px-3 py-2 font-medium">权限</th>
                     <th className="px-3 py-2 font-medium">最后使用</th>
                     <th className="px-3 py-2 font-medium">状态</th>
@@ -273,7 +299,18 @@ export function McpManager({
                   {credentials.map((credential) => (
                     <tr key={credential.id}>
                       <td className="px-3 py-3">
-                        <div className="font-medium">{credential.name}</div>
+                        <div className="flex items-center gap-2 font-medium">
+                          {credential.kind === "OAUTH" ? <Laptop className="size-4" /> : <KeyRound className="size-4" />}
+                          {credential.name}
+                        </div>
+                        <Badge variant="outline" className="mt-1.5">
+                          {credential.kind === "OAUTH" ? "OAuth Agent" : "本地 Markdown 导入"}
+                        </Badge>
+                        {credential.oauthClientId && (
+                          <div className="mt-1 break-all font-mono text-xs text-muted-foreground" title={credential.oauthClientId}>
+                            Client {shortId(credential.oauthClientId)}
+                          </div>
+                        )}
                         <div className="mt-1 font-mono text-xs text-muted-foreground" title={credential.id}>{shortId(credential.id)}</div>
                       </td>
                       <td className="px-3 py-3">
@@ -292,7 +329,8 @@ export function McpManager({
                         </Badge>
                       </td>
                       <td className="px-3 py-3 text-right">
-                        {!credential.revokedAt && (
+                        <div className="flex justify-end gap-1">
+                          {!credential.revokedAt && (
                           <Button
                             type="button"
                             variant="destructive"
@@ -303,7 +341,23 @@ export function McpManager({
                             <Ban className="size-3.5" />
                             撤销
                           </Button>
-                        )}
+                          )}
+                          {credential.revokedAt && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => deleteRecord("credential", credential.id, `连接记录“${credential.name}”`)}
+                              disabled={credential.approvalCount > 0 || busyKey === `delete:credential:${credential.id}`}
+                              aria-label={`删除凭证 ${credential.name}`}
+                              title={credential.approvalCount > 0
+                                ? `仍有关联的 ${credential.approvalCount} 条审批记录`
+                                : "删除连接记录"}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -340,7 +394,7 @@ export function McpManager({
                         <span className="font-mono" title={approval.id}>{shortId(approval.id)}</span>
                       </div>
                     </div>
-                    {approval.status === "PENDING_APPROVAL" && (
+                    {approval.status === "PENDING_APPROVAL" ? (
                       <div className="flex shrink-0 gap-2">
                         <Button
                           type="button"
@@ -362,9 +416,27 @@ export function McpManager({
                           批准并执行
                         </Button>
                       </div>
+                    ) : (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => deleteRecord("approval", approval.id, "审批记录")}
+                        disabled={busyKey === `delete:approval:${approval.id}`}
+                        aria-label="删除审批记录"
+                        title="删除审批记录"
+                      >
+                        <Trash2 className="size-4" />
+                      </Button>
                     )}
                   </div>
                   <Summary value={approval.parameterSummary} />
+                  {Boolean(approval.resultSummary) && (
+                    <div className="mt-3">
+                      <p className="text-xs font-medium text-muted-foreground">执行结果</p>
+                      <Summary value={approval.resultSummary} />
+                    </div>
+                  )}
                   {approval.executionError && (
                     <p className="mt-3 break-words text-sm text-destructive">{approval.executionError}</p>
                   )}
@@ -398,6 +470,7 @@ export function McpManager({
                     <th className="px-3 py-2 font-medium">操作</th>
                     <th className="px-3 py-2 font-medium">参数摘要</th>
                     <th className="px-3 py-2 font-medium">结果</th>
+                    <th className="w-14 px-3 py-2 text-right font-medium">操作</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border align-top">
@@ -411,10 +484,30 @@ export function McpManager({
                       <td className="px-3 py-3">{toolLabels[entry.toolName] ?? entry.toolName}</td>
                       <td className="max-w-sm px-3 py-3"><Summary value={entry.parameterSummary} compact /></td>
                       <td className="px-3 py-3">
-                        <Badge variant={entry.success ? "secondary" : "destructive"}>
-                          {entry.success ? "成功" : entry.errorCode ?? "失败"}
+                        <Badge variant={entry.status === "SUCCESS" ? "secondary" : entry.status === "IN_PROGRESS" ? "outline" : "destructive"}>
+                          {entry.status === "SUCCESS"
+                            ? "成功"
+                            : entry.status === "IN_PROGRESS"
+                              ? "执行中"
+                              : entry.status === "INTERRUPTED"
+                                ? "中断"
+                                : entry.errorCode ?? "失败"}
                         </Badge>
                         {entry.errorMessage && <p className="mt-1 max-w-xs break-words text-xs text-destructive">{entry.errorMessage}</p>}
+                        {Boolean(entry.resultSummary) && <Summary value={entry.resultSummary} compact />}
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon-sm"
+                          onClick={() => deleteRecord("audit", entry.id, "审计记录")}
+                          disabled={entry.status === "IN_PROGRESS" || busyKey === `delete:audit:${entry.id}`}
+                          aria-label="删除审计记录"
+                          title={entry.status === "IN_PROGRESS" ? "执行中的审计记录不能删除" : "删除审计记录"}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
                       </td>
                     </tr>
                   ))}
@@ -428,44 +521,33 @@ export function McpManager({
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>新建 MCP credential</DialogTitle>
-            <DialogDescription>为一个 MCP 客户端分配独立凭证和最小权限。</DialogDescription>
+            <DialogTitle>创建本地 Markdown 导入凭证</DialogTitle>
+            <DialogDescription>仅用于本机 stdio 导入器，固定授予创建草稿审批权限。</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="mcp-credential-name">客户端名称</Label>
+              <Label htmlFor="mcp-credential-name">导入器名称</Label>
               <Input
                 id="mcp-credential-name"
                 value={credentialName}
                 onChange={(event) => setCredentialName(event.target.value)}
-                placeholder="例如：Cursor - 主电脑"
+                placeholder="例如：主电脑 Markdown 导入"
                 maxLength={80}
                 autoFocus
               />
             </div>
-            <fieldset className="space-y-2">
-              <legend className="text-sm font-medium">权限范围</legend>
-              <div className="grid gap-2 sm:grid-cols-2">
-                {MCP_SCOPES.map((scope) => (
-                  <label key={scope} className="flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
-                    <input
-                      type="checkbox"
-                      checked={selectedScopes.includes(scope)}
-                      onChange={() => toggleScope(scope)}
-                      className="size-4 accent-primary"
-                    />
-                    <span>{scopeLabels[scope]}</span>
-                  </label>
-                ))}
-              </div>
-            </fieldset>
+            <div className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
+              <ShieldCheck className="size-4 text-muted-foreground" />
+              <span>{scopeLabels["draft:create"]}</span>
+              <code className="ml-auto text-xs text-muted-foreground">draft:create</code>
+            </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>取消</Button>
             <Button
               type="button"
               onClick={createCredential}
-              disabled={busyKey === "create" || !credentialName.trim() || selectedScopes.length === 0}
+              disabled={busyKey === "create" || !credentialName.trim()}
             >
               <KeyRound className="size-4" />
               创建
@@ -486,8 +568,8 @@ export function McpManager({
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>credential 仅显示一次</DialogTitle>
-            <DialogDescription>关闭后无法再次查看，只能撤销并新建。</DialogDescription>
+            <DialogTitle>本地导入 credential 仅显示一次</DialogTitle>
+            <DialogDescription>关闭后无法再次查看，只能撤销并重新创建。</DialogDescription>
           </DialogHeader>
           <div className="flex min-w-0 items-stretch gap-2">
             <code className="min-w-0 flex-1 select-all break-all rounded-md border border-border bg-muted/50 p-3 text-xs leading-5">

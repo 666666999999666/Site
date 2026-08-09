@@ -1,6 +1,6 @@
 # QZ Site 生产运维手册
 
-> **文档定位**：本文是当前生产操作的唯一常规手册，最后核对日期为 **2026-07-29**。整机或磁盘故障恢复见 [`disaster-recovery.md`](disaster-recovery.md)。
+> **文档定位**：本文是当前生产操作的唯一常规手册，最后核对日期为 **2026-08-09**。整机或磁盘故障恢复见 [`disaster-recovery.md`](disaster-recovery.md)。
 
 ## 1. 运维边界
 
@@ -53,7 +53,7 @@ bash ops/maintenance.sh status
 5. 对比目标源码与候选镜像内的 SHA-256 源码指纹。
 6. 以 digest 更新 Compose，执行 migration 并等待三个服务 Healthy。
 7. 验证 Nginx 配置并 reload。
-8. 执行中英文页面、健康接口、未登录 Todo 写保护、robots 和 sitemap 冒烟测试。
+8. 执行中英文页面、健康接口、未登录 Todo 写保护、OAuth discovery、MCP 401/Origin/旧 Gateway 和站点文件冒烟测试。
 9. 将 Git 提交、镜像 digest 和源码指纹写入 `.deploy-state`。
 10. 再次核对运行容器、镜像、源码和 `.deploy-state`。
 
@@ -77,6 +77,8 @@ bash ops/maintenance.sh status
 - 运行镜像指纹与服务器源码一致。
 - `/api/health`、`/zh`、`/en`、`robots.txt`、`sitemap.xml` 正常。
 - 未登录 Todo 写请求返回 401。
+- OAuth Resource/Authorization Server discovery 正常，未认证 MCP 返回标准 401 Challenge。
+- 非本站 Origin 被 MCP 拒绝，旧远程 Tool Gateway 返回 410。
 
 ## 4. 固定维护入口
 
@@ -92,6 +94,7 @@ bash ops/maintenance.sh status
 | `install-tls` | 校验证书和私钥后原子替换、测试并 reload |
 | `content-dry-run` | 只读扫描旧 Tiptap 正文 |
 | `uploads-dry-run` | 只读扫描孤儿上传 |
+| `mcp` | 清理过期审批、暂存包、限流桶、中断审计和未完成 OAuth Client |
 
 其他值会被拒绝。不得增加 `eval`、任意命令变量或通用远程 Shell。
 
@@ -110,6 +113,7 @@ bash ops/maintenance.sh install-cron
 | 每日 03:00 | 完整数据库与 uploads 备份 | `nice -n 10` |
 | 每周日 03:30 | 在临时容器真实恢复最新备份 | `nice -n 10`，384MB/0.75 CPU |
 | 每周一 09:00 | 证书余量和 HTTPS 检查 | 轻量 |
+| 每小时第 15 分钟 | MCP/OAuth 过期数据维护 | `nice -n 10`，轻量 |
 
 统一日志位于 `backups/maintenance.log`。定时任务异常时先保留日志和失败备份，不要直接删除。
 
@@ -140,6 +144,13 @@ bash ops/maintenance.sh verify-backup
 本机备份不能抵御云盘或整机丢失。异地保护状态和完整恢复步骤见 [`disaster-recovery.md`](disaster-recovery.md)。
 
 ## 7. 证书检查与更新
+
+`www.liaoqizai.site` 会在 TLS 后 301 到 apex。证书 SAN 必须包含 `www.liaoqizai.site`，否则浏览器会在到达重定向前报告证书错误。更新前执行：
+
+```bash
+openssl x509 -in nginx/certs/server_bundle.crt -noout -text \
+  | grep -A1 "Subject Alternative Name"
+```
 
 常规检查：
 
@@ -193,6 +204,8 @@ bash ops/cleanup-uploads.sh --dry-run
 - TCR 密码只通过 Gitee Secret 和 `docker login --password-stdin` 使用，任务结束自动 logout。
 - Web 使用非 Root `node` 用户，Nginx 只读挂载 uploads。
 - 后台密码若曾经通过聊天传输，站点所有者必须在后台改为新的独立长密码。
+- Better Auth Session、OAuth 内部密钥和 JWKS 私钥都由生产 `SESSION_SECRET` 保护；轮换该值会使现有后台 Session 和加密 JWKS 私钥失效，必须按计划重新登录并重新授权 Agent。
+- 远程 Agent 不保存固定凭证；本地 Markdown 导入的 `qzmcp_v1_...` 只写入本机忽略文件，泄露时在 `/admin/mcp` 撤销。
 - 当前两条 `authorized_keys` 保持不变，按站点所有者要求由其最后自行移除。
 
 Gitee Agent 由 `gitee-go-agent.service` 管理，限制为 256MB 内存和 50% CPU。云控制台应急检查：
@@ -213,5 +226,7 @@ Agent 正常重启后服务端释放旧注册可能延迟。先等待 6 分钟�
 - 上传文件在容器重建后仍可读取。
 - 最新完整备份能够恢复。
 - Gitee 与 GitHub `main` 最终指向同一提交。
+- OAuth discovery、DCR 与 Token 端点正常，两个实际客户端分别显示为独立 Agent。
+- 撤销其中一个 Agent 后立即返回 401，其他 Agent 不受影响。
 
 ICP备案、云账号 Secret、后台密码轮换和异地快照属于所有权边界内的外部动作；其余常规部署、巡检、备份和恢复验证由脚本与流水线完成。

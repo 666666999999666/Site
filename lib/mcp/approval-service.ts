@@ -10,6 +10,7 @@ import { validateCategoryCreate, validatePostUpdate } from "../validation"
 import { errorDetails, recordMcpAudit } from "./audit-service"
 import { loadMcpFileConfig } from "./config"
 import { MCP_SCOPES, type McpScope, requireMcpScope } from "./credential-service"
+import { approvalDeletionBlockReason } from "./deletion-policy"
 
 const markdownPayloadSchema = z.object({
   kind: z.literal("create_draft_from_markdown"),
@@ -101,6 +102,9 @@ export async function listMcpApprovals(input: {
   status?: "PENDING_APPROVAL" | "APPROVED" | "REJECTED"
   limit?: number
 } = {}) {
+  if (!input.status || input.status === "PENDING_APPROVAL") {
+    await cleanupExpiredMcpApprovals()
+  }
   return prisma.mcpApproval.findMany({
     where: { status: input.status },
     orderBy: { createdAt: "desc" },
@@ -121,6 +125,106 @@ export async function listMcpApprovals(input: {
       credential: { select: { id: true, name: true, revokedAt: true } },
     },
   })
+}
+
+function approvalResultObject(value: Prisma.JsonValue | null): JsonSummary | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null
+  return value as JsonSummary
+}
+
+export async function getMcpApprovalStatus(id: string, credentialId: string) {
+  await rejectExpiredApproval(id, credentialId)
+  const approval = await prisma.mcpApproval.findFirst({
+    where: { id, credentialId },
+    select: {
+      id: true,
+      toolName: true,
+      status: true,
+      resultSummary: true,
+      executionError: true,
+      processingAt: true,
+      reviewedAt: true,
+      executedAt: true,
+      expiresAt: true,
+      createdAt: true,
+    },
+  })
+  if (!approval) throw new NotFoundError("审批请求不存在")
+
+  const result = approvalResultObject(approval.resultSummary)
+  const status = approval.status === "PENDING_APPROVAL"
+    ? "pending_approval"
+    : approval.status === "APPROVED"
+      ? "approved"
+      : "rejected"
+
+  return {
+    approval_id: approval.id,
+    tool_name: approval.toolName,
+    status,
+    processing: approval.processingAt !== null,
+    expired: approval.executionError === "审批请求已过期",
+    failure_reason: approval.executionError,
+    post_id: typeof result?.postId === "string" ? result.postId : null,
+    category_id: typeof result?.categoryId === "string" ? result.categoryId : null,
+    todo_id: typeof result?.todoId === "string" ? result.todoId : null,
+    result,
+    created_at: approval.createdAt.toISOString(),
+    expires_at: approval.expiresAt.toISOString(),
+    reviewed_at: approval.reviewedAt?.toISOString() ?? null,
+    executed_at: approval.executedAt?.toISOString() ?? null,
+  }
+}
+
+async function cleanupApprovalBundle(approvalId: string) {
+  const bundle = await prisma.mcpImportBundle.findUnique({
+    where: { approvalId },
+    select: { id: true, cleanedAt: true },
+  })
+  if (!bundle || bundle.cleanedAt) return
+  const { cleanupStagedImportBundle } = await import("./import-staging-service")
+  await cleanupStagedImportBundle(bundle.id).catch((error) => {
+    console.error("[MCP staging cleanup failure]", error)
+  })
+}
+
+async function rejectExpiredApproval(id: string, credentialId?: string): Promise<boolean> {
+  const now = new Date()
+  const expired = await prisma.mcpApproval.updateMany({
+    where: {
+      id,
+      credentialId,
+      status: "PENDING_APPROVAL",
+      processingAt: null,
+      expiresAt: { lte: now },
+    },
+    data: {
+      status: "REJECTED",
+      reviewedAt: now,
+      executionError: "审批请求已过期",
+      processingAt: null,
+    },
+  })
+  if (expired.count === 1) await cleanupApprovalBundle(id)
+  return expired.count === 1
+}
+
+export async function cleanupExpiredMcpApprovals(limit = 50): Promise<number> {
+  const approvals = await prisma.mcpApproval.findMany({
+    where: {
+      status: "PENDING_APPROVAL",
+      processingAt: null,
+      expiresAt: { lte: new Date() },
+    },
+    orderBy: { expiresAt: "asc" },
+    take: Math.min(Math.max(limit, 1), 200),
+    select: { id: true },
+  })
+  let cleaned = 0
+  for (const approval of approvals) {
+    if (await rejectExpiredApproval(approval.id)) cleaned += 1
+  }
+  return cleaned
 }
 
 function resultObject(value: Prisma.JsonValue): JsonSummary {
@@ -150,7 +254,19 @@ async function runDatabaseExecution(
       if (existing.toolName !== toolName) {
         throw new PermissionError("审批执行记录与 tool 不匹配")
       }
-      return { result: resultObject(existing.resultSummary), reused: true }
+      const result = resultObject(existing.resultSummary)
+      await transaction.mcpApproval.update({
+        where: { id: approvalId },
+        data: {
+          status: "APPROVED",
+          resultSummary: jsonValue(result),
+          reviewedAt: new Date(),
+          executedAt: new Date(),
+          processingAt: null,
+          executionError: null,
+        },
+      })
+      return { result, reused: true }
     }
 
     const result = await operation(transaction)
@@ -159,6 +275,17 @@ async function runDatabaseExecution(
         approvalId,
         toolName,
         resultSummary: jsonValue(result),
+      },
+    })
+    await transaction.mcpApproval.update({
+      where: { id: approvalId },
+      data: {
+        status: "APPROVED",
+        resultSummary: jsonValue(result),
+        reviewedAt: new Date(),
+        executedAt: new Date(),
+        processingAt: null,
+        executionError: null,
       },
     })
     return { result, reused: false }
@@ -173,6 +300,17 @@ async function dispatchApproval(
   const payload = actionPayloadSchema.parse(payloadValue)
   const completed = await existingExecution(approvalId, toolName)
   if (completed) {
+    await prisma.mcpApproval.update({
+      where: { id: approvalId },
+      data: {
+        status: "APPROVED",
+        resultSummary: jsonValue(completed),
+        reviewedAt: new Date(),
+        executedAt: new Date(),
+        processingAt: null,
+        executionError: null,
+      },
+    })
     if (payload.kind === "create_draft_from_staged_markdown") {
       const { cleanupStagedImportBundle } = await import("./import-staging-service")
       await cleanupStagedImportBundle(payload.bundleId, true).catch((error) => {
@@ -288,23 +426,7 @@ export async function approveMcpApproval(id: string) {
   if (approval.status === "APPROVED") return approval.resultSummary
   if (approval.status === "REJECTED") throw new ConflictError("审批请求已被拒绝")
   if (approval.expiresAt.getTime() <= Date.now()) {
-    const expired = await prisma.mcpApproval.updateMany({
-      where: { id, status: "PENDING_APPROVAL", processingAt: null },
-      data: {
-        status: "REJECTED",
-        reviewedAt: new Date(),
-        executionError: "审批请求已过期",
-        processingAt: null,
-      },
-    })
-    if (expired.count !== 1) throw new ConflictError("审批请求正在执行")
-    const payload = actionPayloadSchema.parse(approval.payload)
-    if (payload.kind === "create_draft_from_staged_markdown") {
-      const { cleanupStagedImportBundle } = await import("./import-staging-service")
-      await cleanupStagedImportBundle(payload.bundleId).catch((error) => {
-        console.error("[MCP staging cleanup failure]", error)
-      })
-    }
+    if (!await rejectExpiredApproval(id)) throw new ConflictError("审批请求正在执行")
     throw new ValidationError("审批请求已过期")
   }
   if (approval.credential.revokedAt) {
@@ -328,16 +450,8 @@ export async function approveMcpApproval(id: string) {
 
   try {
     const result = await dispatchApproval(approval.id, approval.toolName, approval.payload)
-    const completed = await prisma.mcpApproval.update({
+    const completed = await prisma.mcpApproval.findUniqueOrThrow({
       where: { id },
-      data: {
-        status: "APPROVED",
-        resultSummary: jsonValue(result),
-        reviewedAt: new Date(),
-        executedAt: new Date(),
-        processingAt: null,
-        executionError: null,
-      },
       select: { id: true, status: true, resultSummary: true, executedAt: true },
     })
     await recordMcpAudit({
@@ -346,11 +460,19 @@ export async function approveMcpApproval(id: string) {
       parameterSummary: { approvalId: id, phase: "approval_execution" },
       resultSummary: result,
       success: true,
+    }).catch((auditError) => {
+      console.error("[MCP approval audit failure]", auditError)
     })
     return completed
   } catch (error) {
-    await prisma.mcpApproval.update({
+    const reconciled = await prisma.mcpApproval.findUnique({
       where: { id },
+      select: { id: true, status: true, resultSummary: true, executedAt: true },
+    }).catch(() => null)
+    if (reconciled?.status === "APPROVED") return reconciled
+
+    await prisma.mcpApproval.updateMany({
+      where: { id, status: "PENDING_APPROVAL" },
       data: {
         processingAt: null,
         executionError: errorDetails(error).message,
@@ -362,6 +484,8 @@ export async function approveMcpApproval(id: string) {
       parameterSummary: { approvalId: id, phase: "approval_execution" },
       success: false,
       error,
+    }).catch((auditError) => {
+      console.error("[MCP approval audit failure]", auditError)
     })
     throw error
   }
@@ -371,6 +495,10 @@ export async function rejectMcpApproval(id: string, reasonValue?: string) {
   const reason = reasonValue?.trim().slice(0, 1000) || "人工拒绝"
   const approval = await prisma.mcpApproval.findUnique({ where: { id } })
   if (!approval) throw new NotFoundError("审批请求不存在")
+  if (approval.status === "PENDING_APPROVAL" && approval.expiresAt.getTime() <= Date.now()) {
+    await rejectExpiredApproval(id)
+    throw new ValidationError("审批请求已过期")
+  }
   if (approval.status !== "PENDING_APPROVAL") {
     throw new ConflictError("只能拒绝待审批请求")
   }
@@ -402,6 +530,35 @@ export async function rejectMcpApproval(id: string, reasonValue?: string) {
     parameterSummary: { approvalId: id, phase: "approval_rejection" },
     resultSummary: { status: "rejected", reason },
     success: true,
+  }).catch((auditError) => {
+    console.error("[MCP approval audit failure]", auditError)
   })
   return rejected
+}
+
+export async function deleteMcpApproval(id: string) {
+  const approval = await prisma.mcpApproval.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      status: true,
+      processingAt: true,
+      importBundle: { select: { id: true, cleanedAt: true } },
+    },
+  })
+  if (!approval) throw new NotFoundError("审批请求不存在")
+  const blocked = approvalDeletionBlockReason(approval)
+  if (blocked) throw new ConflictError(blocked)
+
+  if (approval.importBundle && !approval.importBundle.cleanedAt) {
+    const { cleanupStagedImportBundle } = await import("./import-staging-service")
+    await cleanupStagedImportBundle(approval.importBundle.id)
+  }
+
+  await prisma.$transaction(async (transaction) => {
+    await transaction.mcpExecution.deleteMany({ where: { approvalId: id } })
+    await transaction.mcpImportBundle.deleteMany({ where: { approvalId: id } })
+    await transaction.mcpApproval.delete({ where: { id } })
+  })
+  return { id, deleted: true }
 }

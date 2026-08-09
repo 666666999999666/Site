@@ -4,8 +4,8 @@ import { z } from "zod"
 import { AppError } from "../lib/errors"
 import { prepareMarkdownImport } from "../lib/markdown-import"
 import type { McpRuntimeConfig } from "../lib/mcp/config"
-import type { McpToolInputMap, McpToolName } from "../lib/mcp/tool-schemas"
-import { createRegisteredBlogMcpServer } from "./register-tools"
+import type { McpToolInputMap } from "../lib/mcp/tool-schemas"
+import { createRegisteredMarkdownImportMcpServer } from "./register-tools"
 
 const importSessionSchema = z.object({
   bundle_id: z.string().uuid(),
@@ -87,33 +87,17 @@ async function createRemoteDraft(config: McpRuntimeConfig, localPath: string) {
   )
 }
 
-async function invokeRemoteTool<Name extends McpToolName>(
-  config: McpRuntimeConfig,
-  name: Name,
-  input: McpToolInputMap[Name]
-) {
-  if (name === "create_draft_from_markdown") {
-    const localPath = (input as McpToolInputMap["create_draft_from_markdown"]).local_path
-    return createRemoteDraft(config, localPath)
-  }
-  return gatewayRequest(config, `/api/mcp/gateway/tools/${name}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  })
-}
-
 export async function verifyRemoteGateway(config: McpRuntimeConfig) {
   await gatewayRequest(config, "/api/mcp/gateway")
 }
 
-export function createRemoteBlogMcpServer(config: McpRuntimeConfig) {
-  return createRegisteredBlogMcpServer(async <Name extends McpToolName>(
-    name: Name,
-    input: McpToolInputMap[Name]
+export function createMarkdownImportMcpServer(config: McpRuntimeConfig) {
+  return createRegisteredMarkdownImportMcpServer(async (
+    _name,
+    input: McpToolInputMap["create_draft_from_markdown"]
   ) => {
     try {
-      return toolResult(await invokeRemoteTool(config, name, input))
+      return toolResult(await createRemoteDraft(config, input.local_path))
     } catch (error) {
       if (!(error instanceof AppError)) console.error("[Remote MCP tool error]", error)
       return toolResult({

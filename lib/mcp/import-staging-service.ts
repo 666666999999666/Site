@@ -16,6 +16,7 @@ import { detectImageExtension, MAX_UPLOAD_BYTES, storeImageBuffer, uploadDirecto
 import { validatePostCreate } from "../validation"
 import { createMcpApproval } from "./approval-service"
 import type { McpSecurityConfig } from "./config"
+import type { McpAuthenticatedContext } from "./auth-context"
 import { runAuthorizedMcpOperation } from "./tool-service"
 
 const MAX_REMOTE_IMPORT_IMAGES = 50
@@ -129,7 +130,7 @@ async function removeBundleFiles(id: string) {
 }
 
 export async function createRemoteImportBundle(input: {
-  credentialToken: string
+  context: McpAuthenticatedContext
   config: McpSecurityConfig
   value: unknown
 }) {
@@ -141,7 +142,7 @@ export async function createRemoteImportBundle(input: {
   const sourceBuffer = Buffer.from(parsed.markdown, "utf8")
   const manifest = validatedManifest(parsed, sourceBuffer)
   return runAuthorizedMcpOperation({
-    credentialToken: input.credentialToken,
+    context: input.context,
     config: input.config,
     toolName: "create_draft_from_markdown.prepare",
     scope: "draft:create",
@@ -249,14 +250,14 @@ async function verifyBundleFiles(bundle: Awaited<ReturnType<typeof loadActiveBun
 }
 
 export async function submitRemoteImportBundle(input: {
-  credentialToken: string
+  context: McpAuthenticatedContext
   uploadToken: string
   bundleId: string
   config: McpSecurityConfig
 }) {
   const initial = await loadActiveBundle(input.bundleId, input.uploadToken)
   return runAuthorizedMcpOperation({
-    credentialToken: input.credentialToken,
+    context: input.context,
     config: input.config,
     toolName: "create_draft_from_markdown",
     scope: "draft:create",
@@ -291,7 +292,7 @@ export async function submitRemoteImportBundle(input: {
         })
         const claimed = await transaction.mcpImportBundle.updateMany({
           where: { id: bundle.id, approvalId: null },
-          data: { approvalId: created.id },
+          data: { approvalId: created.id, expiresAt: created.expiresAt },
         })
         if (claimed.count !== 1) throw new ConflictError("MCP 导入会话已经提交审批")
         return created

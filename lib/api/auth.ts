@@ -1,19 +1,20 @@
-import { getSession } from "@/lib/auth/session"
-import { findUserSessionState } from "@/lib/auth/repository"
-import { AuthError } from "@/lib/errors"
+import { headers } from "next/headers"
+import { auth } from "../auth/better-auth"
+import { AuthError } from "../errors"
 
-export async function ensureAuthenticated() {
-  const session = await getSession()
-  if (!session.isLoggedIn || !session.userId) {
-    throw new AuthError("未登录")
+export interface AuthenticatedAdmin {
+  userId: string
+  username: string
+  isLoggedIn: true
+}
+
+export async function ensureAuthenticated(): Promise<AuthenticatedAdmin> {
+  const session = await auth.api.getSession({ headers: await headers() })
+  if (!session?.user?.id) throw new AuthError("未登录")
+
+  return {
+    userId: session.user.id,
+    username: session.user.name,
+    isLoggedIn: true,
   }
-
-  // #12: 验证用户是否仍存在 + #8: 校验密码版本（修改密码后旧 session 失效）
-  const user = await findUserSessionState(session.userId)
-  if (!user || user.passwordVersion !== session.passwordVersion) {
-    session.destroy()
-    throw new AuthError("会话已失效，请重新登录")
-  }
-
-  return session
 }

@@ -23,7 +23,9 @@ ENV NEXT_PHASE="phase-production-build"
 RUN npx prisma validate
 RUN npx prisma generate
 RUN npm run lint
+RUN npx tsc --noEmit
 RUN npm test
+RUN npm run test:mcp
 RUN --mount=type=cache,target=/app/.next/cache \
     npm run build
 

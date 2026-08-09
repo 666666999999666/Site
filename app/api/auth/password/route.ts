@@ -1,36 +1,34 @@
 import { NextRequest, NextResponse } from "next/server"
-import { findUserByUsername } from "@/lib/auth/repository"
-import { verifyPassword, hashPassword } from "@/lib/auth/password"
+import { auth } from "@/lib/auth/better-auth"
+import { changeAdminPassword } from "@/lib/auth/service"
 import { handleApiError } from "@/lib/api/handler"
-import { AuthError } from "@/lib/errors"
-import { prisma } from "@/lib/db"
 import { ensureAuthenticated } from "@/lib/api/auth"
 import { readJsonObject, validatePasswordChange } from "@/lib/validation"
+import { copyAuthSetCookies } from "@/lib/auth/response"
+import { validateOrigin } from "@/lib/csrf"
 
 export async function POST(req: NextRequest) {
   try {
+    if (!validateOrigin(req, { requireOrigin: true })) {
+      return NextResponse.json({ error: "跨域请求被拒" }, { status: 403 })
+    }
     const session = await ensureAuthenticated()
 
     const { currentPassword, newPassword } = validatePasswordChange(
       await readJsonObject(req)
     )
 
-    const user = await findUserByUsername(session.username!)
-    if (!user || !(await verifyPassword(currentPassword, user.passwordHash))) {
-      throw new AuthError("当前密码错误")
-    }
-
-    const hash = await hashPassword(newPassword)
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        passwordHash: hash,
-        passwordVersion: { increment: 1 },
-      },
+    await changeAdminPassword({
+      userId: session.userId,
+      currentPassword,
+      newPassword,
     })
-    session.destroy()
 
-    return NextResponse.json({ ok: true, loggedOut: true })
+    const authResponse = await auth.api.signOut({ headers: req.headers, asResponse: true })
+    const response = NextResponse.json({ ok: true, loggedOut: true })
+    copyAuthSetCookies(authResponse, response)
+    response.headers.set("Cache-Control", "no-store")
+    return response
   } catch (e) {
     return handleApiError(e)
   }

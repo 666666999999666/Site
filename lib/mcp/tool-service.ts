@@ -1,71 +1,59 @@
-import path from "path"
 import { resolveBlogCategory } from "../categories"
 import { extractPlainText } from "../content"
-import { prepareMarkdownImport, type MarkdownImportPayload } from "../markdown-import"
+import type { MarkdownImportPayload } from "../markdown-import"
 import { assertDraftMetadataTarget, searchPosts } from "../posts"
 import { getTodoForDraft } from "../todos"
 import { validateCategoryCreate, validatePostUpdate } from "../validation"
-import { createMcpApproval } from "./approval-service"
-import { recordMcpAudit } from "./audit-service"
-import type { McpRuntimeConfig, McpSecurityConfig } from "./config"
+import { createMcpApproval, getMcpApprovalStatus } from "./approval-service"
 import {
-  authenticateMcpCredential,
-  mcpCredentialId,
-  requireMcpScope,
-  type McpScope,
-} from "./credential-service"
+  beginMcpAudit,
+  completeMcpAuditFailure,
+  completeMcpAuditSuccess,
+} from "./audit-service"
+import type { McpAuthenticatedContext } from "./auth-context"
+import type { McpSecurityConfig } from "./config"
+import { requireMcpScope, type McpScope } from "./credential-service"
 import { consumeMcpRateLimit } from "./rate-limit-service"
 import {
   createCategoryInputSchema,
-  createDraftFromMarkdownInputSchema,
+  getApprovalStatusInputSchema,
   searchDraftsInputSchema,
   todoToDraftInputSchema,
   updateDraftMetadataInputSchema,
   type McpToolInputMap,
-  type McpToolName,
 } from "./tool-schemas"
 
 export async function runAuthorizedMcpOperation<T>(input: {
-  credentialToken: string
+  context: McpAuthenticatedContext
   config: McpSecurityConfig
   toolName: string
-  scope: McpScope
+  scope: McpScope | null
   write: boolean
   parameterSummary: Record<string, unknown>
   operation: (credentialId: string) => Promise<{ response: T; audit: Record<string, unknown> }>
 }): Promise<T> {
-  let credentialId: string | null = null
+  const audit = await beginMcpAudit({
+    credentialId: input.context.credentialId,
+    toolName: input.toolName,
+    parameterSummary: input.parameterSummary,
+  })
   try {
-    credentialId = mcpCredentialId(input.credentialToken)
-    const credential = await authenticateMcpCredential(input.credentialToken)
-    requireMcpScope(credential, input.scope)
+    if (input.scope !== null) requireMcpScope(input.context, input.scope)
     await consumeMcpRateLimit({
-      credentialId: credential.id,
+      credentialId: input.context.credentialId,
       toolName: input.toolName,
       credentialLimit: input.config.credentialRateLimit,
       toolLimit: input.write ? input.config.writeRateLimit : input.config.searchRateLimit,
     })
-    const result = await input.operation(credential.id)
-    await recordMcpAudit({
-      credentialId: credential.id,
-      toolName: input.toolName,
-      parameterSummary: input.parameterSummary,
-      resultSummary: result.audit,
-      success: true,
+    const result = await input.operation(input.context.credentialId)
+    await completeMcpAuditSuccess(audit.id, result.audit).catch((auditError) => {
+      console.error("[MCP audit completion failure]", auditError)
     })
     return result.response
   } catch (error) {
-    try {
-      await recordMcpAudit({
-        credentialId,
-        toolName: input.toolName,
-        parameterSummary: input.parameterSummary,
-        success: false,
-        error,
-      })
-    } catch (auditError) {
+    await completeMcpAuditFailure(audit.id, error).catch((auditError) => {
       console.error("[MCP audit failure]", auditError)
-    }
+    })
     throw error
   }
 }
@@ -79,8 +67,15 @@ function approvalResponse(approval: { id: string; expiresAt: Date }, extra: Reco
   }
 }
 
+function metadataPreview(value: unknown): unknown {
+  if (value === undefined) return undefined
+  if (value === null) return null
+  const serialized = JSON.stringify(value)
+  return serialized.length <= 500 ? value : `${serialized.slice(0, 500)}…`
+}
+
 export async function requestPreparedMarkdownApproval(input: {
-  credentialToken: string
+  context: McpAuthenticatedContext
   config: McpSecurityConfig
   payload: MarkdownImportPayload
   summary: {
@@ -93,7 +88,7 @@ export async function requestPreparedMarkdownApproval(input: {
   }
 }) {
   return runAuthorizedMcpOperation({
-    credentialToken: input.credentialToken,
+    context: input.context,
     config: input.config,
     toolName: "create_draft_from_markdown",
     scope: "draft:create",
@@ -116,21 +111,10 @@ export async function requestPreparedMarkdownApproval(input: {
   })
 }
 
-async function runCreateDraftFromMarkdown(config: McpRuntimeConfig, rawInput: unknown) {
-  const args = createDraftFromMarkdownInputSchema.parse(rawInput)
-  const prepared = await prepareMarkdownImport(args.local_path, config)
-  return requestPreparedMarkdownApproval({
-    credentialToken: config.credential,
-    config,
-    payload: prepared.payload,
-    summary: prepared.summary,
-  })
-}
-
-async function runSearchDrafts(config: McpSecurityConfig, rawInput: unknown) {
+async function runSearchDrafts(context: McpAuthenticatedContext, config: McpSecurityConfig, rawInput: unknown) {
   const args = searchDraftsInputSchema.parse(rawInput)
   return runAuthorizedMcpOperation({
-    credentialToken: config.credential,
+    context,
     config,
     toolName: "search_drafts",
     scope: "draft:read",
@@ -167,17 +151,26 @@ async function runSearchDrafts(config: McpSecurityConfig, rawInput: unknown) {
   })
 }
 
-async function runUpdateDraftMetadata(config: McpSecurityConfig, rawInput: unknown) {
+async function runUpdateDraftMetadata(context: McpAuthenticatedContext, config: McpSecurityConfig, rawInput: unknown) {
   const args = updateDraftMetadataInputSchema.parse(rawInput)
   return runAuthorizedMcpOperation({
-    credentialToken: config.credential,
+    context,
     config,
     toolName: "update_draft_metadata",
     scope: "draft:update",
     write: true,
     parameterSummary: {
       postId: args.post_id,
-      fields: Object.keys(args).filter((key) => key !== "post_id"),
+      proposed: {
+        ...(args.title !== undefined ? { title: args.title } : {}),
+        ...(args.description !== undefined ? { description: args.description } : {}),
+        ...(args.tags !== undefined ? { tags: args.tags } : {}),
+        ...(args.category !== undefined ? { category: args.category } : {}),
+        ...(args.cover !== undefined ? { cover: args.cover } : {}),
+        ...(args.draft_metadata !== undefined
+          ? { draftMetadataPreview: metadataPreview(args.draft_metadata) }
+          : {}),
+      },
     },
     operation: async (credentialId) => {
       const target = await assertDraftMetadataTarget(args.post_id)
@@ -200,7 +193,16 @@ async function runUpdateDraftMetadata(config: McpSecurityConfig, rawInput: unkno
         parameterSummary: {
           postId: target.id,
           currentTitle: target.title,
-          fields: Object.keys(postInput),
+          proposed: {
+            ...(postInput.title !== undefined ? { title: postInput.title } : {}),
+            ...(postInput.excerpt !== undefined ? { description: postInput.excerpt } : {}),
+            ...(postInput.tags !== undefined ? { tags: postInput.tags } : {}),
+            ...(postInput.categoryId !== undefined ? { categoryId: postInput.categoryId } : {}),
+            ...(postInput.coverImage !== undefined ? { cover: postInput.coverImage } : {}),
+            ...(postInput.draftMetadata !== undefined
+              ? { draftMetadataPreview: metadataPreview(postInput.draftMetadata) }
+              : {}),
+          },
         },
         ttlHours: config.approvalTtlHours,
       })
@@ -212,15 +214,21 @@ async function runUpdateDraftMetadata(config: McpSecurityConfig, rawInput: unkno
   })
 }
 
-async function runCreateCategory(config: McpSecurityConfig, rawInput: unknown) {
+async function runCreateCategory(context: McpAuthenticatedContext, config: McpSecurityConfig, rawInput: unknown) {
   const args = createCategoryInputSchema.parse(rawInput)
   return runAuthorizedMcpOperation({
-    credentialToken: config.credential,
+    context,
     config,
     toolName: "create_category",
     scope: "category:create",
     write: true,
-    parameterSummary: { name: args.name, type: args.type },
+    parameterSummary: {
+      name: args.name,
+      type: args.type,
+      description: args.description ?? null,
+      color: args.color ?? null,
+      sortOrder: args.sort_order ?? 0,
+    },
     operation: async (credentialId) => {
       const category = validateCategoryCreate({
         name: args.name,
@@ -234,7 +242,13 @@ async function runCreateCategory(config: McpSecurityConfig, rawInput: unknown) {
         toolName: "create_category",
         requiredScope: "category:create",
         payload: { kind: "create_category", input: category },
-        parameterSummary: { name: category.name, type: category.type },
+        parameterSummary: {
+          name: category.name,
+          type: category.type,
+          description: category.description ?? null,
+          color: category.color ?? null,
+          sortOrder: category.sortOrder ?? 0,
+        },
         ttlHours: config.approvalTtlHours,
       })
       return {
@@ -245,10 +259,10 @@ async function runCreateCategory(config: McpSecurityConfig, rawInput: unknown) {
   })
 }
 
-async function runTodoToDraft(config: McpSecurityConfig, rawInput: unknown) {
+async function runTodoToDraft(context: McpAuthenticatedContext, config: McpSecurityConfig, rawInput: unknown) {
   const args = todoToDraftInputSchema.parse(rawInput)
   return runAuthorizedMcpOperation({
-    credentialToken: config.credential,
+    context,
     config,
     toolName: "todo_to_draft",
     scope: "todo:convert",
@@ -272,44 +286,47 @@ async function runTodoToDraft(config: McpSecurityConfig, rawInput: unknown) {
   })
 }
 
-export async function runLocalMcpTool<Name extends McpToolName>(
-  config: McpRuntimeConfig,
-  name: Name,
-  input: McpToolInputMap[Name]
-): Promise<Record<string, unknown>> {
-  switch (name) {
-    case "create_draft_from_markdown":
-      return runCreateDraftFromMarkdown(config, input)
-    case "search_drafts":
-      return runSearchDrafts(config, input)
-    case "update_draft_metadata":
-      return runUpdateDraftMetadata(config, input)
-    case "create_category":
-      return runCreateCategory(config, input)
-    case "todo_to_draft":
-      return runTodoToDraft(config, input)
-  }
+async function runGetApprovalStatus(context: McpAuthenticatedContext, config: McpSecurityConfig, rawInput: unknown) {
+  const args = getApprovalStatusInputSchema.parse(rawInput)
+  return runAuthorizedMcpOperation({
+    context,
+    config,
+    toolName: "get_approval_status",
+    scope: null,
+    write: false,
+    parameterSummary: { approvalId: args.approval_id },
+    operation: async (credentialId) => {
+      const approval = await getMcpApprovalStatus(args.approval_id, credentialId)
+      return {
+        response: approval,
+        audit: {
+          approvalId: approval.approval_id,
+          status: approval.status,
+          postId: approval.post_id,
+        },
+      }
+    },
+  })
 }
 
-export type GatewayMcpToolName = Exclude<McpToolName, "create_draft_from_markdown">
+export type GatewayMcpToolName = Exclude<keyof McpToolInputMap, "create_draft_from_markdown">
 
 export async function runGatewayMcpTool<Name extends GatewayMcpToolName>(
+  context: McpAuthenticatedContext,
   config: McpSecurityConfig,
   name: Name,
   input: McpToolInputMap[Name]
 ): Promise<Record<string, unknown>> {
   switch (name) {
     case "search_drafts":
-      return runSearchDrafts(config, input)
+      return runSearchDrafts(context, config, input)
     case "update_draft_metadata":
-      return runUpdateDraftMetadata(config, input)
+      return runUpdateDraftMetadata(context, config, input)
     case "create_category":
-      return runCreateCategory(config, input)
+      return runCreateCategory(context, config, input)
     case "todo_to_draft":
-      return runTodoToDraft(config, input)
+      return runTodoToDraft(context, config, input)
+    case "get_approval_status":
+      return runGetApprovalStatus(context, config, input)
   }
-}
-
-export function sourceFileSummary(localPath: string) {
-  return { sourceFile: path.basename(localPath) }
 }

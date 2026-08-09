@@ -32,6 +32,18 @@ enum McpApprovalStatus {
   REJECTED
 }
 
+enum McpCredentialKind {
+  STATIC
+  OAUTH
+}
+
+enum McpAuditStatus {
+  IN_PROGRESS
+  SUCCESS
+  FAILURE
+  INTERRUPTED
+}
+
 model Post {
   id            String     @id @default(cuid())
   title         String
@@ -89,7 +101,179 @@ model User {
   username        String   @unique
   passwordHash    String
   passwordVersion Int      @default(1)
+  name            String
+  email           String   @unique
+  emailVerified   Boolean  @default(true)
+  image           String?
   createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  accounts           Account[]
+  sessions           Session[]
+  oauthClients       OauthClient[]
+  oauthRefreshTokens OauthRefreshToken[]
+  oauthAccessTokens  OauthAccessToken[]
+  oauthConsents      OauthConsent[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  expiresAt DateTime
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  oauthRefreshTokens OauthRefreshToken[]
+  oauthAccessTokens  OauthAccessToken[]
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(cuid())
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(cuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model Jwks {
+  id         String    @id @default(cuid())
+  publicKey  String    @db.Text
+  privateKey String    @db.Text
+  createdAt  DateTime  @default(now())
+  expiresAt  DateTime?
+}
+
+model OauthClient {
+  id                      String   @id @default(cuid())
+  clientId                String   @unique
+  clientSecret            String?
+  disabled                Boolean  @default(false)
+  skipConsent             Boolean?
+  enableEndSession        Boolean?
+  subjectType             String?
+  scopes                  String[]  @default([])
+  userId                  String?
+  user                    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  name                    String?
+  uri                     String?
+  icon                    String?
+  contacts                String[]  @default([])
+  tos                     String?
+  policy                  String?
+  softwareId              String?
+  softwareVersion         String?
+  softwareStatement       String?
+  redirectUris            String[]
+  postLogoutRedirectUris  String[]  @default([])
+  tokenEndpointAuthMethod String?
+  grantTypes              String[]  @default([])
+  responseTypes           String[]  @default([])
+  public                  Boolean  @default(true)
+  type                    String?
+  requirePKCE             Boolean  @default(true)
+  referenceId             String?
+  metadata                Json?
+
+  refreshTokens OauthRefreshToken[]
+  accessTokens  OauthAccessToken[]
+  consents      OauthConsent[]
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+model OauthRefreshToken {
+  id          String      @id @default(cuid())
+  token       String      @unique
+  clientId    String
+  client      OauthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  sessionId   String?
+  session     Session?    @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  userId      String
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceId String?
+  expiresAt   DateTime
+  createdAt   DateTime    @default(now())
+  revoked     DateTime?
+  authTime    DateTime?
+  scopes      String[]
+
+  accessTokens OauthAccessToken[]
+
+  @@index([clientId])
+  @@index([sessionId])
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model OauthAccessToken {
+  id          String             @id @default(cuid())
+  token       String             @unique
+  clientId    String
+  client      OauthClient        @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  sessionId   String?
+  session     Session?           @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  userId      String?
+  user        User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceId String?
+  refreshId   String?
+  refresh     OauthRefreshToken? @relation(fields: [refreshId], references: [id], onDelete: Cascade)
+  expiresAt   DateTime
+  createdAt   DateTime           @default(now())
+  scopes      String[]
+
+  @@index([clientId])
+  @@index([sessionId])
+  @@index([userId])
+  @@index([refreshId])
+  @@index([expiresAt])
+}
+
+model OauthConsent {
+  id          String      @id @default(cuid())
+  clientId    String
+  client      OauthClient @relation(fields: [clientId], references: [clientId], onDelete: Cascade)
+  userId      String?
+  user        User?       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  referenceId String?
+  scopes      String[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@unique([clientId, userId])
+  @@index([clientId])
+  @@index([userId])
 }
 
 model Setting {
@@ -114,14 +298,17 @@ model Project {
 }
 
 model McpCredential {
-  id         String    @id
-  name       String
-  secretHash String
-  scopes     String[]
-  revokedAt  DateTime?
-  lastUsedAt DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id            String            @id
+  kind          McpCredentialKind @default(STATIC)
+  name          String
+  secretHash    String?
+  oauthClientId String?           @unique
+  oauthSubject  String?
+  scopes        String[]
+  revokedAt     DateTime?
+  lastUsedAt    DateTime?
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 
   approvals     McpApproval[]
   auditLogs     McpAuditLog[]
@@ -129,6 +316,7 @@ model McpCredential {
   importBundles McpImportBundle[]
 
   @@index([revokedAt])
+  @@index([kind, revokedAt])
 }
 
 model McpApproval {
@@ -190,13 +378,16 @@ model McpAuditLog {
   toolName         String
   parameterSummary Json
   resultSummary    Json?
+  status           McpAuditStatus @default(IN_PROGRESS)
   success          Boolean
   errorCode        String?
   errorMessage     String?
   createdAt        DateTime       @default(now())
+  completedAt      DateTime?
 
   @@index([credentialId, createdAt])
   @@index([toolName, createdAt])
+  @@index([status, createdAt])
 }
 
 model McpRateLimit {

@@ -1,50 +1,82 @@
-# 线上博客 stdio MCP 使用说明
+# 博客 MCP 使用说明
 
-## 1. 架构与边界
+## 1. 当前架构
 
-`qz-blog-drafts` 由 Claude Desktop、Cursor 等客户端在本机拉起。它通过 HTTPS 网关操控线上博客，数据路径为：
+线上工具使用 **OAuth 2.1 + Streamable HTTP**。Cursor、Claude、Trae 等客户端只配置一个 URL，首次连接时由浏览器完成管理员登录与 Agent 授权：
 
 ```text
-本地 MCP Client -> 本地 stdio Server -> https://liaoqizai.site/api/mcp/gateway
-                 -> 线上业务 Service -> PostgreSQL / 上传卷
+Cursor / Claude / Trae
+        -> https://liaoqizai.site/api/mcp
+        -> OAuth 登录与授权确认
+        -> 现有业务 Service -> PostgreSQL
 ```
 
-本机 Server 只读取允许目录内的 Markdown 和图片，不连接生产 PostgreSQL，不接触生产上传卷。线上网关复用网站现有文章、分类、Todo、校验和数据库访问层。
+只有导入电脑上的 Markdown 和图片时才启动本地 stdio 导入器，因为远程服务器不能读取本机文件：
 
-| Tool | Scope | 行为 |
+```text
+MCP Client -> 本地 stdio 导入器
+           -> https://liaoqizai.site/api/mcp/gateway/imports
+           -> 私有暂存区 -> 人工审批 -> 草稿
+```
+
+| Tool | 入口 | 行为 |
 |---|---|---|
-| `create_draft_from_markdown` | `draft:create` | 上传本地 Markdown 与引用图片，审批后创建线上草稿 |
-| `search_drafts` | `draft:read` | 按标题、关键词、标签、分区、状态查询线上文章 |
-| `update_draft_metadata` | `draft:update` | 审批后修改草稿标题、描述、标签、分区、封面和 metadata |
-| `create_category` | `category:create` | 审批后创建 BLOG/TODO 分区 |
-| `todo_to_draft` | `todo:convert` | 审批后把线上 Todo 的已有内容复制为草稿 |
+| `search_drafts` | 远程 OAuth MCP | 按标题、关键词、标签、分区、状态查询文章 |
+| `update_draft_metadata` | 远程 OAuth MCP | 审批后修改草稿 metadata，不修改正文 |
+| `create_category` | 远程 OAuth MCP | 审批后创建 BLOG/TODO 分区 |
+| `todo_to_draft` | 远程 OAuth MCP | 审批后搬运 Todo 已有内容，不生成正文 |
+| `get_approval_status` | 远程 OAuth MCP | 查询当前 Agent 自己的审批结果、失败原因和最终 `post_id` |
+| `create_draft_from_markdown` | 本地 stdio | 读取本机 Markdown/图片并上传为待审批导入 |
 
-MCP 没有生成正文、发布文章或删除数据的工具。搜索只返回 metadata 和最多 240 字的纯文本摘要，不返回完整正文。
+MCP 不提供正文生成、发布或删除文章的工具。OAuth Consent 只决定某个 Agent 可以请求哪些能力；每个写操作仍必须在博客后台单独审批。
 
-## 2. 部署前提
+## 2. 远程 OAuth 配置
 
-线上应用必须先部署包含 MCP 网关和对应 Prisma migration 的版本：
+### Cursor 与 Trae
+
+支持远程 MCP URL 的客户端使用：
+
+```json
+{
+  "mcpServers": {
+    "qz-blog": {
+      "url": "https://liaoqizai.site/api/mcp"
+    }
+  }
+}
+```
+
+部分客户端要求显式写 `"type": "http"` 或 `"type": "streamable-http"`，其余配置不变。不要添加固定 `Authorization` Header。
+
+### Claude Desktop / Claude 网页版
+
+在 **Settings -> Connectors -> Add custom connector** 中填写：
+
+```text
+https://liaoqizai.site/api/mcp
+```
+
+### Claude Code
 
 ```bash
-npx prisma migrate deploy
+claude mcp add --transport http qz-blog https://liaoqizai.site/api/mcp
 ```
 
-生产 Web 容器负责执行 migration。远程 MCP Client 不执行 migration，也不配置 `DATABASE_URL`。
+### 首次连接流程
 
-## 3. 创建独立 Credential
+1. 客户端通过 DCR 注册独立的公开 OAuth Client。
+2. 浏览器打开博客授权页，只输入现有管理员密码。
+3. 页面展示 Agent 名称、回调域名和申请的 scope。
+4. 确认后客户端获得 15 分钟 Access Token 与可轮换的 30 天 Refresh Token。
+5. 后台 `/admin/mcp` 会显示这个 Agent，可独立撤销、审计和限流。
 
-登录博客后台，打开 `/admin/mcp`，选择“新建凭证”。每个客户端分别创建，例如：
+每个 Agent 都应单独连接。撤销一个 Agent 会立即阻止它访问 MCP，不影响其他 Agent。远程 `/api/mcp` 不接受 `qzmcp_v1_...` 固定凭证。
 
-- `Cursor - 主电脑`
-- `Claude Desktop - 主电脑`
+## 3. 本地 Markdown 导入
 
-按客户端实际用途勾选最小权限。完整 credential 只显示一次，线上数据库仅保存 scrypt hash。credential 丢失后应在同一页面撤销并重新创建；撤销会在下一次请求立即生效。
+先在 `/admin/mcp` 点击“创建本地 Markdown 导入凭证”。该凭证固定只有 `draft:create`，完整值只显示一次，数据库只保存 scrypt Hash。
 
-本地开发或生产应急维护仍可在能访问对应数据库的受信环境中使用 `npm run mcp:admin`，日常线上使用不需要该命令。
-
-## 4. 本机私密配置
-
-为不同客户端创建不同的、已被 Git 忽略的环境文件，例如 `.env.mcp.cursor.local`：
+在项目根目录创建被 Git 忽略的 `.env.mcp.local`：
 
 ```dotenv
 MCP_REMOTE_URL="https://liaoqizai.site"
@@ -53,69 +85,39 @@ MCP_MARKDOWN_ROOT="C:/Users/you/Documents/blog-drafts"
 MCP_IMAGE_ROOT="C:/Users/you/Documents/blog-drafts"
 ```
 
-远程模式不配置 `DATABASE_URL` 或 `UPLOAD_DIR`。`MCP_MARKDOWN_ROOT` 是 Markdown 沙箱，`MCP_IMAGE_ROOT` 是图片沙箱；默认均为仓库内的 `drafts/`。
-
-## 5. Cursor 配置
-
-在 Cursor 用户配置或项目 `.cursor/mcp.json` 中加入：
+项目不会提交 `.env.mcp.local` 或 `.env.mcp.claude.local`，因为其中包含真实凭证。配置本地 server：
 
 ```json
 {
   "mcpServers": {
-    "qz-blog": {
+    "qz-blog-local-import": {
       "command": "C:\\Program Files\\nodejs\\node.exe",
       "args": [
         "C:\\Users\\you\\site\\node_modules\\tsx\\dist\\cli.mjs",
         "C:\\Users\\you\\site\\mcp\\server.ts"
       ],
       "env": {
-        "DOTENV_CONFIG_PATH": "C:\\Users\\you\\site\\.env.mcp.cursor.local"
+        "DOTENV_CONFIG_PATH": "C:\\Users\\you\\site\\.env.mcp.local"
       }
     }
   }
 }
 ```
 
-重启 Cursor 后，`qz-blog` 应列出五个 tools。
+本地 server 只暴露 `create_draft_from_markdown`，不代理搜索、metadata、分类或 Todo 工具，也不连接生产数据库。
 
-## 6. Claude Desktop 配置
-
-Windows 下直接运行 `node.exe` 和项目的 `tsx` CLI，避免 `npm run` 的额外 stdout 内容破坏 stdio JSON-RPC：
-
-```json
-{
-  "mcpServers": {
-    "qz-blog": {
-      "command": "C:\\Program Files\\nodejs\\node.exe",
-      "args": [
-        "C:\\Users\\you\\site\\node_modules\\tsx\\dist\\cli.mjs",
-        "C:\\Users\\you\\site\\mcp\\server.ts"
-      ],
-      "env": {
-        "DOTENV_CONFIG_PATH": "C:\\Users\\you\\site\\.env.mcp.claude.local"
-      }
-    }
-  }
-}
-```
-
-Claude Desktop 与 Cursor 必须使用不同 credential。
-
-## 7. Markdown 导入规则
+## 4. Markdown 安全规则
 
 - 只接受 `.md` 与 `.markdown`，单文件最大 2MB。
 - Markdown 真实路径必须位于 `MCP_MARKDOWN_ROOT` 内。
 - 相对图片必须位于 `MCP_IMAGE_ROOT` 内；拒绝 `..` 越界、符号链接越界、绝对路径以及 `file:`、`data:` 等协议。
-- 本地图片只允许 JPG、PNG、GIF、WebP，按文件签名判断；单张最大 5MB、单篇最多 50 张、总计最大 50MB。
-- 本地图片通过私有暂存区上传，Nginx 禁止公开访问；批准后才写入正式 `/uploads/`。
-- frontmatter 的 `title`、`description/excerpt`、`tags`、`category/categoryId`、`cover/coverImage` 映射到文章字段，完整 JSON 结果保存到 `draftMetadata`。
-- 除本地图片目标地址外，正文保持原样，因此 Mermaid、KaTeX、代码块和普通 Markdown 都会保留。
+- 图片只允许 JPG、PNG、GIF、WebP，按文件签名判断；单张最大 5MB、单篇最多 50 张、总计最大 50MB。
+- frontmatter 映射到文章字段；除本地图片地址外，正文保持原样，Mermaid、KaTeX、代码块和 Markdown 均会保留。
+- Markdown 正文不写入审批或审计；暂存正文在批准、拒绝或过期清理后删除。
 
-Markdown 正文不会进入审批记录或审计日志。远程导入会把正文暂存在生产上传卷的私有目录，批准、拒绝或过期后清理。
+## 5. 审批流程
 
-## 8. 人工审批
-
-`search_drafts` 查询会立即返回结果。其他写 tools 只返回：
+写 Tool 首次返回：
 
 ```json
 {
@@ -125,27 +127,44 @@ Markdown 正文不会进入审批记录或审计日志。远程导入会把正�
 }
 ```
 
-登录 `/admin/mcp` 查看参数摘要，选择“批准并执行”或“拒绝”。批准后才会真正创建草稿、修改 metadata、创建分区或转换 Todo。审批默认 24 小时过期。
+登录 `/admin/mcp` 查看拟修改值并批准或拒绝。Agent 随后调用 `get_approval_status`，可得到 `pending_approval`、`approved` 或 `rejected`，以及 `failure_reason`、`post_id`、执行结果和时间。Agent 只能查询自己发起的审批。
 
-每项批准都有以审批 ID 为主键的幂等执行记录。网络重试或进程中断不会重复创建业务数据；无法确认数据库事务状态时会优先保留图片，再由现有孤儿上传清理流程处理。
+过期审批会持久化为 `rejected`，原因为“审批请求已过期”。审批批准与业务执行使用幂等记录，重试不会重复创建分区或草稿。
 
-## 9. 审计与限流
+## 6. Todo ID 限制
 
-每次 tool 调用及审批执行/拒绝都会记录 credential ID、tool、时间、参数摘要、结果摘要、成功状态和错误。审计不记录 Markdown 正文、credential 或 upload token，可在 `/admin/mcp` 的“审计”标签页查看最近 100 条。
+`todo_to_draft` 必须提供明确的 `todo_id`。当前没有 `search_todos` Tool，因此需要先在博客后台 Todo 页面点击复制图标取得 ID；Agent 不能仅凭标题猜测或批量转换 Todo。
 
-线上默认限制：
+## 7. 连接、审计与删除
 
-- 每个 credential 总计 60 次/分钟。
-- 搜索 tool 30 次/分钟。
-- 单个写 tool 10 次/分钟。
+- `/admin/mcp` 的“已连接 Agent 与本地导入器”展示客户端类型、名称、OAuth Client ID、scope、状态和最后使用时间。
+- OAuth Agent 与本地导入凭证均可独立撤销；OAuth 撤销同时清理 Consent、Access Token、Refresh Token 和 DCR Client。
+- 每次 Tool 调用先创建 `IN_PROGRESS` 审计，结束后更新为成功或失败；中断记录由维护任务修复为 `INTERRUPTED`。
+- 审计只保存 Tool、业务 ID、字段名和截断后的 metadata 摘要，不保存正文、Access Token、Refresh Token、固定凭证或上传 Token。
+- 有效凭证必须先撤销，待审批请求必须先批准、拒绝或过期，才能删除；审计可受控单条删除。
+- 默认每个连接 60 次/分钟；单个只读 Tool 30 次/分钟；单个写 Tool 10 次/分钟。
 
-生产环境可通过 `MCP_CREDENTIAL_RATE_LIMIT_PER_MINUTE`、`MCP_SEARCH_RATE_LIMIT_PER_MINUTE`、`MCP_WRITE_RATE_LIMIT_PER_MINUTE` 与 `MCP_APPROVAL_TTL_HOURS` 调整。Client 不能覆盖线上治理参数。
+## 8. OAuth 公共接口
 
-## 10. 本地诊断
+| 接口 | 用途 |
+|---|---|
+| `https://liaoqizai.site/api/mcp` | Streamable HTTP MCP Resource |
+| `https://liaoqizai.site/.well-known/oauth-protected-resource/api/mcp` | Resource Metadata |
+| `https://liaoqizai.site/.well-known/oauth-authorization-server/api/oauth` | Authorization Server Metadata |
+| `https://liaoqizai.site/api/oauth/oauth2/register` | DCR |
+| `https://liaoqizai.site/api/oauth/oauth2/authorize` | Authorization + PKCE |
+| `https://liaoqizai.site/api/oauth/oauth2/token` | Token 与刷新 |
+| `https://liaoqizai.site/api/oauth/oauth2/revoke` | Token 撤销 |
+| `https://liaoqizai.site/api/oauth/jwks` | ES256 JWKS |
 
-```powershell
-$env:DOTENV_CONFIG_PATH="C:\Users\you\site\.env.mcp.cursor.local"
-node .\node_modules\tsx\dist\cli.mjs .\mcp\server.ts
+只允许 `Authorization: Bearer` 传递 Access Token。Token 必须通过签名、`kid`、`iss`、精确 `aud`、有效期、管理员身份 `sub`、Client 和本地撤销状态校验。浏览器后台 Session 与已授权 Agent 的生命周期彼此独立，Agent 通过后台连接记录单独撤销。
+
+## 9. 验证
+
+```bash
+npm run test:mcp
+npm run test:mcp:gateway
+MCP_OAUTH_TEST_DATABASE_URL="postgresql://.../qz_mcp_test" npm run test:mcp:oauth
 ```
 
-看到 `QZ Blog MCP Server running on stdio` 后持续等待输入属于正常现象。Server 只把 JSON-RPC 协议写到 stdout，诊断信息写到 stderr。
+`test:mcp` 不需要数据库。`test:mcp:gateway` 使用测试数据库验证本地 Markdown 导入。`test:mcp:oauth` 会清空名称包含 `test` 的本机 PostgreSQL 数据库，完整验证旧密码迁移、DCR、PKCE、Consent、Token、刷新、撤销、双 Agent 隔离、审批、审计与改密会话失效，禁止指向生产数据库。

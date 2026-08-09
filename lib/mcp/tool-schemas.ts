@@ -38,12 +38,17 @@ export const todoToDraftInputSchema = z.object({
   mark_done: z.boolean().default(false),
 }).strict()
 
+export const getApprovalStatusInputSchema = z.object({
+  approval_id: z.string().min(1).max(128).describe("写操作返回的审批 ID"),
+}).strict()
+
 export const mcpToolInputSchemas = {
   create_draft_from_markdown: createDraftFromMarkdownInputSchema,
   search_drafts: searchDraftsInputSchema,
   update_draft_metadata: updateDraftMetadataInputSchema,
   create_category: createCategoryInputSchema,
   todo_to_draft: todoToDraftInputSchema,
+  get_approval_status: getApprovalStatusInputSchema,
 } as const
 
 export type McpToolName = keyof typeof mcpToolInputSchemas
@@ -52,6 +57,7 @@ export type SearchDraftsInput = z.infer<typeof searchDraftsInputSchema>
 export type UpdateDraftMetadataInput = z.infer<typeof updateDraftMetadataInputSchema>
 export type CreateCategoryInput = z.infer<typeof createCategoryInputSchema>
 export type TodoToDraftInput = z.infer<typeof todoToDraftInputSchema>
+export type GetApprovalStatusInput = z.infer<typeof getApprovalStatusInputSchema>
 
 export interface McpToolInputMap {
   create_draft_from_markdown: CreateDraftFromMarkdownInput
@@ -59,4 +65,5 @@ export interface McpToolInputMap {
   update_draft_metadata: UpdateDraftMetadataInput
   create_category: CreateCategoryInput
   todo_to_draft: TodoToDraftInput
+  get_approval_status: GetApprovalStatusInput
 }

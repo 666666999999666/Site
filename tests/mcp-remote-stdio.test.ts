@@ -27,7 +27,7 @@ function textResult(result: Awaited<ReturnType<Client["callTool"]>>) {
   return JSON.parse(content[0].text) as Record<string, unknown>
 }
 
-test("remote stdio mode transports local Markdown to the HTTPS gateway without a database", {
+test("local import stdio transports Markdown to the HTTPS gateway without exposing online tools", {
   timeout: 20_000,
 }, async () => {
   const sandbox = await mkdtemp(path.join(os.tmpdir(), "qz-mcp-remote-"))
@@ -84,10 +84,6 @@ test("remote stdio mode transports local Markdown to the HTTPS gateway without a
       response.end(JSON.stringify({ status: "pending_approval", approval_id: "approval-1" }))
       return
     }
-    if (recorded.method === "POST" && recorded.url === "/api/mcp/gateway/tools/search_drafts") {
-      response.end(JSON.stringify({ count: 1, results: [{ id: "draft-1", title: "线上草稿" }] }))
-      return
-    }
     response.statusCode = 404
     response.end(JSON.stringify({ error: "not found" }))
   })
@@ -124,6 +120,8 @@ test("remote stdio mode transports local Markdown to the HTTPS gateway without a
 
   try {
     await client.connect(transport)
+    const tools = await client.listTools()
+    assert.deepEqual(tools.tools.map((tool) => tool.name), ["create_draft_from_markdown"])
 
     const imported = textResult(await client.callTool({
       name: "create_draft_from_markdown",
@@ -132,13 +130,7 @@ test("remote stdio mode transports local Markdown to the HTTPS gateway without a
     assert.equal(imported.status, "pending_approval")
     assert.equal(imported.approval_id, "approval-1")
 
-    const searched = textResult(await client.callTool({
-      name: "search_drafts",
-      arguments: { title: "线上", status: "DRAFT", limit: 5 },
-    }))
-    assert.equal(searched.count, 1)
-
-    assert.ok(requests.length >= 5)
+    assert.ok(requests.length >= 4)
     assert.ok(requests.every((request) => request.authorization === "Bearer remote-test-credential"))
 
     const init = requests.find((request) => request.url === "/api/mcp/gateway/imports")
@@ -158,13 +150,7 @@ test("remote stdio mode transports local Markdown to the HTTPS gateway without a
     assert.equal(image.contentLength, String(onePixelPng.length))
     assert.deepEqual(image.body, onePixelPng)
 
-    const search = requests.find((request) => request.url.endsWith("/tools/search_drafts"))
-    assert.ok(search)
-    assert.deepEqual(JSON.parse(search.body.toString("utf8")), {
-      title: "线上",
-      status: "DRAFT",
-      limit: 5,
-    })
+    assert.equal(requests.some((request) => request.url.includes("/tools/")), false)
   } finally {
     await client.close().catch(() => undefined)
     await new Promise<void>((resolve) => server.close(() => resolve()))

@@ -45,3 +45,9 @@ Next.js 上游仍有公开问题跟踪 Sharp 告警：
 同步安全修复与 MCP 后，`npm audit fix` 在现有 semver 范围内更新了 Mermaid、DOMPurify、js-yaml 与 nanoid，清除了对应的 XSS、原型污染和 DoS 告警。随后重新通过单元测试、Lint、TypeScript、生产构建和真实浏览器 CSP/Mermaid 验证。
 
 `npm audit --omit=dev --registry=https://registry.npmjs.org` 仍报告 **2 项 High**，均来自 `next@16.2.12` 的 optional `sharp@0.34.x`。生产继续使用既有隔离：`images.unoptimized=true`、Nginx 拒绝 `/_next/image`，最终镜像删除 `sharp` 与 `@img`。自动强制修复会把 Next.js 改到当前固定版本之外，未在本次安全同步中执行。
+
+## 2026-08-09 OAuth MCP 复核
+
+引入稳定版 `@better-auth/oauth-provider@1.6.26` 后，审计结果为 **1 项 Moderate、2 项 High**。High 仍是上文已隔离的 Sharp 链路；Moderate 是 [GHSA-p2fr-6hmx-4528](https://github.com/advisories/GHSA-p2fr-6hmx-4528) 所述的 OAuth Resource Indicator 未绑定问题，当前没有可用修复版本。
+
+本站只有一个合法 Resource：`https://liaoqizai.site/api/mcp`。应用路由在 Authorization Code 和 Refresh Token 流程中都强制请求携带且只能携带这一精确 `resource`，Access Token 的 `aud` 也固定为同一地址；缺失、重复或错误 Resource 均由集成测试拒绝。因此公告中的跨 Resource 换取 Token 路径在本站不可达，但 `npm audit` 仍会按包版本报告该条目。Better Auth 发布修复版后应升级并保留这些应用层校验。

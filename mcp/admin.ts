@@ -5,7 +5,6 @@ import { listMcpAuditLogs } from "../lib/mcp/audit-service"
 import {
   createMcpCredential,
   listMcpCredentials,
-  MCP_SCOPES,
   revokeMcpCredential,
 } from "../lib/mcp/credential-service"
 
@@ -37,14 +36,14 @@ function print(value: unknown) {
 function usage(): never {
   throw new Error([
     "用法：",
-    "  npm run mcp:admin -- credential create --name <client> --scopes <scope,...>",
+    "  npm run mcp:admin -- credential create --name <local-importer>",
     "  npm run mcp:admin -- credential list",
     "  npm run mcp:admin -- credential revoke --id <credential-id>",
     "  npm run mcp:admin -- approval list [--status pending_approval|approved|rejected] [--limit 50]",
     "  npm run mcp:admin -- approval approve --id <approval-id>",
     "  npm run mcp:admin -- approval reject --id <approval-id> [--reason <reason>]",
     "  npm run mcp:admin -- audit list [--credential <id>] [--tool <name>] [--limit 50]",
-    `可用 scopes：${MCP_SCOPES.join(", ")}`,
+    "固定凭证仅用于本地 Markdown 导入，并固定授予 draft:create。",
   ].join("\n"))
 }
 
@@ -60,11 +59,10 @@ function approvalStatus(value: string | undefined) {
 async function main() {
   const [resource, action] = args
   if (resource === "credential" && action === "create") {
-    const scopes = requiredOption("scopes").split(",").map((scope) => scope.trim()).filter(Boolean)
-    const result = await createMcpCredential(requiredOption("name"), scopes)
+    const result = await createMcpCredential(requiredOption("name"))
     print({
       ...result,
-      warning: "token 只显示这一次；请立即写入对应 MCP client 的私密环境配置。",
+      warning: "token 只显示这一次；请立即写入本地 Markdown 导入器的私密环境配置。",
     })
     return
   }

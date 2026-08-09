@@ -1,44 +1,31 @@
 import "dotenv/config"
 import { fileURLToPath } from "url"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
+import { ConfigurationError } from "../lib/errors"
 import { loadMcpRuntimeConfig } from "../lib/mcp/config"
 
 process.chdir(fileURLToPath(new URL("../", import.meta.url)))
 
 async function main() {
   const config = loadMcpRuntimeConfig()
-  let disconnect: () => Promise<void> = async () => {}
-  let server
-
-  if (config.remoteUrl) {
-    const { createRemoteBlogMcpServer, verifyRemoteGateway } = await import("./remote-tools")
-    await verifyRemoteGateway(config)
-    server = createRemoteBlogMcpServer(config)
-  } else {
-    const [tools, credentials, rateLimits, database] = await Promise.all([
-      import("./tools"),
-      import("../lib/mcp/credential-service"),
-      import("../lib/mcp/rate-limit-service"),
-      import("../lib/db"),
-    ])
-    await credentials.authenticateMcpCredential(config.credential)
-    await rateLimits.cleanupMcpRateLimits()
-    disconnect = database.disconnectDatabase
-    server = tools.createBlogMcpServer(config)
+  if (!config.remoteUrl) {
+    throw new ConfigurationError("本地 Markdown 导入需要配置 MCP_REMOTE_URL")
   }
+  const { createMarkdownImportMcpServer, verifyRemoteGateway } = await import("./remote-tools")
+  await verifyRemoteGateway(config)
+  const server = createMarkdownImportMcpServer(config)
 
   const transport = new StdioServerTransport()
 
   const shutdown = async () => {
     await server.close()
-    await disconnect()
     process.exit(0)
   }
   process.once("SIGINT", shutdown)
   process.once("SIGTERM", shutdown)
 
   await server.connect(transport)
-  console.error("QZ Blog MCP Server running on stdio")
+  console.error("QZ Blog local Markdown import MCP running on stdio")
 }
 
 main().catch((error) => {

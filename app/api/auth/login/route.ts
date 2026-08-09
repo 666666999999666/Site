@@ -3,6 +3,7 @@ import { login } from "@/lib/auth/service"
 import { handleApiError } from "@/lib/api/handler"
 import { readJsonObject, validateLogin } from "@/lib/validation"
 import { validateOrigin } from "@/lib/csrf"
+import { copyAuthSetCookies } from "@/lib/auth/response"
 
 export async function POST(req: NextRequest) {
   try {
@@ -17,8 +18,11 @@ export async function POST(req: NextRequest) {
     const ip = req.headers.get("x-real-ip")
       || req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
       || "unknown"
-    const result = await login(body.password, ip)
-    return NextResponse.json(result)
+    const result = await login(body.password, ip, req.headers)
+    const response = NextResponse.json({ userId: result.userId, username: result.username })
+    copyAuthSetCookies(result.response, response)
+    response.headers.set("Cache-Control", "no-store")
+    return response
   } catch (e) {
     return handleApiError(e)
   }

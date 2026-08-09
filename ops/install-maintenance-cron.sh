@@ -30,6 +30,8 @@ awk '
     "$APP_DIR" "$BACKUP_DIR/maintenance.log"
   printf '0 9 * * 1 cd %q && bash ops/maintenance.sh ssl >> %q 2>&1\n' \
     "$APP_DIR" "$BACKUP_DIR/maintenance.log"
+  printf '15 * * * * cd %q && nice -n 10 bash ops/maintenance.sh mcp >> %q 2>&1\n' \
+    "$APP_DIR" "$BACKUP_DIR/maintenance.log"
   printf '# END QZSITE MANAGED\n'
 } >> "$updated"
 

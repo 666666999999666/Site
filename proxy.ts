@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import createIntlMiddleware from 'next-intl/middleware'
 import { routing } from './i18n/routing'
-import { getProxySession } from "@/lib/auth/session"
-import { findUserSessionState } from "@/lib/auth/repository"
+import { auth } from "@/lib/auth/better-auth"
 import { randomUUID } from "crypto"
 import { buildContentSecurityPolicy } from "@/lib/csp"
 
@@ -14,12 +13,8 @@ export async function proxy(req: NextRequest) {
 
   // 保护 /admin 路径（页面路由；API 路由由 handler 级 ensureAuthenticated 保护）
   if (pathname.startsWith("/admin")) {
-    const sessionCookie = req.cookies.get("blog_session")?.value
-    const session = await getProxySession(sessionCookie)
-    const user = session?.userId && typeof session.passwordVersion === "number"
-      ? await findUserSessionState(session.userId)
-      : null
-    if (!session || !user || user.passwordVersion !== session.passwordVersion) {
+    const session = await auth.api.getSession({ headers: req.headers })
+    if (!session?.user?.id) {
       // 未登录重定向到首页——首页响应会带 CSP，重定向本身无需 CSP
       const loginUrl = req.nextUrl.clone()
       loginUrl.pathname = "/"
@@ -27,6 +22,18 @@ export async function proxy(req: NextRequest) {
       return NextResponse.redirect(loginUrl)
     }
     // admin 放行：用 NextResponse.next({ request: { headers } }) 把 nonce 透传给 SSR
+    const nonce = Buffer.from(randomUUID()).toString("base64")
+    const csp = buildContentSecurityPolicy(nonce, process.env.NODE_ENV === "development")
+    const requestHeaders = new Headers(req.headers)
+    requestHeaders.set("x-nonce", nonce)
+    requestHeaders.set("Content-Security-Policy", csp)
+    const response = NextResponse.next({ request: { headers: requestHeaders } })
+    response.headers.set("Content-Security-Policy", csp)
+    return response
+  }
+
+  // OAuth 登录与授权页不属于多语言路由，直接放行并附加 CSP。
+  if (pathname.startsWith("/oauth")) {
     const nonce = Buffer.from(randomUUID()).toString("base64")
     const csp = buildContentSecurityPolicy(nonce, process.env.NODE_ENV === "development")
     const requestHeaders = new Headers(req.headers)
@@ -54,5 +61,5 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/(zh|en)/:path*', '/admin/:path*'],
+  matcher: ['/', '/(zh|en)/:path*', '/admin/:path*', '/oauth/:path*'],
 }
