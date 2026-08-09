@@ -138,13 +138,15 @@ bash ops/verify-backup.sh
 
 恢复验证会启动不映射端口的临时 PostgreSQL 容器，真实执行 `pg_restore` 并读取文章、项目、设置、Todo、用户和 migration 表，然后自动删除临时容器。备份默认保留 30 天。
 
-服务器定时任务由版本化脚本幂等安装：
+生产维护由 Gitee Go 的 `pipeline-maintenance.yml` 每小时第 15 分钟触发。调度脚本会幂等执行每日完整备份、每周隔离恢复验证、每周证书检查和每小时 MCP/OAuth 清理；失败任务不会写入完成标记，会在下一小时重试。
+
+只有在服务器具备 root 或免密 `sudo` 时，才使用主机 `cron` 作为替代方案：
 
 ```bash
 bash ops/maintenance.sh install-cron
 ```
 
-它会配置每日完整备份、每周隔离恢复验证和每周证书检查，并移除旧的数据库-only 备份任务。完整架构说明见 [`docs/architecture.md`](docs/architecture.md)，生产操作见 [`docs/operations.md`](docs/operations.md)，整机恢复见 [`docs/disaster-recovery.md`](docs/disaster-recovery.md)。
+主机 `cron` 会配置同等维护任务，并移除旧的数据库-only 备份任务。完整架构说明见 [`docs/architecture.md`](docs/architecture.md)，生产操作见 [`docs/operations.md`](docs/operations.md)，整机恢复见 [`docs/disaster-recovery.md`](docs/disaster-recovery.md)。
 
 ## 安全边界
 

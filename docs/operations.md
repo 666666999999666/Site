@@ -86,6 +86,7 @@ bash ops/maintenance.sh status
 
 | 动作 | 影响 |
 |---|---|
+| `scheduled` | 按北京时间幂等分派备份、恢复验证、证书检查和 MCP/OAuth 维护 |
 | `status` | 只读检查容器、发布来源和公开冒烟 |
 | `backup` | 创建完整生产备份集 |
 | `verify-backup` | 在隔离 PostgreSQL 容器恢复最新备份 |
@@ -100,22 +101,26 @@ bash ops/maintenance.sh status
 
 ## 5. 定时任务
 
-安装或更新：
+生产环境使用 Gitee Go 的 `pipeline-maintenance.yml`，每小时第 15 分钟触发一次 `scheduled`。脚本在 `backups/.maintenance-state` 保存完成标记：达到计划时间后的首次成功执行会写入标记，失败则由下一小时自动重试。
+
+当前计划：
+
+| 时间 | 动作 | 资源控制 |
+|---|---|---|
+| 每日 03:00 后首次触发 | 完整数据库与 uploads 备份 | 串行执行、进程锁保护 |
+| 每周日 03:00 后首次触发 | 在临时容器真实恢复最新备份 | 384MB/0.75 CPU |
+| 每周一 09:00 后首次触发 | 证书余量和 HTTPS 检查 | 轻量 |
+| 每小时第 15 分钟 | MCP/OAuth 过期数据维护 | 轻量 |
+
+此模式的主日志是 Gitee Go 构建日志。任务异常时保留失败日志和备份中间信息，不要直接删除；成功标记保留 45 天后自动清理。
+
+仅当服务器具备 root 或免密 `sudo` 时，才安装主机 `cron` 作为替代方案：
 
 ```bash
 bash ops/maintenance.sh install-cron
 ```
 
-脚本使用带标记的 crontab 区块，重复执行不会产生重复任务，并会删除旧的 `/home/ubuntu/backup-db.sh` 和 `/home/ubuntu/check-ssl.sh` 条目。当前计划：
-
-| 时间 | 动作 | 资源控制 |
-|---|---|---|
-| 每日 03:00 | 完整数据库与 uploads 备份 | `nice -n 10` |
-| 每周日 03:30 | 在临时容器真实恢复最新备份 | `nice -n 10`，384MB/0.75 CPU |
-| 每周一 09:00 | 证书余量和 HTTPS 检查 | 轻量 |
-| 每小时第 15 分钟 | MCP/OAuth 过期数据维护 | `nice -n 10`，轻量 |
-
-统一日志位于 `backups/maintenance.log`。定时任务异常时先保留日志和失败备份，不要直接删除。
+主机脚本使用带标记的 crontab 区块，重复执行不会产生重复任务，并会删除旧的 `/home/ubuntu/backup-db.sh` 和 `/home/ubuntu/check-ssl.sh` 条目。该模式的统一日志位于 `backups/maintenance.log`。当前 Gitee Agent 账户没有安装系统 crontab 所需权限，因此生产环境以 Gitee Go 调度为准。
 
 ## 6. 备份与验证
 
