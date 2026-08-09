@@ -7,12 +7,26 @@ chmod 700 "$BACKUP_DIR"
 
 existing="$(mktemp)"
 updated="$(mktemp)"
+installed="$(mktemp)"
 cleanup() {
-  rm -f -- "$existing" "$updated"
+  rm -f -- "$existing" "$updated" "$installed"
 }
 trap cleanup EXIT
 
-crontab -l > "$existing" 2>/dev/null || true
+cron_user="${MAINTENANCE_CRON_USER:-ubuntu}"
+id "$cron_user" >/dev/null 2>&1 || fail "Maintenance cron user does not exist: $cron_user"
+
+if [[ "$(id -u)" -eq 0 ]]; then
+  crontab_command=(crontab -u "$cron_user")
+elif command -v sudo >/dev/null 2>&1 && sudo -n true >/dev/null 2>&1; then
+  crontab_command=(sudo -n crontab -u "$cron_user")
+elif [[ "$(id -un)" == "$cron_user" ]]; then
+  crontab_command=(crontab)
+else
+  fail "Installing the maintenance cron requires non-interactive sudo access for $cron_user"
+fi
+
+"${crontab_command[@]}" -l > "$existing" 2>/dev/null || true
 awk '
   $0 == "# BEGIN QZSITE MANAGED" { managed = 1; next }
   $0 == "# END QZSITE MANAGED" { managed = 0; next }
@@ -35,5 +49,14 @@ awk '
   printf '# END QZSITE MANAGED\n'
 } >> "$updated"
 
-crontab "$updated"
-log "Managed maintenance cron entries installed"
+"${crontab_command[@]}" "$updated"
+"${crontab_command[@]}" -l > "$installed"
+
+grep -Fqx '# BEGIN QZSITE MANAGED' "$installed" || fail "Managed maintenance cron header was not installed"
+grep -Fq 'ops/maintenance.sh backup' "$installed" || fail "Database backup cron entry was not installed"
+grep -Fq 'ops/maintenance.sh verify-backup' "$installed" || fail "Backup verification cron entry was not installed"
+grep -Fq 'ops/maintenance.sh ssl' "$installed" || fail "SSL check cron entry was not installed"
+grep -Fq 'ops/maintenance.sh mcp' "$installed" || fail "MCP maintenance cron entry was not installed"
+grep -Fqx '# END QZSITE MANAGED' "$installed" || fail "Managed maintenance cron footer was not installed"
+
+log "Managed maintenance cron entries installed for $cron_user"
