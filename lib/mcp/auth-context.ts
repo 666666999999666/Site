@@ -8,7 +8,6 @@ import {
 } from "../auth/oauth-config"
 import { MCP_SCOPES, type McpScope } from "./scopes"
 import {
-  authenticateMcpCredential,
   ensureOAuthMcpCredential,
 } from "./credential-service"
 
@@ -96,15 +95,4 @@ export async function authenticateOAuthMcpRequest(request: Request): Promise<Mcp
     name: client.name || client.softwareId || "未命名 Agent",
     scopes,
   })
-}
-
-export async function authenticateStaticMcpContext(token: string): Promise<McpAuthenticatedContext> {
-  const credential = await authenticateMcpCredential(token)
-  return {
-    credentialId: credential.id,
-    clientName: credential.name,
-    authType: "static",
-    scopes: credential.scopes.filter((scope): scope is McpScope => MCP_SCOPES.includes(scope as McpScope)),
-    subject: credential.id,
-  }
 }

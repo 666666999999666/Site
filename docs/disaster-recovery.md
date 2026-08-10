@@ -134,8 +134,8 @@ docker compose --env-file .env up --detach --wait db
 
 6. 按第 5 节恢复数据库和 uploads。
 7. 运行 `ops/deploy.sh origin/main <web-image>`，让脚本完成完整备份、migration、Compose 切换、冒烟和 `.deploy-state` 重建。
-8. 安装或重新绑定 Gitee Agent，确认 `pipeline-maintenance.yml` 的每小时计划触发已恢复，并手动执行一次 `scheduled` 和 `status`。
-9. 仅当目标服务器使用主机定时任务且具备 root 或免密 `sudo` 时，运行 `bash ops/maintenance.sh install-cron`。
+8. 安装或重新绑定 Gitee Agent，确认自动部署流水线可用；`pipeline-maintenance.yml` 只保留为手动应急入口。
+9. 运行 `bash ops/maintenance.sh install-cron`，随后执行 `mcp` 和 `status`，确认用户 Cron 与 `backups/maintenance.log` 正常。
 
 不得从本地开发数据库、Seed 或空上传目录补生产数据。
 

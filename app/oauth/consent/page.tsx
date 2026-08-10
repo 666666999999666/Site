@@ -14,7 +14,7 @@ import { MCP_SCOPES } from "@/lib/mcp/scopes"
 export const metadata: Metadata = { title: "确认 Agent 权限" }
 
 const SCOPE_LABELS: Record<string, string> = {
-  "draft:create": "创建博客草稿审批",
+  "draft:import": "导入用户已有的 Markdown 草稿",
   "draft:read": "搜索草稿与文章元数据",
   "draft:update": "提交草稿元数据修改审批",
   "category:create": "提交新建分区审批",

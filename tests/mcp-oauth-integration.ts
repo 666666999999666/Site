@@ -6,13 +6,14 @@ import path from "node:path"
 import bcrypt from "bcryptjs"
 import { Client as PgClient } from "pg"
 
-const FINAL_MIGRATION = "20260809030000_better_auth_oauth_mcp"
+const OAUTH_MIGRATION = "20260809030000_better_auth_oauth_mcp"
+const FINAL_MIGRATION = "20260810090000_remote_oauth_markdown_import"
 const OLD_PASSWORD = "Old9Pass!"
 const NEW_PASSWORD = "oauth-test-password-2026-updated!"
 const ADMIN_ID = "oauth-admin"
 const ADMIN_EMAIL = "admin@liaoqizai.site"
 const ALL_SCOPES = [
-  "draft:create",
+  "draft:import",
   "draft:read",
   "draft:update",
   "category:create",
@@ -33,6 +34,10 @@ interface TokenResponse {
   expires_in: number
   token_type: string
   scope: string
+}
+
+function progress(step: string) {
+  process.stdout.write(`[oauth-integration] ${step}\n`)
 }
 
 function requireTestDatabaseUrl(): string {
@@ -57,7 +62,7 @@ async function resetDatabase(client: PgClient): Promise<string> {
     .sort()
   assert.ok(directories.includes(FINAL_MIGRATION))
 
-  for (const directory of directories.filter((name) => name < FINAL_MIGRATION)) {
+  for (const directory of directories.filter((name) => name < OAUTH_MIGRATION)) {
     const sql = await readFile(path.join(migrationsRoot, directory, "migration.sql"), "utf8")
     await client.query(sql)
   }
@@ -67,11 +72,39 @@ async function resetDatabase(client: PgClient): Promise<string> {
     'INSERT INTO "User" ("id", "username", "passwordHash", "passwordVersion") VALUES ($1, $2, $3, 1)',
     [ADMIN_ID, "admin", oldHash]
   )
-  const finalSql = await readFile(
-    path.join(migrationsRoot, FINAL_MIGRATION, "migration.sql"),
+  const oauthSql = await readFile(
+    path.join(migrationsRoot, OAUTH_MIGRATION, "migration.sql"),
     "utf8"
   )
+  await client.query(oauthSql)
+
+  const legacyClientId = "legacy-scope-migration-client"
+  const legacyCredentialId = randomUUID()
+  await client.query(`
+    INSERT INTO "OauthClient" ("id", "clientId", "redirectUris", "createdAt", "updatedAt")
+    VALUES ($1, $2, ARRAY['https://client.example/callback'], CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  `, [randomUUID(), legacyClientId])
+  await client.query(`
+    INSERT INTO "McpCredential"
+      ("id", "kind", "name", "oauthClientId", "oauthSubject", "scopes", "createdAt", "updatedAt")
+    VALUES (
+      $1, 'OAUTH', 'Legacy Agent', $2, $3, ARRAY['draft:create', 'draft:read'],
+      CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    )
+  `, [legacyCredentialId, legacyClientId, ADMIN_ID])
+
+  const finalSql = await readFile(path.join(migrationsRoot, FINAL_MIGRATION, "migration.sql"), "utf8")
   await client.query(finalSql)
+  const migratedCredential = await client.query<{ scopes: string[]; revokedAt: Date | null }>(`
+    SELECT "scopes", "revokedAt" FROM "McpCredential" WHERE "id" = $1
+  `, [legacyCredentialId])
+  assert.deepEqual(migratedCredential.rows[0].scopes, ["draft:import", "draft:read"])
+  assert.ok(migratedCredential.rows[0].revokedAt)
+  assert.equal((await client.query(
+    'SELECT COUNT(*)::int AS count FROM "OauthClient" WHERE "clientId" = $1',
+    [legacyClientId]
+  )).rows[0].count, 0)
+  await client.query('DELETE FROM "McpCredential" WHERE "id" = $1', [legacyCredentialId])
 
   const migrated = await client.query<{
     passwordVersion: number
@@ -170,6 +203,7 @@ async function main() {
   const pg = new PgClient({ connectionString: databaseUrl })
   await pg.connect()
   await resetDatabase(pg)
+  progress("migrations and legacy scope migration verified")
 
   let oauthRouteHandler: ((request: Request) => Promise<Response>) | null = null
   const server = createServer(async (request, response) => {
@@ -221,7 +255,12 @@ async function main() {
     import("../lib/mcp/audit-service"),
     import("../lib/mcp/maintenance-service"),
   ])
-  const oauthFetch = (pathname: string, init?: RequestInit) => fetch(`${origin}/api/oauth${pathname}`, {
+  progress("application modules loaded")
+  const timedFetch = (input: string | URL, init?: RequestInit) => fetch(input, {
+    ...init,
+    signal: init?.signal ?? AbortSignal.timeout(15_000),
+  })
+  const oauthFetch = (pathname: string, init?: RequestInit) => timedFetch(`${origin}/api/oauth${pathname}`, {
     ...init,
     redirect: "manual",
   })
@@ -323,6 +362,7 @@ async function main() {
     }),
   }))
   assert.equal(confidentialClient.status, 400)
+  progress("discovery and unauthenticated boundaries verified")
 
   const register = async (name: string): Promise<RegisteredClient> => {
     const redirectUri = `${origin}/oauth-test-callback/${encodeURIComponent(name)}`
@@ -359,6 +399,7 @@ async function main() {
     await auth.api.getSession({ headers: new Headers({ cookie: "admin_session=legacy-cookie" }) }),
     null
   )
+  progress("administrator login and legacy cookie rejection verified")
 
   const authorize = async (client: RegisteredClient): Promise<TokenResponse> => {
     const verifier = randomBytes(48).toString("base64url")
@@ -374,7 +415,7 @@ async function main() {
       prompt: "consent",
       resource: `${origin}/api/mcp`,
     }).toString()
-    const authorization = await fetch(authorizationUrl, { redirect: "manual" })
+    const authorization = await timedFetch(authorizationUrl, { redirect: "manual" })
     const signInLocation = await redirectTarget(authorization)
     const signInUrl = new URL(signInLocation, origin)
     assert.equal(signInUrl.pathname, "/oauth/sign-in")
@@ -462,10 +503,11 @@ async function main() {
 
   try {
     const [clientA, clientB] = await Promise.all([
-      register("Cursor Agent"),
-      register("Trae Agent"),
+      register("Trae Primary"),
+      register("Trae Secondary"),
     ])
     const abandonedClient = await register("Abandoned Agent")
+    progress("three public OAuth clients registered")
 
     const invalidRedirect = new URL(`${origin}/api/oauth/oauth2/authorize`)
     invalidRedirect.search = new URLSearchParams({
@@ -477,7 +519,7 @@ async function main() {
       code_challenge_method: "S256",
       resource: `${origin}/api/mcp`,
     }).toString()
-    const invalidRedirectResponse = await fetch(invalidRedirect, {
+    const invalidRedirectResponse = await timedFetch(invalidRedirect, {
       headers: { cookie: sessionCookie },
       redirect: "manual",
     })
@@ -492,7 +534,7 @@ async function main() {
       scope: ALL_SCOPES,
       resource: `${origin}/api/mcp`,
     }).toString()
-    const missingPkceResponse = await fetch(missingPkce, {
+    const missingPkceResponse = await timedFetch(missingPkce, {
       headers: { cookie: sessionCookie },
       redirect: "manual",
     })
@@ -501,6 +543,7 @@ async function main() {
 
     const tokenA = await authorize(clientA)
     const tokenB = await authorize(clientB)
+    progress("PKCE, consent, authorization code and access tokens verified")
     const refreshAResponse = await oauthFetch("/oauth2/token", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded", origin },
@@ -531,8 +574,8 @@ async function main() {
     const contextA = await authContext.authenticateOAuthMcpRequest(oauthRequest(refreshedA.access_token))
     const contextB = await authContext.authenticateOAuthMcpRequest(oauthRequest(tokenB.access_token))
     assert.notEqual(contextA.credentialId, contextB.credentialId)
-    assert.equal(contextA.clientName, "Cursor Agent")
-    assert.equal(contextB.clientName, "Trae Agent")
+    assert.equal(contextA.clientName, "Trae Primary")
+    assert.equal(contextB.clientName, "Trae Secondary")
 
     const marker = randomUUID()
     const bodyMarker = `private-body-${marker}`
@@ -548,6 +591,7 @@ async function main() {
     const todo = await prisma.todo.create({ data: { title: `OAuth Todo ${marker}` } })
     const config = {
       approvalTtlHours: 24,
+      importUploadTtlMinutes: 20,
       credentialRateLimit: 100,
       searchRateLimit: 20,
       writeRateLimit: 20,
@@ -601,6 +645,7 @@ async function main() {
     const updatedPost = await prisma.post.findUniqueOrThrow({ where: { id: post.id } })
     assert.equal(updatedPost.title, `OAuth approved title ${marker}`)
     assert.equal(updatedPost.content, bodyMarker)
+    progress("tool scopes, approvals and Agent isolation verified")
 
     const isolationTool = `oauth-isolation-${marker}`
     await rateLimitService.consumeMcpRateLimit({
@@ -683,6 +728,7 @@ async function main() {
     assert.doesNotMatch(serializedAudits, new RegExp(bodyMarker))
     assert.doesNotMatch(serializedAudits, new RegExp(refreshedA.access_token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
     assert.doesNotMatch(serializedAudits, new RegExp(tokenB.refresh_token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")))
+    progress("maintenance recovery and audit redaction verified")
 
     const session = await prisma.session.findFirstOrThrow({ where: { userId: ADMIN_ID } })
     const now = Math.floor(Date.now() / 1000)
@@ -712,13 +758,13 @@ async function main() {
       await assert.rejects(authContext.authenticateOAuthMcpRequest(oauthRequest(token)))
     }
 
-    const staticCredential = await credentials.createMcpCredential("OAuth remote rejection test")
     await assert.rejects(
-      authContext.authenticateOAuthMcpRequest(oauthRequest(staticCredential.token)),
+      authContext.authenticateOAuthMcpRequest(oauthRequest(
+        "qzmcp_v1_00000000-0000-4000-8000-000000000000_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+      )),
       /不能用于远程/
     )
-    await credentials.revokeMcpCredential(staticCredential.credential.id)
-    await credentials.deleteMcpCredential(staticCredential.credential.id)
+    progress("JWT claim and legacy credential rejection verified")
 
     await credentials.revokeMcpCredential(contextA.credentialId)
     await assert.rejects(
@@ -751,6 +797,7 @@ async function main() {
       }),
     })
     assert.ok(revokedRefresh.status >= 400)
+    progress("Agent and refresh token revocation verified")
 
     const beforePasswordChange = await prisma.user.findUniqueOrThrow({ where: { id: ADMIN_ID } })
     await authService.changeAdminPassword({
@@ -772,6 +819,7 @@ async function main() {
       oauthRequest(tokenB.access_token)
     )
     assert.equal(agentAfterPasswordChange.credentialId, contextB.credentialId)
+    progress("password migration compatibility and session revocation verified")
 
     const originalNodeEnv = process.env.NODE_ENV
     const originalSiteUrl = process.env.NEXT_PUBLIC_SITE_URL
@@ -794,10 +842,14 @@ async function main() {
       })
     }
 
-    process.stdout.write("OAuth 2.1 MCP integration test passed\n")
+    progress("OAuth 2.1 MCP integration test passed")
   } finally {
     oauthRouteHandler = null
-    await new Promise<void>((resolve) => server.close(() => resolve()))
+    await new Promise<void>((resolve) => {
+      server.close(() => resolve())
+      server.closeIdleConnections()
+      server.closeAllConnections()
+    })
     await prisma.$disconnect()
     await pg.query('DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public')
     await pg.end()
@@ -806,5 +858,5 @@ async function main() {
 
 main().catch((error) => {
   process.stderr.write(`${error instanceof Error ? error.stack : String(error)}\n`)
-  process.exitCode = 1
+  process.exit(1)
 })

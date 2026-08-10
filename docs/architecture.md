@@ -189,7 +189,7 @@ erDiagram
 | `Setting` | 公开站点信息 | API 只允许固定白名单键，不能变成任意配置存储 |
 | `User`、`Account`、`Session` | 单一管理员与数据库会话 | bcrypt 兼容字段同步；Seed 不覆盖现有密码；改密撤销全部会话 |
 | `OauthClient`、`OauthConsent`、`OauthAccessToken`、`OauthRefreshToken`、`Jwks` | OAuth 2.1 授权服务器 | 公开 DCR、强制 S256 PKCE、首次 Consent、短期 ES256 JWT、刷新轮换与撤销 |
-| `McpCredential` | Agent 或本地导入器身份 | OAuth Client 一对一映射；固定凭证只保存 scrypt Hash；支持 scope 与即时撤销 |
+| `McpCredential` | 远程 Agent 身份及旧版记录 | OAuth Client 一对一映射；支持 scope 与即时撤销；旧 STATIC 记录不再可认证 |
 | `McpApproval` | MCP 写操作审批 | 写请求默认 `PENDING_APPROVAL`，批准后才调用业务函数 |
 | `McpExecution` | 审批执行幂等记录 | 与业务写入同事务落库，进程中断后的重试不会重复创建资源 |
 | `McpAuditLog` | MCP 操作审计 | 保存参数/结果摘要，不保存 Markdown 正文或 token |
@@ -263,12 +263,12 @@ HTML 的 CSP 由 `proxy.ts` 按请求生成：脚本只允许同一 nonce 与受
 - 远程 Agent 只连接 `/api/mcp`。未认证响应通过 RFC 9728 Resource Metadata 启动 OAuth，固定 `qzmcp_v1_...` 凭证会被拒绝。
 - 每个 Agent 通过 DCR 创建独立公开 Client，使用 S256 PKCE 和首次 Consent；Access Token 是 15 分钟 ES256 JWT，Refresh Token 有效 30 天并轮换。
 - 资源服务器严格验证 JWKS `kid`、签名、`iss`、精确 `aud`、`exp`、`nbf`、管理员 `sub`、`azp`、Session、scope、Client 与本地 Credential 撤销状态。
-- 固定凭证只授予 `draft:create`，仅供本地 stdio 读取沙箱中的 Markdown/图片并调用 `/api/mcp/gateway/imports/*`。
+- `draft:import` 允许 Agent 搬运用户指定的 Markdown；正文与图片先进入私有暂存区，短期上传票据按 bundle、图片序号、大小和 SHA-256 限权，finalize 后仍需人工审批。
 - 每个请求只认证一次，再将统一 `McpAuthenticatedContext` 传入 Tool Service；审计、审批和限流均使用其中的 Credential ID，多个 Agent 不共用桶或记录。
 - 搜索和审批状态查询可立即执行；导入草稿、更新 metadata、创建分区和 Todo 转草稿只创建审批请求。OAuth Consent 不能替代逐次写审批。
 - 每次 Tool 调用先写 `IN_PROGRESS` 审计，结束后收尾；维护任务将中断项修复为 `INTERRUPTED`。审计不保存正文或任何 Token。
 - 人工批准时再次检查 credential/scope，并复用文章、分类与 Todo 业务函数；审批状态、幂等执行记录和业务写入尽量在同一事务中完成。
-- Markdown 与图片使用真实路径沙箱、大小/签名检查和审批前后 SHA-256 对比；`drafts/` 不进入 Git 或镜像。
+- 服务端不读取客户端磁盘路径；Trae 逐字读取用户指定文件并上传。服务端限制 Markdown/图片大小、数量、协议、真实文件签名和 SHA-256，正文与 Token 不进入审计。
 
 ## 7. 部署与数据安全
 

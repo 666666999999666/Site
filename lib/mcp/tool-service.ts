@@ -1,6 +1,5 @@
 import { resolveBlogCategory } from "../categories"
 import { extractPlainText } from "../content"
-import type { MarkdownImportPayload } from "../markdown-import"
 import { assertDraftMetadataTarget, searchPosts } from "../posts"
 import { getTodoForDraft } from "../todos"
 import { validateCategoryCreate, validatePostUpdate } from "../validation"
@@ -72,43 +71,6 @@ function metadataPreview(value: unknown): unknown {
   if (value === null) return null
   const serialized = JSON.stringify(value)
   return serialized.length <= 500 ? value : `${serialized.slice(0, 500)}…`
-}
-
-export async function requestPreparedMarkdownApproval(input: {
-  context: McpAuthenticatedContext
-  config: McpSecurityConfig
-  payload: MarkdownImportPayload
-  summary: {
-    sourceFile: string
-    title: string
-    category: string | null
-    tags: string[]
-    imageCount: number
-    sourceDigest: string
-  }
-}) {
-  return runAuthorizedMcpOperation({
-    context: input.context,
-    config: input.config,
-    toolName: "create_draft_from_markdown",
-    scope: "draft:create",
-    write: true,
-    parameterSummary: input.summary,
-    operation: async (credentialId) => {
-      const approval = await createMcpApproval({
-        credentialId,
-        toolName: "create_draft_from_markdown",
-        requiredScope: "draft:create",
-        payload: input.payload,
-        parameterSummary: input.summary,
-        ttlHours: input.config.approvalTtlHours,
-      })
-      return {
-        response: approvalResponse(approval, { draft: input.summary }),
-        audit: { approvalId: approval.id, status: "pending_approval" },
-      }
-    },
-  })
 }
 
 async function runSearchDrafts(context: McpAuthenticatedContext, config: McpSecurityConfig, rawInput: unknown) {
@@ -309,7 +271,10 @@ async function runGetApprovalStatus(context: McpAuthenticatedContext, config: Mc
   })
 }
 
-export type GatewayMcpToolName = Exclude<keyof McpToolInputMap, "create_draft_from_markdown">
+export type GatewayMcpToolName = Exclude<
+  keyof McpToolInputMap,
+  "begin_markdown_draft_import" | "finalize_markdown_draft_import"
+>
 
 export async function runGatewayMcpTool<Name extends GatewayMcpToolName>(
   context: McpAuthenticatedContext,

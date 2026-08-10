@@ -66,6 +66,9 @@ export const auth = betterAuth({
   advanced: {
     cookiePrefix: "qz_oauth",
     useSecureCookies: process.env.NODE_ENV === "production",
+    ipAddress: {
+      ipAddressHeaders: ["x-forwarded-for"],
+    },
     defaultCookieAttributes: {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",

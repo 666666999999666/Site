@@ -1,7 +1,27 @@
 import { z } from "zod"
 
-export const createDraftFromMarkdownInputSchema = z.object({
-  local_path: z.string().min(1).max(2048).describe("MCP_MARKDOWN_ROOT 内的 .md/.markdown 文件路径"),
+const markdownImportImageSchema = z.object({
+  reference: z.string().min(1).max(2048)
+    .describe("Markdown 中原样出现的本地图片相对引用，例如 ./images/cover.png"),
+  digest: z.string().regex(/^[a-f0-9]{64}$/)
+    .describe("本地图片原始字节的 SHA-256 小写十六进制摘要"),
+  size: z.number().int().min(1).max(5 * 1024 * 1024)
+    .describe("本地图片原始字节数，单张最多 5 MiB"),
+}).strict()
+
+export const beginMarkdownDraftImportInputSchema = z.object({
+  source_file: z.string().min(1).max(255)
+    .describe("用户指定 Markdown 文件的文件名，不要传完整本机路径"),
+  markdown: z.string().max(2_000_000)
+    .describe("从用户文件逐字读取的 Markdown 全文；禁止生成、续写或改写正文"),
+  images: z.array(markdownImportImageSchema).max(50)
+    .describe("Markdown 本地图片引用、大小与摘要；没有本地图片时传空数组"),
+}).strict()
+
+export const finalizeMarkdownDraftImportInputSchema = z.object({
+  bundle_id: z.string().uuid().describe("begin_markdown_draft_import 返回的导入会话 ID"),
+  upload_token: z.string().min(43).max(128)
+    .describe("begin_markdown_draft_import 返回的一次性短期上传票据"),
 }).strict()
 
 export const searchDraftsInputSchema = z.object({
@@ -43,7 +63,8 @@ export const getApprovalStatusInputSchema = z.object({
 }).strict()
 
 export const mcpToolInputSchemas = {
-  create_draft_from_markdown: createDraftFromMarkdownInputSchema,
+  begin_markdown_draft_import: beginMarkdownDraftImportInputSchema,
+  finalize_markdown_draft_import: finalizeMarkdownDraftImportInputSchema,
   search_drafts: searchDraftsInputSchema,
   update_draft_metadata: updateDraftMetadataInputSchema,
   create_category: createCategoryInputSchema,
@@ -52,7 +73,8 @@ export const mcpToolInputSchemas = {
 } as const
 
 export type McpToolName = keyof typeof mcpToolInputSchemas
-export type CreateDraftFromMarkdownInput = z.infer<typeof createDraftFromMarkdownInputSchema>
+export type BeginMarkdownDraftImportInput = z.infer<typeof beginMarkdownDraftImportInputSchema>
+export type FinalizeMarkdownDraftImportInput = z.infer<typeof finalizeMarkdownDraftImportInputSchema>
 export type SearchDraftsInput = z.infer<typeof searchDraftsInputSchema>
 export type UpdateDraftMetadataInput = z.infer<typeof updateDraftMetadataInputSchema>
 export type CreateCategoryInput = z.infer<typeof createCategoryInputSchema>
@@ -60,7 +82,8 @@ export type TodoToDraftInput = z.infer<typeof todoToDraftInputSchema>
 export type GetApprovalStatusInput = z.infer<typeof getApprovalStatusInputSchema>
 
 export interface McpToolInputMap {
-  create_draft_from_markdown: CreateDraftFromMarkdownInput
+  begin_markdown_draft_import: BeginMarkdownDraftImportInput
+  finalize_markdown_draft_import: FinalizeMarkdownDraftImportInput
   search_drafts: SearchDraftsInput
   update_draft_metadata: UpdateDraftMetadataInput
   create_category: CreateCategoryInput

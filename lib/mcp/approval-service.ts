@@ -3,25 +3,12 @@ import { createCategory } from "../categories"
 import { prisma } from "../db"
 import { ConflictError, NotFoundError, PermissionError, ValidationError } from "../errors"
 import { Prisma } from "../generated/prisma/client"
-import { materializeMarkdownImport } from "../markdown-import"
 import { createPost, updateDraftMetadata } from "../posts"
 import { todoToDraft } from "../todos"
 import { validateCategoryCreate, validatePostUpdate } from "../validation"
 import { errorDetails, recordMcpAudit } from "./audit-service"
-import { loadMcpFileConfig } from "./config"
 import { MCP_SCOPES, type McpScope, requireMcpScope } from "./credential-service"
 import { approvalDeletionBlockReason } from "./deletion-policy"
-
-const markdownPayloadSchema = z.object({
-  kind: z.literal("create_draft_from_markdown"),
-  sourcePath: z.string().min(1),
-  sourceDigest: z.string().regex(/^[a-f0-9]{64}$/),
-  images: z.array(z.object({
-    reference: z.string().min(1),
-    path: z.string().min(1),
-    digest: z.string().regex(/^[a-f0-9]{64}$/),
-  }).strict()).max(200),
-}).strict()
 
 const stagedMarkdownPayloadSchema = z.object({
   kind: z.literal("create_draft_from_staged_markdown"),
@@ -59,7 +46,6 @@ const todoPayloadSchema = z.object({
 }).strict()
 
 const actionPayloadSchema = z.discriminatedUnion("kind", [
-  markdownPayloadSchema,
   stagedMarkdownPayloadSchema,
   updatePayloadSchema,
   categoryPayloadSchema,
@@ -321,34 +307,6 @@ async function dispatchApproval(
   }
 
   switch (payload.kind) {
-    case "create_draft_from_markdown": {
-      const materialized = await materializeMarkdownImport(payload, loadMcpFileConfig())
-      try {
-        const execution = await runDatabaseExecution(approvalId, toolName, async (transaction) => {
-          const post = await createPost(materialized.input, transaction)
-          return {
-            postId: post.id,
-            title: post.title,
-            status: post.status,
-            importedImageCount: materialized.importedImages.length,
-          }
-        })
-        if (execution.reused) await materialized.cleanup()
-        return execution.result
-      } catch (error) {
-        let completedAfterError: JsonSummary | null = null
-        let executionStateKnown = true
-        try {
-          completedAfterError = await existingExecution(approvalId, toolName)
-        } catch (lookupError) {
-          executionStateKnown = false
-          console.error("[MCP execution reconciliation failure]", lookupError)
-        }
-        if (completedAfterError) return completedAfterError
-        if (executionStateKnown) await materialized.cleanup()
-        throw error
-      }
-    }
     case "create_draft_from_staged_markdown": {
       const { cleanupStagedImportBundle, materializeStagedMarkdownImport } = await import("./import-staging-service")
       const materialized = await materializeStagedMarkdownImport(payload.bundleId)

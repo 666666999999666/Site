@@ -1,24 +1,11 @@
-import { NextRequest } from "next/server"
-import { handleApiError } from "@/lib/api/handler"
-import { loadMcpSecurityConfig } from "@/lib/mcp/config"
-import { mcpBearerCredential, mcpJson, requireJsonContentType } from "@/lib/mcp/http"
-import { createRemoteImportBundle } from "@/lib/mcp/import-staging-service"
-import { authenticateStaticMcpContext } from "@/lib/mcp/auth-context"
-import { runMcpMaintenance } from "@/lib/mcp/maintenance-service"
+import { NextResponse } from "next/server"
 
-export async function POST(request: NextRequest) {
-  try {
-    requireJsonContentType(request)
-    const token = mcpBearerCredential(request)
-    const context = await authenticateStaticMcpContext(token)
-    await runMcpMaintenance().catch((error) => console.error("[MCP maintenance failure]", error))
-    const result = await createRemoteImportBundle({
-      context,
-      config: loadMcpSecurityConfig(),
-      value: await request.json(),
-    })
-    return mcpJson(result, { status: 201 })
-  } catch (error) {
-    return handleApiError(error)
-  }
+export function POST() {
+  return NextResponse.json(
+    {
+      error: "本地固定凭证导入已停用，请连接 /api/mcp 并使用 OAuth 远程导入工具",
+      code: "REMOTE_MCP_OAUTH_REQUIRED",
+    },
+    { status: 410, headers: { "Cache-Control": "no-store" } }
+  )
 }

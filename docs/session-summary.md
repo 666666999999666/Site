@@ -289,7 +289,7 @@ CI/CD 打通后，继续完善了网站功能。
 | 后台认证 | Better Auth 数据库 Session；密码界面保持单密码输入；改密同步兼容 Hash 并撤销全部后台 Session |
 | OAuth | 公开客户端 DCR、S256 PKCE、首次 Consent、15 分钟 ES256 Access Token、30 天轮换 Refresh Token |
 | MCP | URL-only Streamable HTTP；每个 Agent 独立身份、scope、限流、审批、审计与撤销 |
-| 本地导入 | 固定凭证只保留 `draft:create`，仅用于受限目录中的 Markdown/图片上传 |
+| Markdown 导入 | OAuth `draft:import` + 短期上传票据，Trae 只配置远程 URL，不再运行本地 stdio |
 | 运维 | OAuth discovery/MCP Challenge smoke；每小时清理过期审批、暂存、限流、审计和未完成 DCR Client |
 
 `iron-session` 已从当前代码和镜像依赖移除；`User.passwordHash` 与 `passwordVersion` 仅保留为密码兼容及旧镜像回滚字段。仓库保持公开是明确选择，因此真实密码、Token、`.env`、私钥和本地报告不得进入 Git。

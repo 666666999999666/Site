@@ -1,18 +1,10 @@
 import assert from "node:assert/strict"
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises"
-import os from "node:os"
-import path from "node:path"
 import test from "node:test"
 import {
+  markdownLocalImageReferences,
   parseMarkdownDraft,
-  prepareMarkdownImport,
   rewriteMarkdownImageReferences,
 } from "../lib/markdown-import"
-
-const onePixelPng = Buffer.from(
-  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
-  "base64"
-)
 
 test("parses frontmatter while preserving Markdown, mermaid, and KaTeX", () => {
   const raw = [
@@ -64,46 +56,25 @@ test("rewrites only parsed image destinations without touching code examples", (
   assert.match(rewritten, /公式 \$a_\(b\)\$/)
 })
 
-test("prepares sandboxed Markdown without storing the article body in approval payload", async () => {
-  const root = await mkdtemp(path.join(os.tmpdir(), "qz-mcp-markdown-"))
-  const assets = path.join(root, "assets")
-  await mkdir(assets)
-  await writeFile(path.join(assets, "cover.png"), onePixelPng)
-  await writeFile(path.join(root, "draft.md"), [
-    "---",
-    "title: 本地草稿",
-    "cover: ./assets/cover.png",
-    "---",
-    "",
-    "用户写的正文",
-    "",
-    "![封面](./assets/cover.png)",
+test("collects only local image references for remote upload", () => {
+  const draft = parseMarkdownDraft("draft.md", [
+    "![local](./assets/a.png)",
+    "![remote](https://example.com/a.png)",
+    "![stored](/uploads/existing.png)",
   ].join("\n"))
-
-  const prepared = await prepareMarkdownImport("draft.md", {
-    markdownRoot: root,
-    imageRoot: root,
-  })
-  assert.equal(prepared.summary.title, "本地草稿")
-  assert.equal(prepared.summary.imageCount, 1)
-  assert.equal(prepared.payload.images.length, 1)
-  assert.doesNotMatch(JSON.stringify(prepared.payload), /用户写的正文/)
+  assert.deepEqual(markdownLocalImageReferences(draft), ["./assets/a.png"])
 })
 
-test("rejects Markdown and image traversal outside configured roots", async () => {
-  const parent = await mkdtemp(path.join(os.tmpdir(), "qz-mcp-traversal-"))
-  const root = path.join(parent, "allowed")
-  await mkdir(root)
-  await writeFile(path.join(parent, "outside.md"), "# outside")
-  await writeFile(path.join(parent, "outside.png"), onePixelPng)
-  await writeFile(path.join(root, "draft.md"), "![escape](../outside.png)")
-
-  await assert.rejects(
-    prepareMarkdownImport("../outside.md", { markdownRoot: root, imageRoot: root }),
-    /超出允许目录/
-  )
-  await assert.rejects(
-    prepareMarkdownImport("draft.md", { markdownRoot: root, imageRoot: root }),
-    /超出允许目录/
-  )
+test("rejects unsafe image protocols and cross-platform absolute paths", () => {
+  for (const reference of [
+    "file:///etc/passwd",
+    "data:image/png;base64,AAAA",
+    "/etc/passwd",
+    "C:/secret.png",
+    "C:\\secret.png",
+    "\\\\server\\share\\secret.png",
+  ]) {
+    const draft = parseMarkdownDraft("draft.md", `![unsafe](${reference})`)
+    assert.throws(() => markdownLocalImageReferences(draft), /不允许|相对路径/)
+  }
 })

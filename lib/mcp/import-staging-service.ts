@@ -6,35 +6,27 @@ import { resolveBlogCategory } from "../categories"
 import { prisma } from "../db"
 import { ConflictError, NotFoundError, PermissionError, ValidationError } from "../errors"
 import { Prisma } from "../generated/prisma/client"
+import { mcpResourceUrl } from "../auth/oauth-config"
 import {
   MAX_MARKDOWN_BYTES,
   markdownLocalImageReferences,
   parseMarkdownDraft,
   rewriteMarkdownImageReferences,
 } from "../markdown-import"
-import { detectImageExtension, MAX_UPLOAD_BYTES, storeImageBuffer, uploadDirectory, uploadFilePath } from "../uploads"
+import { detectImageExtension, storeImageBuffer, uploadDirectory, uploadFilePath } from "../uploads"
 import { validatePostCreate } from "../validation"
 import { createMcpApproval } from "./approval-service"
 import type { McpSecurityConfig } from "./config"
 import type { McpAuthenticatedContext } from "./auth-context"
 import { runAuthorizedMcpOperation } from "./tool-service"
+import { beginMarkdownDraftImportInputSchema } from "./tool-schemas"
 
 const MAX_REMOTE_IMPORT_IMAGES = 50
 const MAX_REMOTE_IMPORT_IMAGE_BYTES = 50 * 1024 * 1024
 const BUNDLE_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
-const remoteImageSchema = z.object({
-  reference: z.string().min(1).max(2048),
-  digest: z.string().regex(/^[a-f0-9]{64}$/),
-  size: z.number().int().min(1).max(MAX_UPLOAD_BYTES),
-}).strict()
-
-export const remoteImportInitSchema = z.object({
-  source_file: z.string().min(1).max(255),
-  source_digest: z.string().regex(/^[a-f0-9]{64}$/),
-  markdown: z.string(),
-  images: z.array(remoteImageSchema).max(MAX_REMOTE_IMPORT_IMAGES),
-}).strict()
+const remoteImageSchema = beginMarkdownDraftImportInputSchema.shape.images.element
+export const remoteImportInitSchema = beginMarkdownDraftImportInputSchema
 
 const storedManifestSchema = z.object({
   summary: z.object({
@@ -86,7 +78,7 @@ function uploadTokenMatches(token: string, encodedHash: string): boolean {
 }
 
 function normalizedSourceFile(value: string): string {
-  const filename = path.basename(value.trim())
+  const filename = path.posix.basename(value.trim().replace(/\\/g, "/"))
   if (!filename || !/\.md(?:own)?$/i.test(filename)) {
     throw new ValidationError("只允许上传 .md 或 .markdown 文件")
   }
@@ -95,7 +87,7 @@ function normalizedSourceFile(value: string): string {
 
 function validatedManifest(input: z.infer<typeof remoteImportInitSchema>, sourceBuffer: Buffer): StoredManifest {
   if (sourceBuffer.length > MAX_MARKDOWN_BYTES) throw new ValidationError("Markdown 文件不能超过 2MB")
-  if (sha256(sourceBuffer) !== input.source_digest) throw new ValidationError("Markdown 摘要不匹配")
+  const sourceDigest = sha256(sourceBuffer)
   const sourceFile = normalizedSourceFile(input.source_file)
   const draft = parseMarkdownDraft(sourceFile, sourceBuffer.toString("utf8"))
   const expectedReferences = markdownLocalImageReferences(draft)
@@ -117,7 +109,7 @@ function validatedManifest(input: z.infer<typeof remoteImportInitSchema>, source
       category: draft.categoryReference,
       tags: draft.tags,
       imageCount: input.images.length,
-      sourceDigest: input.source_digest,
+      sourceDigest,
     },
     images: [...input.images]
       .sort((left, right) => left.reference.localeCompare(right.reference, "en"))
@@ -134,49 +126,56 @@ export async function createRemoteImportBundle(input: {
   config: McpSecurityConfig
   value: unknown
 }) {
-  const parsedResult = remoteImportInitSchema.safeParse(input.value)
-  if (!parsedResult.success) {
-    throw new ValidationError(parsedResult.error.issues[0]?.message ?? "MCP Markdown 导入参数无效")
-  }
-  const parsed = parsedResult.data
-  const sourceBuffer = Buffer.from(parsed.markdown, "utf8")
-  const manifest = validatedManifest(parsed, sourceBuffer)
   return runAuthorizedMcpOperation({
     context: input.context,
     config: input.config,
-    toolName: "create_draft_from_markdown.prepare",
-    scope: "draft:create",
+    toolName: "begin_markdown_draft_import",
+    scope: "draft:import",
     write: true,
-    parameterSummary: manifest.summary,
+    parameterSummary: { action: "prepare_remote_markdown_import" },
     operation: async (credentialId) => {
-      const pending = await prisma.mcpImportBundle.count({
-        where: {
-          credentialId,
-          approvalId: null,
-          cleanedAt: null,
-          expiresAt: { gt: new Date() },
-        },
-      })
-      if (pending >= 3) throw new ConflictError("该 MCP credential 已有 3 个未提交的导入会话")
-
+      const parsedResult = remoteImportInitSchema.safeParse(input.value)
+      if (!parsedResult.success) {
+        throw new ValidationError(parsedResult.error.issues[0]?.message ?? "MCP Markdown 导入参数无效")
+      }
+      const parsed = parsedResult.data
+      const sourceBuffer = Buffer.from(parsed.markdown, "utf8")
+      const manifest = validatedManifest(parsed, sourceBuffer)
       const id = randomUUID()
       const uploadToken = randomBytes(32).toString("base64url")
-      const expiresAt = new Date(Date.now() + input.config.approvalTtlHours * 60 * 60 * 1000)
+      const expiresAt = new Date(Date.now() + input.config.importUploadTtlMinutes * 60 * 1000)
       const directory = bundleDirectory(id)
-      await mkdir(stagingRoot(), { recursive: true })
-      await mkdir(directory, { mode: 0o700 })
       try {
-        await writeFile(sourcePath(id), sourceBuffer, { flag: "wx", mode: 0o600 })
-        await prisma.mcpImportBundle.create({
-          data: {
-            id,
-            credentialId,
-            sourceFile: manifest.summary.sourceFile,
-            sourceDigest: manifest.summary.sourceDigest,
-            manifest: jsonValue(manifest),
-            uploadTokenHash: sha256(uploadToken),
-            expiresAt,
-          },
+        await prisma.$transaction(async (transaction) => {
+          await transaction.$queryRaw`
+            SELECT "id" FROM "McpCredential" WHERE "id" = ${credentialId} FOR UPDATE
+          `
+          const pending = await transaction.mcpImportBundle.count({
+            where: {
+              credentialId,
+              approvalId: null,
+              cleanedAt: null,
+              expiresAt: { gt: new Date() },
+            },
+          })
+          if (pending >= 3) {
+            throw new ConflictError("该 MCP credential 已有 3 个未提交的导入会话")
+          }
+
+          await mkdir(stagingRoot(), { recursive: true })
+          await mkdir(directory, { mode: 0o700 })
+          await writeFile(sourcePath(id), sourceBuffer, { flag: "wx", mode: 0o600 })
+          await transaction.mcpImportBundle.create({
+            data: {
+              id,
+              credentialId,
+              sourceFile: manifest.summary.sourceFile,
+              sourceDigest: manifest.summary.sourceDigest,
+              manifest: jsonValue(manifest),
+              uploadTokenHash: sha256(uploadToken),
+              expiresAt,
+            },
+          })
         })
       } catch (error) {
         await removeBundleFiles(id)
@@ -188,6 +187,20 @@ export async function createRemoteImportBundle(input: {
           upload_token: uploadToken,
           image_count: manifest.images.length,
           expires_at: expiresAt.toISOString(),
+          upload_header: "X-MCP-Upload-Token",
+          uploads: manifest.images.map((image) => ({
+            index: image.index,
+            reference: image.reference,
+            size: image.size,
+            digest: image.digest,
+            url: new URL(
+              `/api/mcp/imports/${id}/images/${image.index}`,
+              mcpResourceUrl()
+            ).toString(),
+          })),
+          next_step: manifest.images.length > 0
+            ? "Use HTTP PUT to upload each referenced local image as raw bytes with the returned upload token header, then call finalize_markdown_draft_import."
+            : "Call finalize_markdown_draft_import now.",
         },
         audit: { bundleId: id, status: "uploading", imageCount: manifest.images.length },
       }
@@ -213,19 +226,22 @@ export async function storeRemoteImportImage(input: {
   bundleId: string
   uploadToken: string
   index: number
-  buffer: Buffer
+  declaredSize: number
+  readBuffer: () => Promise<Buffer>
 }) {
   const bundle = await loadActiveBundle(input.bundleId, input.uploadToken)
   if (bundle.approvalId) throw new ConflictError("MCP 导入会话已经提交审批")
   const expected = bundle.manifest.images.find((image) => image.index === input.index)
   if (!expected) throw new NotFoundError("MCP 导入图片不在清单中")
-  if (input.buffer.length !== expected.size) throw new ValidationError("MCP 导入图片大小不匹配")
-  if (sha256(input.buffer) !== expected.digest) throw new ValidationError("MCP 导入图片摘要不匹配")
-  if (!detectImageExtension(input.buffer)) throw new ValidationError("MCP 导入图片格式无效")
+  if (input.declaredSize !== expected.size) throw new ValidationError("MCP 导入图片大小不匹配")
+  const buffer = await input.readBuffer()
+  if (buffer.length !== expected.size) throw new ValidationError("MCP 导入图片大小不匹配")
+  if (sha256(buffer) !== expected.digest) throw new ValidationError("MCP 导入图片摘要不匹配")
+  if (!detectImageExtension(buffer)) throw new ValidationError("MCP 导入图片格式无效")
 
   const target = imagePath(bundle.id, expected.index)
   try {
-    await writeFile(target, input.buffer, { flag: "wx", mode: 0o600 })
+    await writeFile(target, buffer, { flag: "wx", mode: 0o600 })
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error
     const existing = await readFile(target)
@@ -255,14 +271,13 @@ export async function submitRemoteImportBundle(input: {
   bundleId: string
   config: McpSecurityConfig
 }) {
-  const initial = await loadActiveBundle(input.bundleId, input.uploadToken)
   return runAuthorizedMcpOperation({
     context: input.context,
     config: input.config,
-    toolName: "create_draft_from_markdown",
-    scope: "draft:create",
+    toolName: "finalize_markdown_draft_import",
+    scope: "draft:import",
     write: true,
-    parameterSummary: initial.manifest.summary,
+    parameterSummary: { bundleId: input.bundleId },
     operation: async (credentialId) => {
       const bundle = await loadActiveBundle(input.bundleId, input.uploadToken)
       if (bundle.credentialId !== credentialId) throw new PermissionError("MCP 导入会话不属于当前 credential")
@@ -283,8 +298,8 @@ export async function submitRemoteImportBundle(input: {
       const approval = await prisma.$transaction(async (transaction) => {
         const created = await createMcpApproval({
           credentialId,
-          toolName: "create_draft_from_markdown",
-          requiredScope: "draft:create",
+          toolName: "finalize_markdown_draft_import",
+          requiredScope: "draft:import",
           payload: { kind: "create_draft_from_staged_markdown", bundleId: bundle.id },
           parameterSummary: bundle.manifest.summary,
           ttlHours: input.config.approvalTtlHours,

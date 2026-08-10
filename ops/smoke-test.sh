@@ -48,7 +48,9 @@ curl --fail "${curl_args[@]}" "$site_url/sitemap.xml" > /dev/null
 
 resource_metadata="$(curl --fail "${curl_args[@]}" "$site_url/.well-known/oauth-protected-resource/api/mcp")"
 [[ "$resource_metadata" == *'"resource":"https://liaoqizai.site/api/mcp"'* \
-  && "$resource_metadata" == *'"authorization_servers":["https://liaoqizai.site/api/oauth"]'* ]] \
+  && "$resource_metadata" == *'"authorization_servers":["https://liaoqizai.site/api/oauth"]'* \
+  && "$resource_metadata" == *'"draft:import"'* \
+  && "$resource_metadata" != *'"draft:create"'* ]] \
   || fail "OAuth protected resource metadata is invalid"
 
 resource_alias="$(curl --fail "${curl_args[@]}" "$site_url/.well-known/oauth-protected-resource")"
@@ -76,6 +78,8 @@ mcp_status="$(
   || fail "Unauthenticated MCP request returned HTTP $mcp_status instead of 401"
 grep -Eiq 'www-authenticate:.*Bearer.*resource_metadata="https://liaoqizai.site/.well-known/oauth-protected-resource/api/mcp".*error="invalid_token"' "$tmp_dir/mcp.headers" \
   || fail "MCP 401 response did not include the OAuth resource challenge"
+grep -Eiq 'www-authenticate:.*scope="[^"]*draft:import[^"]*"' "$tmp_dir/mcp.headers" \
+  || fail "MCP 401 response did not advertise the remote Markdown import scope"
 
 origin_status="$(
   curl "${curl_args[@]}" \
@@ -101,5 +105,29 @@ legacy_gateway_status="$(
 )"
 [[ "$legacy_gateway_status" == "410" ]] \
   || fail "Legacy remote MCP gateway returned HTTP $legacy_gateway_status instead of 410"
+
+legacy_import_status="$(
+  curl "${curl_args[@]}" \
+    --output /dev/null \
+    --write-out '%{http_code}' \
+    --request POST \
+    --header 'Content-Type: application/json' \
+    --data '{}' \
+    "$site_url/api/mcp/gateway/imports"
+)"
+[[ "$legacy_import_status" == "410" ]] \
+  || fail "Legacy fixed-credential import returned HTTP $legacy_import_status instead of 410"
+
+upload_without_ticket_status="$(
+  curl "${curl_args[@]}" \
+    --output /dev/null \
+    --write-out '%{http_code}' \
+    --request PUT \
+    --header 'Content-Type: application/octet-stream' \
+    --data-binary 'x' \
+    "$site_url/api/mcp/imports/00000000-0000-4000-8000-000000000000/images/0"
+)"
+[[ "$upload_without_ticket_status" == "401" ]] \
+  || fail "Remote import upload without a ticket returned HTTP $upload_without_ticket_status instead of 401"
 
 log "Public smoke tests passed"

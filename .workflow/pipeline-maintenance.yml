@@ -14,7 +14,7 @@ stages:
     script: |-
       set -eu
       cd /home/ubuntu/个人网站
-      action="${MAINTENANCE_ACTION:-scheduled}"
+      action="${MAINTENANCE_ACTION:-status}"
       bash ops/maintenance.sh "$action"
     hostGroupID:
       ID: tencent-cloud
@@ -24,9 +24,7 @@ stages:
     strategy:
       retry: "0"
 triggers:
-  trigger: auto
-  schedule:
-  - cron: '* 15 * * * ? *'
+  trigger: manual
 notify: []
 variables:
   global:

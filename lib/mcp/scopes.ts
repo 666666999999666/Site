@@ -1,5 +1,5 @@
 export const MCP_SCOPES = [
-  "draft:create",
+  "draft:import",
   "draft:read",
   "draft:update",
   "category:create",

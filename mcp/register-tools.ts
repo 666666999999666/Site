@@ -1,8 +1,9 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
 import {
+  beginMarkdownDraftImportInputSchema,
   createCategoryInputSchema,
-  createDraftFromMarkdownInputSchema,
+  finalizeMarkdownDraftImportInputSchema,
   getApprovalStatusInputSchema,
   searchDraftsInputSchema,
   todoToDraftInputSchema,
@@ -11,8 +12,7 @@ import {
   type McpToolName,
 } from "../lib/mcp/tool-schemas"
 
-export type OnlineMcpToolName = Exclude<McpToolName, "create_draft_from_markdown">
-export type MarkdownImportMcpToolName = Extract<McpToolName, "create_draft_from_markdown">
+export type OnlineMcpToolName = McpToolName
 
 export type McpToolInvoker<Names extends McpToolName> = <Name extends Names>(
   name: Name,
@@ -21,7 +21,7 @@ export type McpToolInvoker<Names extends McpToolName> = <Name extends Names>(
 
 function createServer(name: string) {
   return new McpServer(
-    { name, version: "1.2.0" },
+    { name, version: "1.3.0" },
     {
       instructions: [
         "This server only transports and manages owner-authored blog drafts.",
@@ -34,6 +34,20 @@ function createServer(name: string) {
 
 export function createRegisteredOnlineMcpServer(invoke: McpToolInvoker<OnlineMcpToolName>) {
   const server = createServer("qz-blog-online")
+
+  server.registerTool("begin_markdown_draft_import", {
+    title: "准备导入 Markdown 草稿",
+    description: "读取用户明确指定的本机 Markdown 与其引用图片信息，创建短期上传会话。必须逐字搬运用户正文，禁止生成、续写或改写内容。返回的图片地址只接受对应原始图片字节。",
+    inputSchema: beginMarkdownDraftImportInputSchema,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  }, async (args) => invoke("begin_markdown_draft_import", args))
+
+  server.registerTool("finalize_markdown_draft_import", {
+    title: "提交 Markdown 草稿导入审批",
+    description: "所有本地图片按准备步骤返回的地址上传完成后，校验暂存内容并创建待人工审批的草稿导入请求；不会发布文章。",
+    inputSchema: finalizeMarkdownDraftImportInputSchema,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async (args) => invoke("finalize_markdown_draft_import", args))
 
   server.registerTool("search_drafts", {
     title: "搜索博客文章与草稿",
@@ -69,21 +83,6 @@ export function createRegisteredOnlineMcpServer(invoke: McpToolInvoker<OnlineMcp
     inputSchema: getApprovalStatusInputSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (args) => invoke("get_approval_status", args))
-
-  return server
-}
-
-export function createRegisteredMarkdownImportMcpServer(
-  invoke: McpToolInvoker<MarkdownImportMcpToolName>
-) {
-  const server = createServer("qz-blog-local-import")
-
-  server.registerTool("create_draft_from_markdown", {
-    title: "导入本地 Markdown 草稿",
-    description: "校验允许目录内的 Markdown 和本地图片，并上传为待人工审批的线上草稿导入请求。不会生成正文或直接发布文章。",
-    inputSchema: createDraftFromMarkdownInputSchema,
-    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
-  }, async (args) => invoke("create_draft_from_markdown", args))
 
   return server
 }

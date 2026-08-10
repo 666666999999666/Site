@@ -61,7 +61,9 @@ test("online tools work over stateless Streamable HTTP", async () => {
     assert.deepEqual(
       tools.tools.map((tool) => tool.name).sort(),
       [
+        "begin_markdown_draft_import",
         "create_category",
+        "finalize_markdown_draft_import",
         "get_approval_status",
         "search_drafts",
         "todo_to_draft",
@@ -69,13 +71,23 @@ test("online tools work over stateless Streamable HTTP", async () => {
       ]
     )
 
+    const begin = await client.callTool({
+      name: "begin_markdown_draft_import",
+      arguments: {
+        source_file: "owner-draft.md",
+        markdown: "---\ntitle: Owner draft\n---\n\nUser-authored body.",
+        images: [],
+      },
+    })
+    assert.notEqual(begin.isError, true)
+
     const result = await client.callTool({
       name: "get_approval_status",
       arguments: { approval_id: "approval-1" },
     })
     assert.notEqual(result.isError, true)
-    assert.equal(calls.length, 1)
-    assert.deepEqual(calls[0], {
+    assert.equal(calls.length, 2)
+    assert.deepEqual(calls[1], {
       name: "get_approval_status",
       input: { approval_id: "approval-1" },
     })

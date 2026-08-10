@@ -51,3 +51,13 @@ Next.js 上游仍有公开问题跟踪 Sharp 告警：
 引入稳定版 `@better-auth/oauth-provider@1.6.26` 后，审计结果为 **1 项 Moderate、2 项 High**。High 仍是上文已隔离的 Sharp 链路；Moderate 是 [GHSA-p2fr-6hmx-4528](https://github.com/advisories/GHSA-p2fr-6hmx-4528) 所述的 OAuth Resource Indicator 未绑定问题，当前没有可用修复版本。
 
 本站只有一个合法 Resource：`https://liaoqizai.site/api/mcp`。应用路由在 Authorization Code 和 Refresh Token 流程中都强制请求携带且只能携带这一精确 `resource`，Access Token 的 `aud` 也固定为同一地址；缺失、重复或错误 Resource 均由集成测试拒绝。因此公告中的跨 Resource 换取 Token 路径在本站不可达，但 `npm audit` 仍会按包版本报告该条目。Better Auth 发布修复版后应升级并保留这些应用层校验。
+
+## 2026-08-10 远程导入复核
+
+`npm audit --omit=dev --registry=https://registry.npmjs.org` 仍为 **1 项 Moderate、2 项 High**，没有新增公告。Registry 当前版本分别为 Next.js `16.3.0`、`@better-auth/oauth-provider` `1.6.26`、MCP SDK `1.30.0`、Sharp `0.35.3`。
+
+- OAuth Provider 仍没有稳定修复版；本站继续强制唯一 Resource、固定 `aud`，并在 Authorization Code 与 Refresh 两条路径拒绝缺失、重复和错误 Resource。
+- Next.js `16.3.0` 已可用，但它超出当前 `16.2.12` 固定版本。本轮同时迁移 OAuth scope、远程上传与生产调度，不叠加框架升级；Sharp 继续通过 `images.unoptimized`、Nginx 拒绝 `/_next/image` 和最终镜像删除 `sharp`/`@img` 隔离。
+- 远程 Markdown 图片上传不调用 Sharp，只用文件签名和 SHA-256 校验。无票据请求在读取 Body 前即返回 401，票据只绑定一个 bundle 中声明的图片。
+
+以上为明确接受的残余风险，不允许运行 `npm audit fix --force`。Next.js 升级应单独提交并完整回归编辑器、OAuth、MCP、公开图片和生产镜像内容。

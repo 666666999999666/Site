@@ -21,7 +21,7 @@
 5. [`docs/site-audit-and-improvement-plan.md`](docs/site-audit-and-improvement-plan.md)：改造前审计基线与已完成项，不是待办清单。
 6. [`docs/dependency-audit.md`](docs/dependency-audit.md)：依赖告警、处理方式与运行路径判断。
 7. [`docs/session-summary.md`](docs/session-summary.md)：历史建站过程，仅供追溯，不作为当前技术或运维依据。
-8. [`docs/local-mcp.md`](docs/local-mcp.md)：本地 stdio MCP、独立 credential、审批、审计与客户端配置。
+8. [`docs/local-mcp.md`](docs/local-mcp.md)：远程 OAuth MCP、Markdown 导入、审批、审计与 Trae 配置。
 
 ## 本地开发
 
@@ -51,11 +51,11 @@ npm run build
 
 ## 线上博客 MCP
 
-Cursor、Trae、Claude Code 等客户端通过 `https://liaoqizai.site/api/mcp` 的 Streamable HTTP 直接管理线上博客。只有导入本机 Markdown/图片时才启动受限 stdio 导入器；MCP Client 不直连生产数据库。
+Trae 通过 `https://liaoqizai.site/api/mcp` 的 Streamable HTTP 直接管理线上博客，包含本机 Markdown/图片的远程搬运；MCP Client 不直连生产数据库。
 
 它只负责导入用户已有 Markdown、搜索线上文章、修改草稿 metadata、创建分区、Todo 转草稿和查询审批状态，不提供正文生成、发布或删除工具。所有写操作先进入 `/admin/mcp`，由站长批准后在线上执行。
 
-远程客户端只需配置 MCP URL，首次连接时通过浏览器完成管理员登录、Agent 名称与权限确认；每个 Agent 会获得独立 OAuth 身份，可单独撤销、审计和限流。固定 credential 只用于本地 Markdown/图片导入。完整配置见 [`docs/local-mcp.md`](docs/local-mcp.md)。
+Trae 只需配置 MCP URL，首次连接时通过浏览器完成管理员登录、Agent 名称与权限确认；每个 Agent 会获得独立 OAuth 身份，可单独撤销、审计和限流。Markdown 与图片通过短期、单会话上传票据搬运，不再使用固定 credential 或本地 stdio。完整配置见 [`docs/local-mcp.md`](docs/local-mcp.md)。
 
 ## 数据变更
 
@@ -117,7 +117,7 @@ bash ops/deploy.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
 
 部署脚本会串行加锁、创建部署前备份、把候选镜像解析为不可变 digest，并校验镜像内源码指纹与目标 Git 提交一致。切换后等待数据库/Web/Nginx 全部 Healthy，执行中英文页面、未登录写保护和站点基础文件冒烟测试，再把提交、digest 和指纹写入 `.deploy-state`。失败时输出诊断并恢复上一版本代码、镜像和部署状态。数据库 migration 仍应设计为向后兼容，因为应用回滚不会自动逆转数据库变更。
 
-仓库中共有两份 Gitee Go 定义：`pipeline-deploy` 在 `main` 推送时自动构建、部署并执行维护入口的 `status`；`pipeline-maintenance` 只在故障、临时备份、恢复验证或证书轮换时手动执行固定动作。它不接受任意 Shell，也不需要日常人工点击。GitHub 当前只作为代码镜像仓库，不运行部署或生产维护工作流。
+仓库中共有两份 Gitee Go 定义：`pipeline-deploy` 在 `main` 推送时自动构建、部署、幂等安装服务器 Cron 并执行 `status`；`pipeline-maintenance` 只在故障、临时备份、恢复验证或证书轮换时手动执行固定动作。它不接受任意 Shell，也不承担自动定时调度。GitHub 当前只作为代码镜像仓库，不运行部署或生产维护工作流。
 
 生产机是 2 核 2G 规格，禁止在服务器执行 `docker build`、`npm ci`、`next build` 或全量测试。Compose 将数据库、Web 和 Nginx 分别限制为 512MB、768MB 和 128MB；主机保留 1GB、`swappiness=10` 的应急 Swap。镜像编译和完整质量检查只能在本地或托管 CI 完成。
 
@@ -138,15 +138,13 @@ bash ops/verify-backup.sh
 
 恢复验证会启动不映射端口的临时 PostgreSQL 容器，真实执行 `pg_restore` 并读取文章、项目、设置、Todo、用户和 migration 表，然后自动删除临时容器。备份默认保留 30 天。
 
-生产维护由 Gitee Go 的 `pipeline-maintenance.yml` 每小时第 15 分钟触发。调度脚本会幂等执行每日完整备份、每周隔离恢复验证、每周证书检查和每小时 MCP/OAuth 清理；失败任务不会写入完成标记，会在下一小时重试。
-
-只有在服务器具备 root 或免密 `sudo` 时，才使用主机 `cron` 作为替代方案：
+生产维护由服务器用户 Cron 直接调度：每日 03:00 完整备份、每周日 03:30 隔离恢复验证、每周一 09:00 证书检查、每小时第 15 分钟清理 MCP/OAuth 过期数据。部署流水线每次都会幂等同步这组任务：
 
 ```bash
 bash ops/maintenance.sh install-cron
 ```
 
-主机 `cron` 会配置同等维护任务，并移除旧的数据库-only 备份任务。完整架构说明见 [`docs/architecture.md`](docs/architecture.md)，生产操作见 [`docs/operations.md`](docs/operations.md)，整机恢复见 [`docs/disaster-recovery.md`](docs/disaster-recovery.md)。
+Cron 安装会移除旧的数据库-only 备份和证书任务，统一日志写入 `backups/maintenance.log`。完整架构说明见 [`docs/architecture.md`](docs/architecture.md)，生产操作见 [`docs/operations.md`](docs/operations.md)，整机恢复见 [`docs/disaster-recovery.md`](docs/disaster-recovery.md)。
 
 ## 安全边界
 

@@ -6,11 +6,9 @@ import {
   Ban,
   Check,
   CheckCircle2,
-  Clipboard,
   Clock3,
   KeyRound,
   Laptop,
-  Plus,
   RefreshCw,
   ShieldCheck,
   Trash2,
@@ -21,16 +19,6 @@ import { apiRequest, jsonRequest } from "@/lib/api-client"
 import { type McpScope } from "@/lib/mcp/scopes"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 
 type ApprovalStatus = "PENDING_APPROVAL" | "APPROVED" | "REJECTED"
@@ -83,7 +71,7 @@ interface AuditLogView {
 }
 
 const scopeLabels: Record<McpScope, string> = {
-  "draft:create": "创建草稿",
+  "draft:import": "导入 Markdown 草稿",
   "draft:read": "查询草稿",
   "draft:update": "修改元数据",
   "category:create": "创建分类",
@@ -91,8 +79,8 @@ const scopeLabels: Record<McpScope, string> = {
 }
 
 const toolLabels: Record<string, string> = {
-  create_draft_from_markdown: "导入 Markdown 草稿",
-  "create_draft_from_markdown.prepare": "准备 Markdown 导入",
+  begin_markdown_draft_import: "准备 Markdown 导入",
+  finalize_markdown_draft_import: "提交 Markdown 导入审批",
   search_drafts: "搜索草稿",
   update_draft_metadata: "修改草稿元数据",
   create_category: "创建分类",
@@ -144,54 +132,18 @@ export function McpManager({
   auditLogs: AuditLogView[]
 }) {
   const router = useRouter()
-  const [createOpen, setCreateOpen] = useState(false)
-  const [tokenOpen, setTokenOpen] = useState(false)
-  const [credentialName, setCredentialName] = useState("")
-  const [oneTimeToken, setOneTimeToken] = useState("")
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [error, setError] = useState("")
-  const [copied, setCopied] = useState(false)
 
   const pendingApprovals = useMemo(
     () => approvals.filter((approval) => approval.status === "PENDING_APPROVAL"),
     [approvals]
   )
 
-  async function createCredential() {
-    if (!credentialName.trim()) return
-    setBusyKey("create")
-    setError("")
-    try {
-      const result = await apiRequest<{ token: string }>(
-        "/api/mcp/admin/credentials",
-        jsonRequest("POST", { name: credentialName.trim() })
-      )
-      setOneTimeToken(result.token)
-      setCredentialName("")
-      setCreateOpen(false)
-      setTokenOpen(true)
-      router.refresh()
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "创建 MCP credential 失败")
-    } finally {
-      setBusyKey(null)
-    }
-  }
-
-  async function copyToken() {
-    try {
-      await navigator.clipboard.writeText(oneTimeToken)
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1500)
-    } catch {
-      setError("浏览器未允许复制，请手动选择 credential")
-    }
-  }
-
   async function revokeCredential(credential: CredentialView) {
     const effect = credential.kind === "OAUTH"
       ? "该 Agent 的授权、令牌和客户端注册会立即失效。"
-      : "该本地导入器会立即无法继续上传 Markdown。"
+      : "该旧版本地导入凭证会立即失效。"
     if (!window.confirm(`撤销“${credential.name}”？${effect}`)) return
     setBusyKey(`credential:${credential.id}`)
     setError("")
@@ -275,14 +227,10 @@ export function McpManager({
 
         <TabsContent value="credentials">
           <div className="mb-4 flex items-center justify-between gap-3">
-            <h2 className="font-medium">已连接 Agent 与本地导入器</h2>
-            <Button type="button" onClick={() => setCreateOpen(true)}>
-              <Plus className="size-4" />
-              创建本地导入凭证
-            </Button>
+            <h2 className="font-medium">已连接 Agent</h2>
           </div>
           {credentials.length === 0 ? (
-            <EmptyState icon={KeyRound} text="暂无 Agent 连接或本地导入器" />
+            <EmptyState icon={KeyRound} text="暂无已授权 Agent" />
           ) : (
             <div className="overflow-x-auto rounded-md border border-border">
               <table className="w-full min-w-[760px] text-left text-sm">
@@ -304,7 +252,7 @@ export function McpManager({
                           {credential.name}
                         </div>
                         <Badge variant="outline" className="mt-1.5">
-                          {credential.kind === "OAUTH" ? "OAuth Agent" : "本地 Markdown 导入"}
+                          {credential.kind === "OAUTH" ? "OAuth Agent" : "旧版本地凭证"}
                         </Badge>
                         {credential.oauthClientId && (
                           <div className="mt-1 break-all font-mono text-xs text-muted-foreground" title={credential.oauthClientId}>
@@ -518,72 +466,6 @@ export function McpManager({
         </TabsContent>
       </Tabs>
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>创建本地 Markdown 导入凭证</DialogTitle>
-            <DialogDescription>仅用于本机 stdio 导入器，固定授予创建草稿审批权限。</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="mcp-credential-name">导入器名称</Label>
-              <Input
-                id="mcp-credential-name"
-                value={credentialName}
-                onChange={(event) => setCredentialName(event.target.value)}
-                placeholder="例如：主电脑 Markdown 导入"
-                maxLength={80}
-                autoFocus
-              />
-            </div>
-            <div className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm">
-              <ShieldCheck className="size-4 text-muted-foreground" />
-              <span>{scopeLabels["draft:create"]}</span>
-              <code className="ml-auto text-xs text-muted-foreground">draft:create</code>
-            </div>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setCreateOpen(false)}>取消</Button>
-            <Button
-              type="button"
-              onClick={createCredential}
-              disabled={busyKey === "create" || !credentialName.trim()}
-            >
-              <KeyRound className="size-4" />
-              创建
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={tokenOpen}
-        onOpenChange={(open) => {
-          setTokenOpen(open)
-          if (!open) {
-            setOneTimeToken("")
-            setCopied(false)
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>本地导入 credential 仅显示一次</DialogTitle>
-            <DialogDescription>关闭后无法再次查看，只能撤销并重新创建。</DialogDescription>
-          </DialogHeader>
-          <div className="flex min-w-0 items-stretch gap-2">
-            <code className="min-w-0 flex-1 select-all break-all rounded-md border border-border bg-muted/50 p-3 text-xs leading-5">
-              {oneTimeToken}
-            </code>
-            <Button type="button" variant="outline" size="icon" onClick={copyToken} aria-label="复制 credential" title="复制 credential">
-              {copied ? <Check className="size-4" /> : <Clipboard className="size-4" />}
-            </Button>
-          </div>
-          <DialogFooter>
-            <Button type="button" onClick={() => setTokenOpen(false)}>完成</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </>
   )
 }

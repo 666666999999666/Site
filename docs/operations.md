@@ -41,6 +41,7 @@ Gitee Agent 执行：
 
 ```bash
 bash ops/deploy.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
+bash ops/maintenance.sh install-cron
 bash ops/maintenance.sh status
 ```
 
@@ -86,7 +87,6 @@ bash ops/maintenance.sh status
 
 | 动作 | 影响 |
 |---|---|
-| `scheduled` | 按北京时间幂等分派备份、恢复验证、证书检查和 MCP/OAuth 维护 |
 | `status` | 只读检查容器、发布来源和公开冒烟 |
 | `backup` | 创建完整生产备份集 |
 | `verify-backup` | 在隔离 PostgreSQL 容器恢复最新备份 |
@@ -101,26 +101,24 @@ bash ops/maintenance.sh status
 
 ## 5. 定时任务
 
-生产环境使用 Gitee Go 的 `pipeline-maintenance.yml`，每小时第 15 分钟触发一次 `scheduled`。脚本在 `backups/.maintenance-state` 保存完成标记：达到计划时间后的首次成功执行会写入标记，失败则由下一小时自动重试。
+生产环境以 `ubuntu` 用户 Cron 作为唯一自动调度源。`pipeline-deploy` 每次发布后运行 `install-cron` 幂等同步任务；Gitee Go 的 `pipeline-maintenance` 仅供手动应急，不设置定时触发，避免重复备份和重复维护。
 
 当前计划：
 
 | 时间 | 动作 | 资源控制 |
 |---|---|---|
-| 每日 03:00 后首次触发 | 完整数据库与 uploads 备份 | 串行执行、进程锁保护 |
-| 每周日 03:00 后首次触发 | 在临时容器真实恢复最新备份 | 384MB/0.75 CPU |
-| 每周一 09:00 后首次触发 | 证书余量和 HTTPS 检查 | 轻量 |
+| 每日 03:00 | 完整数据库与 uploads 备份 | 串行执行、进程锁保护 |
+| 每周日 03:30 | 在临时容器真实恢复最新备份 | 384MB/0.75 CPU |
+| 每周一 09:00 | 证书余量和 HTTPS 检查 | 轻量 |
 | 每小时第 15 分钟 | MCP/OAuth 过期数据维护 | 轻量 |
 
-此模式的主日志是 Gitee Go 构建日志。任务异常时保留失败日志和备份中间信息，不要直接删除；成功标记保留 45 天后自动清理。
-
-仅当服务器具备 root 或免密 `sudo` 时，才安装主机 `cron` 作为替代方案：
+安装或修复调度：
 
 ```bash
 bash ops/maintenance.sh install-cron
 ```
 
-主机脚本使用带标记的 crontab 区块，重复执行不会产生重复任务，并会删除旧的 `/home/ubuntu/backup-db.sh` 和 `/home/ubuntu/check-ssl.sh` 条目。该模式的统一日志位于 `backups/maintenance.log`。当前 Gitee Agent 账户没有安装系统 crontab 所需权限，因此生产环境以 Gitee Go 调度为准。
+脚本使用带标记的 crontab 区块，重复执行不会产生重复任务，并会删除旧的 `/home/ubuntu/backup-db.sh` 和 `/home/ubuntu/check-ssl.sh` 条目。统一日志位于 `backups/maintenance.log`；任务失败时保留日志和备份中间信息，不直接删除。
 
 ## 6. 备份与验证
 
@@ -210,7 +208,7 @@ bash ops/cleanup-uploads.sh --dry-run
 - Web 使用非 Root `node` 用户，Nginx 只读挂载 uploads。
 - 后台密码若曾经通过聊天传输，站点所有者必须在后台改为新的独立长密码。
 - Better Auth Session、OAuth 内部密钥和 JWKS 私钥都由生产 `SESSION_SECRET` 保护；轮换该值会使现有后台 Session 和加密 JWKS 私钥失效，必须按计划重新登录并重新授权 Agent。
-- 远程 Agent 不保存固定凭证；本地 Markdown 导入的 `qzmcp_v1_...` 只写入本机忽略文件，泄露时在 `/admin/mcp` 撤销。
+- 远程 Agent 只使用 OAuth；Markdown 图片上传票据短期、单会话有效且数据库只保存 Hash。旧 `qzmcp_v1_...` 固定凭证已停用。
 - 当前两条 `authorized_keys` 保持不变，按站点所有者要求由其最后自行移除。
 
 Gitee Agent 由 `gitee-go-agent.service` 管理，限制为 256MB 内存和 50% CPU。云控制台应急检查：
