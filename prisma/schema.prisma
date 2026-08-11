@@ -91,6 +91,7 @@ model Todo {
   dueDate     DateTime?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+  dailyTasks  DailyTask[]
 
   @@index([status])
   @@index([categoryId])
@@ -114,6 +115,64 @@ model User {
   oauthRefreshTokens OauthRefreshToken[]
   oauthAccessTokens  OauthAccessToken[]
   oauthConsents      OauthConsent[]
+  dailyPlans         DailyPlan[]
+}
+
+model DailyQuote {
+  id             Int       @id @default(autoincrement())
+  quote          String    @db.Text
+  category       String    @db.VarChar(32)
+  author         String?   @db.VarChar(120)
+  source         String?   @db.VarChar(200)
+  sourceDetail   String?   @map("source_detail") @db.VarChar(200)
+  usedDate       DateTime? @unique @map("used_date") @db.Date
+  normalizedHash String    @unique @map("normalized_hash") @db.VarChar(64)
+  status         Boolean   @default(true)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  plans          DailyPlan[]
+
+  @@index([status, category])
+  @@map("daily_quotes")
+}
+
+model DailyPlan {
+  id            String      @id @default(cuid())
+  userId        String      @map("user_id")
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planDate      DateTime    @map("plan_date") @db.Date
+  quoteId       Int?        @map("quote_id")
+  quote         DailyQuote? @relation(fields: [quoteId], references: [id], onDelete: SetNull)
+  quoteText     String      @map("quote_text") @db.Text
+  quoteCategory String      @map("quote_category") @db.VarChar(32)
+  quoteAuthor   String?     @map("quote_author") @db.VarChar(120)
+  quoteSource   String?     @map("quote_source") @db.VarChar(200)
+  quoteSourceDetail String? @map("quote_source_detail") @db.VarChar(200)
+  tasks         DailyTask[]
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  @@unique([userId, planDate])
+  @@index([userId, planDate(sort: Desc)])
+  @@map("daily_plans")
+}
+
+model DailyTask {
+  id           String    @id @default(cuid())
+  planId       String    @map("plan_id")
+  plan         DailyPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  slot         Int
+  title        String    @db.VarChar(300)
+  completedAt  DateTime? @map("completed_at")
+  sourceTodoId String?   @map("source_todo_id")
+  sourceTodo   Todo?     @relation(fields: [sourceTodoId], references: [id], onDelete: SetNull)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@unique([planId, slot])
+  @@unique([planId, sourceTodoId])
+  @@index([sourceTodoId])
+  @@map("daily_tasks")
 }
 
 model Session {

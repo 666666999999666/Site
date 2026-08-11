@@ -2,11 +2,24 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { Bot, FileText, ListTodo, Settings, Home, FolderKanban } from "lucide-react"
+import {
+  Bot,
+  CalendarDays,
+  FileText,
+  FolderKanban,
+  LayoutDashboard,
+  ListTodo,
+  MessageSquareQuote,
+  Settings,
+  Sun,
+} from "lucide-react"
 import { cn } from "@/lib/utils"
 
 const items = [
-  { href: "/admin", label: "概览", icon: Home },
+  { href: "/admin", label: "今日三件事", icon: Sun },
+  { href: "/admin/overview", label: "概览", icon: LayoutDashboard },
+  { href: "/admin/daily/history", label: "历史记录", icon: CalendarDays },
+  { href: "/admin/daily/quotes", label: "每日提醒语", icon: MessageSquareQuote },
   { href: "/admin/posts", label: "文章", icon: FileText },
   { href: "/admin/projects", label: "项目管理", icon: FolderKanban },
   { href: "/admin/todos", label: "Todo / Idea", icon: ListTodo },
