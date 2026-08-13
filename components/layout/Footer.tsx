@@ -17,7 +17,15 @@ export function Footer({ ownerName }: { ownerName: string }) {
             target="_blank"
             rel="noopener noreferrer"
           >
-            豫ICP备2026034998号
+            豫ICP备2026034998号-1
+          </a>
+          <span className="mx-1">|</span>
+          <a
+            href="http://www.beian.gov.cn/portal/registerSystemInfo?recordcode=46020002000486"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            琼公网安备46020002000486号
           </a>
         </p>
       </Container>
