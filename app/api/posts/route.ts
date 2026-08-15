@@ -4,6 +4,8 @@ import { handleApiError } from "@/lib/api/handler"
 import { ensureAuthenticated } from "@/lib/api/auth"
 import { readJsonObject, validatePostCreate } from "@/lib/validation"
 import { ValidationError } from "@/lib/errors"
+import { requireJsonRequest } from "@/lib/api/admin-mutation"
+import { privateNoStore } from "@/lib/api/private-response"
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,19 +16,20 @@ export async function GET(req: NextRequest) {
       throw new ValidationError("搜索关键词过长")
     }
     const posts = await searchPosts({ keyword: q, status: "ALL" })
-    return NextResponse.json(posts)
+    return privateNoStore(NextResponse.json(posts))
   } catch (e) {
-    return handleApiError(e)
+    return privateNoStore(handleApiError(e))
   }
 }
 
 export async function POST(req: NextRequest) {
   try {
     await ensureAuthenticated()
+    requireJsonRequest(req)
     const input = validatePostCreate(await readJsonObject(req))
     const post = await createPost(input)
-    return NextResponse.json(post, { status: 201 })
+    return privateNoStore(NextResponse.json(post, { status: 201 }))
   } catch (e) {
-    return handleApiError(e)
+    return privateNoStore(handleApiError(e))
   }
 }

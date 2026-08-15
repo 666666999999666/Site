@@ -22,6 +22,7 @@
 6. [`docs/dependency-audit.md`](docs/dependency-audit.md)：依赖告警、处理方式与运行路径判断。
 7. [`docs/session-summary.md`](docs/session-summary.md)：历史建站过程，仅供追溯，不作为当前技术或运维依据。
 8. [`docs/local-mcp.md`](docs/local-mcp.md)：远程 OAuth MCP、Markdown 导入、审批、审计与 Trae 配置。
+9. [`docs/prefix-inbox.md`](docs/prefix-inbox.md)：无 LLM 前缀收件箱的分流规则、数据安全、部署与回滚。
 
 ## 本地开发
 
@@ -106,6 +107,8 @@ bash ops/cleanup-uploads.sh --dry-run
 - `SESSION_SECRET`：至少 32 个随机字符
 - `NEXT_PUBLIC_SITE_URL`
 - `NEXT_PUBLIC_GITHUB_URL`
+
+前缀收件箱使用 `INBOX_ENABLED` 紧急关闭开关；未配置时默认为 `true`，设置为 `false` 可关闭入口。
 
 缺少数据库密码、数据库 URL、Session Secret、站点 URL 或镜像引用时，Compose 会直接失败。
 

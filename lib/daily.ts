@@ -237,7 +237,10 @@ export async function getDailyDashboard(userId: string, now = new Date()): Promi
     prisma.todo.findMany({
       where: { status: "TODO" },
       select: { id: true, title: true, category: { select: { name: true } } },
-      orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
+      orderBy: [
+        { priority: { sort: "desc", nulls: "last" } },
+        { createdAt: "desc" },
+      ],
       take: 100,
     }),
     getDailyStats(userId, now),

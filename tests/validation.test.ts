@@ -5,7 +5,11 @@ import {
   validatePostCreate,
   validateProjectCreate,
   validateSettings,
+  validateTodoCreate,
   validateTodoDraft,
+  validateTodoSubtaskCreate,
+  validateTodoSubtaskUpdate,
+  validateEmptyObject,
   validateTodoUpdate,
 } from "../lib/validation"
 
@@ -49,6 +53,11 @@ test("post validation accepts bounded draft metadata and upload covers", () => {
   }), /JSON 对象/)
 })
 
+test("bodyless mutation contracts reject smuggled fields", () => {
+  assert.doesNotThrow(() => validateEmptyObject({}))
+  assert.throws(() => validateEmptyObject({ sourceInboxItemId: "private" }), /不支持的字段/)
+})
+
 test("todo validation rejects invalid status and priority", () => {
   assert.throws(() => validateTodoUpdate({ status: "UNKNOWN" }), /状态无效/)
   assert.throws(() => validateTodoUpdate({ priority: 3 }), /0 到 2/)
@@ -56,6 +65,61 @@ test("todo validation rejects invalid status and priority", () => {
   assert.deepEqual(validateTodoDraft({ markDone: true }), { markDone: true })
   assert.throws(() => validateTodoDraft({ markDone: "yes" }), /必须是布尔值/)
   assert.throws(() => validateTodoDraft({ title: "unexpected" }), /不支持的字段/)
+})
+
+test("todo validation supports unset priority, projects, completion criteria and subtasks", () => {
+  const todo = validateTodoCreate({
+    title: "  完成收件箱  ",
+    projectId: "project-1",
+    priority: null,
+    completionCriteria: "测试全部通过",
+    subtasks: [
+      { title: "  单元测试  ", completed: true, sortOrder: 2 },
+      { title: "集成测试" },
+    ],
+  })
+
+  assert.equal(todo.title, "完成收件箱")
+  assert.equal(todo.projectId, "project-1")
+  assert.equal(todo.priority, null)
+  assert.equal(todo.completionCriteria, "测试全部通过")
+  assert.deepEqual(todo.subtasks, [
+    { title: "单元测试", completed: true, sortOrder: 2 },
+    { title: "集成测试" },
+  ])
+
+  assert.deepEqual(validateTodoUpdate({ subtasks: [
+    { id: "existing-subtask", title: "保留原子任务", completed: true },
+  ] }).subtasks, [
+    { id: "existing-subtask", title: "保留原子任务", completed: true },
+  ])
+  assert.throws(() => validateTodoCreate({
+    title: "新 Todo",
+    subtasks: [{ id: "client-id", title: "客户端指定 ID" }],
+  }), /不支持的字段/)
+
+  assert.throws(() => validateTodoUpdate({ subtasks: [
+    { id: "duplicate", title: "一" },
+    { id: "duplicate", title: "二" },
+  ] }), /ID 不能重复/)
+  assert.throws(() => validateTodoUpdate({ sourceInboxItemId: "private" }), /不支持的字段/)
+})
+
+test("todo subtask validation uses strict create and update fields", () => {
+  assert.deepEqual(validateTodoSubtaskCreate({
+    title: "  编写测试  ",
+    completed: false,
+    sortOrder: 1,
+  }), {
+    title: "编写测试",
+    completed: false,
+    sortOrder: 1,
+  })
+  assert.deepEqual(validateTodoSubtaskUpdate({ completed: true }), { completed: true })
+  assert.throws(() => validateTodoSubtaskCreate({ id: "client-id", title: "任务" }), /不支持的字段/)
+  assert.throws(() => validateTodoSubtaskUpdate({}), /没有可更新/)
+  assert.throws(() => validateTodoSubtaskUpdate({ completed: "yes" }), /必须是布尔值/)
+  assert.throws(() => validateTodoSubtaskUpdate({ sortOrder: -1 }), /0 到 10000/)
 })
 
 test("project validation only accepts web URLs and local cover paths", () => {

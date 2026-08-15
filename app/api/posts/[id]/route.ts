@@ -4,9 +4,11 @@ import { updatePost } from "@/lib/posts"
 import { handleApiError } from "@/lib/api/handler"
 import { NotFoundError } from "@/lib/errors"
 import { ensureAuthenticated } from "@/lib/api/auth"
-import { readJsonObject, validatePostUpdate } from "@/lib/validation"
+import { readJsonObject, validateEmptyObject, validatePostUpdate } from "@/lib/validation"
 import { extractUploadUrls } from "@/lib/content"
 import { deleteUploadFiles } from "@/lib/uploads-cleanup"
+import { requireJsonRequest } from "@/lib/api/admin-mutation"
+import { privateNoStore } from "@/lib/api/private-response"
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -14,27 +16,30 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     const { id } = await params
     const post = await prisma.post.findUnique({ where: { id }, include: { category: true } })
     if (!post) throw new NotFoundError("未找到文章")
-    return NextResponse.json(post)
+    return privateNoStore(NextResponse.json(post))
   } catch (e) {
-    return handleApiError(e)
+    return privateNoStore(handleApiError(e))
   }
 }
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await ensureAuthenticated()
+    requireJsonRequest(req)
     const { id } = await params
     const input = validatePostUpdate(await readJsonObject(req))
     const post = await updatePost(id, input)
-    return NextResponse.json(post)
+    return privateNoStore(NextResponse.json(post))
   } catch (e) {
-    return handleApiError(e)
+    return privateNoStore(handleApiError(e))
   }
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     await ensureAuthenticated()
+    requireJsonRequest(req)
+    validateEmptyObject(await readJsonObject(req))
     const { id } = await params
     const post = await prisma.post.findUnique({
       where: { id },
@@ -46,8 +51,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
       if (post.coverImage) urls.add(post.coverImage)
       await deleteUploadFiles([...urls], id)
     }
-    return NextResponse.json({ ok: true })
+    return privateNoStore(NextResponse.json({ ok: true }))
   } catch (e) {
-    return handleApiError(e)
+    return privateNoStore(handleApiError(e))
   }
 }

@@ -1,9 +1,9 @@
 "use client"
 
 import { useMemo, useState, useSyncExternalStore } from "react"
-import { Check, ChevronDown, Copy, FilePlus2, Pencil, Plus, Search, Trash2 } from "lucide-react"
+import { Check, ChevronDown, Copy, FilePlus2, Pencil, Plus, Search, Trash2, X } from "lucide-react"
 import { useRouter } from "next/navigation"
-import type { Category, Post, Todo } from "@/lib/generated/prisma/client"
+import type { Category, Post, Project, Todo, TodoSubtask } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 import { CategoryManager } from "./CategoryManager"
@@ -12,7 +12,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 
-type TodoWithCategory = Todo & { category: Category | null }
+type TodoWithRelations = Todo & {
+  category: Category | null
+  project: Project | null
+  subtasks: TodoSubtask[]
+}
+type EditableSubtask = {
+  id?: string
+  clientId: string
+  title: string
+  completed: boolean
+}
 type StatusFilter = "TODO" | "DONE" | "ALL"
 
 // #29: 用 useSyncExternalStore 在 hydration 后读取 localStorage 记住的新建分类，
@@ -58,9 +68,11 @@ function priorityLabel(priority: number) {
 export function TodoList({
   todos: initialTodos,
   categories: initialCategories,
+  projects,
 }: {
-  todos: TodoWithCategory[]
+  todos: TodoWithRelations[]
   categories: Category[]
+  projects: Project[]
 }) {
   const [todos, setTodos] = useState(initialTodos)
   const [categories, setCategories] = useState(initialCategories)
@@ -93,7 +105,7 @@ export function TodoList({
     setPending(true)
     setError("")
     try {
-      const todo = await apiRequest<TodoWithCategory>(
+      const todo = await apiRequest<TodoWithRelations>(
         "/api/todos",
         jsonRequest("POST", {
           title: newTitle,
@@ -113,7 +125,7 @@ export function TodoList({
     setPending(true)
     setError("")
     try {
-      const updated = await apiRequest<TodoWithCategory>(
+      const updated = await apiRequest<TodoWithRelations>(
         `/api/todos/${id}`,
         jsonRequest("PATCH", input)
       )
@@ -139,7 +151,7 @@ export function TodoList({
     setPending(true)
     setError("")
     try {
-      await apiRequest(`/api/todos/${todo.id}`, { method: "DELETE" })
+      await apiRequest(`/api/todos/${todo.id}`, jsonRequest("DELETE", {}))
       setTodos((current) => current.filter((item) => item.id !== todo.id))
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "删除失败")
@@ -152,12 +164,12 @@ export function TodoList({
     setPending(true)
     setError("")
     try {
-      const result = await apiRequest<{ post: Post; todo: TodoWithCategory }>(
+      const result = await apiRequest<{ post: Post; todo: Todo }>(
         `/api/todos/${todo.id}/draft`,
         jsonRequest("POST", { markDone })
       )
       setTodos((current) => current.map((item) => (
-        item.id === todo.id ? result.todo : item
+        item.id === todo.id ? { ...item, ...result.todo } : item
       )))
       router.push(`/admin/posts/${result.post.id}`)
     } catch (caught) {
@@ -203,6 +215,25 @@ export function TodoList({
     if (newCategoryId === id) selectNewCategory("")
   }
 
+  async function updateSubtask(todoId: string, subtaskId: string, input: Record<string, unknown>) {
+    setPending(true)
+    setError("")
+    try {
+      const updated = await apiRequest<TodoSubtask>(
+        `/api/todos/${todoId}/subtasks/${subtaskId}`,
+        jsonRequest("PATCH", input)
+      )
+      setTodos((current) => current.map((todo) => todo.id === todoId ? {
+        ...todo,
+        subtasks: todo.subtasks.map((subtask) => subtask.id === subtaskId ? updated : subtask),
+      } : todo))
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "更新子任务失败")
+    } finally {
+      setPending(false)
+    }
+  }
+
   const filteredTodos = useMemo(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase()
     return todos
@@ -210,13 +241,13 @@ export function TodoList({
       .filter((todo) => statusFilter === "ALL" || todo.status === statusFilter)
       .filter((todo) => {
         if (!normalizedQuery) return true
-        return `${todo.title}\n${todo.description || ""}`
+        return `${todo.title}\n${todo.description || ""}\n${todo.completionCriteria || ""}\n${todo.project?.title || ""}\n${todo.subtasks.map((subtask) => subtask.title).join("\n")}`
           .toLocaleLowerCase()
           .includes(normalizedQuery)
       })
       .sort((a, b) => {
         if (a.status !== b.status) return a.status === "TODO" ? -1 : 1
-        if (a.priority !== b.priority) return b.priority - a.priority
+        if (a.priority !== b.priority) return (b.priority ?? -1) - (a.priority ?? -1)
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       })
   }, [activeGroupId, query, statusFilter, todos])
@@ -241,14 +272,14 @@ export function TodoList({
         <div className="flex flex-col gap-2 sm:flex-row">
           <Input
             autoFocus
-            placeholder="记录一个任务或想法"
+            placeholder="记录一个任务"
             value={newTitle}
             onChange={(event) => setNewTitle(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.nativeEvent.isComposing) void add()
             }}
             className="min-w-0 flex-1"
-            maxLength={300}
+            maxLength={600}
           />
           <select
             value={newCategoryId}
@@ -312,11 +343,13 @@ export function TodoList({
                 key={todo.id}
                 todo={todo}
                 categories={categories}
+                projects={projects}
                 disabled={pending}
                 onToggle={() => toggle(todo)}
                 onDelete={() => remove(todo)}
                 onSave={(input) => updateTodo(todo.id, input)}
                 onCreateDraft={(markDone) => createDraft(todo, markDone)}
+                onUpdateSubtask={(subtaskId, input) => updateSubtask(todo.id, subtaskId, input)}
               />
             ))}
           </ul>
@@ -329,26 +362,38 @@ export function TodoList({
 function TodoItem({
   todo,
   categories,
+  projects,
   disabled,
   onToggle,
   onDelete,
   onSave,
   onCreateDraft,
+  onUpdateSubtask,
 }: {
-  todo: TodoWithCategory
+  todo: TodoWithRelations
   categories: Category[]
+  projects: Project[]
   disabled: boolean
   onToggle: () => void
   onDelete: () => void
-  onSave: (input: Record<string, unknown>) => Promise<TodoWithCategory>
+  onSave: (input: Record<string, unknown>) => Promise<TodoWithRelations>
   onCreateDraft: (markDone: boolean) => Promise<void>
+  onUpdateSubtask: (subtaskId: string, input: Record<string, unknown>) => Promise<void>
 }) {
   const [editing, setEditing] = useState(false)
   const [title, setTitle] = useState(todo.title)
   const [description, setDescription] = useState(todo.description || "")
   const [categoryId, setCategoryId] = useState(todo.categoryId || "")
-  const [priority, setPriority] = useState(todo.priority)
+  const [projectId, setProjectId] = useState(todo.projectId || "")
+  const [priority, setPriority] = useState(todo.priority === null ? "" : String(todo.priority))
   const [dueDate, setDueDate] = useState(dueDateInput(todo.dueDate))
+  const [completionCriteria, setCompletionCriteria] = useState(todo.completionCriteria || "")
+  const [subtasks, setSubtasks] = useState<EditableSubtask[]>(() => todo.subtasks.map((subtask) => ({
+    id: subtask.id,
+    clientId: subtask.id,
+    title: subtask.title,
+    completed: subtask.completed,
+  })))
   const [error, setError] = useState("")
   const [copiedId, setCopiedId] = useState(false)
   const done = todo.status === "DONE"
@@ -357,8 +402,16 @@ function TodoItem({
     setTitle(todo.title)
     setDescription(todo.description || "")
     setCategoryId(todo.categoryId || "")
-    setPriority(todo.priority)
+    setProjectId(todo.projectId || "")
+    setPriority(todo.priority === null ? "" : String(todo.priority))
     setDueDate(dueDateInput(todo.dueDate))
+    setCompletionCriteria(todo.completionCriteria || "")
+    setSubtasks(todo.subtasks.map((subtask) => ({
+      id: subtask.id,
+      clientId: subtask.id,
+      title: subtask.title,
+      completed: subtask.completed,
+    })))
     setError("")
     setEditing(true)
   }
@@ -373,8 +426,18 @@ function TodoItem({
         title,
         description: description || null,
         categoryId: categoryId || null,
-        priority,
+        projectId: projectId || null,
+        priority: priority === "" ? null : Number(priority),
         dueDate: dueDateIso(dueDate),
+        completionCriteria: completionCriteria || null,
+        subtasks: subtasks
+          .filter((subtask) => subtask.title.trim())
+          .map((subtask, index) => ({
+            ...(subtask.id ? { id: subtask.id } : {}),
+            title: subtask.title,
+            completed: subtask.completed,
+            sortOrder: index,
+          })),
       })
       setEditing(false)
     } catch (caught) {
@@ -398,8 +461,20 @@ function TodoItem({
     }
   }
 
+  function addSubtask() {
+    if (subtasks.length >= 100) {
+      setError("子任务不能超过 100 个")
+      return
+    }
+    setSubtasks((current) => [...current, {
+      clientId: `new-${Date.now()}-${current.length}`,
+      title: "",
+      completed: false,
+    }])
+  }
+
   return (
-    <li className="min-w-0 p-3 sm:p-4">
+    <li id={`todo-${todo.id}`} className="min-w-0 scroll-mt-20 p-3 sm:p-4">
       <div className="flex min-w-0 items-start gap-3">
         <button
           type="button"
@@ -429,11 +504,14 @@ function TodoItem({
           {!editing && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
               {todo.category && <span>{todo.category.name}</span>}
-              {todo.priority > 0 && (
+              {todo.project && <span>项目：{todo.project.title}</span>}
+              {todo.priority === null ? (
+                <span>优先级未设置</span>
+              ) : todo.priority > 0 ? (
                 <span className={todo.priority === 2 ? "text-destructive" : "text-amber-600"}>
                   {priorityLabel(todo.priority)}
                 </span>
-              )}
+              ) : null}
               {todo.dueDate && (
                 <time dateTime={new Date(todo.dueDate).toISOString()}>
                   截止 {new Date(todo.dueDate).toLocaleDateString("zh-CN", {
@@ -442,6 +520,30 @@ function TodoItem({
                 </time>
               )}
             </div>
+          )}
+          {!editing && todo.completionCriteria && (
+            <p className="mt-2 whitespace-pre-wrap break-words text-sm text-muted-foreground">
+              完成标准：{todo.completionCriteria}
+            </p>
+          )}
+          {!editing && todo.subtasks.length > 0 && (
+            <ul className="mt-3 space-y-1.5" aria-label={`${todo.title} 的子任务`}>
+              {todo.subtasks.map((subtask) => (
+                <li key={subtask.id} className="flex items-start gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={subtask.completed}
+                    disabled={disabled}
+                    onChange={() => void onUpdateSubtask(subtask.id, { completed: !subtask.completed })}
+                    aria-label={`${subtask.completed ? "标记为未完成" : "标记为已完成"}：${subtask.title}`}
+                    className="mt-1"
+                  />
+                  <span className={cn("break-words", subtask.completed && "text-muted-foreground line-through")}>
+                    {subtask.title}
+                  </span>
+                </li>
+              ))}
+            </ul>
           )}
         </div>
 
@@ -498,7 +600,7 @@ function TodoItem({
               id={`todo-title-${todo.id}`}
               value={title}
               onChange={(event) => setTitle(event.target.value)}
-              maxLength={300}
+              maxLength={600}
             />
           </div>
           <div className="space-y-2">
@@ -508,10 +610,10 @@ function TodoItem({
               value={description}
               onChange={(event) => setDescription(event.target.value)}
               rows={4}
-              maxLength={20_000}
+              maxLength={200_000}
             />
           </div>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <div className="space-y-2">
               <Label htmlFor={`todo-category-${todo.id}`}>分区</Label>
               <select
@@ -527,16 +629,31 @@ function TodoItem({
               </select>
             </div>
             <div className="space-y-2">
+              <Label htmlFor={`todo-project-${todo.id}`}>项目</Label>
+              <select
+                id={`todo-project-${todo.id}`}
+                value={projectId}
+                onChange={(event) => setProjectId(event.target.value)}
+                className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
+              >
+                <option value="">无项目</option>
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>{project.title}</option>
+                ))}
+              </select>
+            </div>
+            <div className="space-y-2">
               <Label htmlFor={`todo-priority-${todo.id}`}>优先级</Label>
               <select
                 id={`todo-priority-${todo.id}`}
                 value={priority}
-                onChange={(event) => setPriority(Number(event.target.value))}
+                onChange={(event) => setPriority(event.target.value)}
                 className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm"
               >
-                <option value={0}>普通</option>
-                <option value={1}>重要</option>
-                <option value={2}>紧急</option>
+                <option value="">未设置</option>
+                <option value="0">普通</option>
+                <option value="1">重要</option>
+                <option value="2">紧急</option>
               </select>
             </div>
             <div className="space-y-2">
@@ -548,6 +665,62 @@ function TodoItem({
                 onChange={(event) => setDueDate(event.target.value)}
               />
             </div>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor={`todo-completion-${todo.id}`}>完成标准</Label>
+            <Textarea
+              id={`todo-completion-${todo.id}`}
+              value={completionCriteria}
+              onChange={(event) => setCompletionCriteria(event.target.value)}
+              rows={3}
+              maxLength={40_000}
+              placeholder="怎样才算完成"
+            />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <Label>子任务</Label>
+              <Button type="button" variant="outline" size="sm" onClick={addSubtask} disabled={disabled}>
+                <Plus className="size-4" />
+                添加子任务
+              </Button>
+            </div>
+            {subtasks.length === 0 ? (
+              <p className="text-sm text-muted-foreground">暂无子任务</p>
+            ) : (
+              <div className="space-y-2">
+                {subtasks.map((subtask, index) => (
+                  <div key={subtask.clientId} className="flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      checked={subtask.completed}
+                      onChange={(event) => setSubtasks((current) => current.map((item, itemIndex) => (
+                        itemIndex === index ? { ...item, completed: event.target.checked } : item
+                      )))}
+                      aria-label={`子任务 ${index + 1} 完成状态`}
+                    />
+                    <Input
+                      value={subtask.title}
+                      onChange={(event) => setSubtasks((current) => current.map((item, itemIndex) => (
+                        itemIndex === index ? { ...item, title: event.target.value } : item
+                      )))}
+                      maxLength={600}
+                      placeholder={`子任务 ${index + 1}`}
+                      aria-label={`子任务 ${index + 1} 标题`}
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => setSubtasks((current) => current.filter((_, itemIndex) => itemIndex !== index))}
+                      aria-label={`删除子任务 ${index + 1}`}
+                    >
+                      <X className="size-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
           {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
           <div className="flex justify-end gap-2">

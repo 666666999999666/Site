@@ -26,6 +26,29 @@ enum CategoryType {
   TODO
 }
 
+enum InboxKind {
+  BLOG
+  IDEA
+  TODO
+}
+
+enum InboxStatus {
+  RECEIVED
+  APPLIED
+  FAILED
+}
+
+enum InboxTargetType {
+  BLOG
+  IDEA
+  TODO
+}
+
+enum IdeaConversionTarget {
+  BLOG
+  TODO
+}
+
 enum McpApprovalStatus {
   PENDING_APPROVAL
   APPROVED
@@ -45,21 +68,24 @@ enum McpAuditStatus {
 }
 
 model Post {
-  id            String     @id @default(cuid())
-  title         String
-  content       String     @db.Text
-  excerpt       String?
-  slug          String     @unique
-  categoryId    String?
-  category      Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  tags          String[]
-  coverImage    String?
-  draftMetadata Json?
-  status        PostStatus @default(DRAFT)
-  readTime      Int        @default(1)
-  publishedAt   DateTime?
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+  id                String           @id @default(cuid())
+  title             String
+  content           String           @db.Text
+  excerpt           String?
+  slug              String           @unique
+  categoryId        String?
+  category          Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  tags              String[]
+  coverImage        String?
+  draftMetadata     Json?
+  status            PostStatus       @default(DRAFT)
+  readTime          Int              @default(1)
+  publishedAt       DateTime?
+  sourceInboxItemId String?          @unique
+  sourceInboxItem   InboxItem?       @relation("PostSourceInbox", fields: [sourceInboxItemId], references: [id], onDelete: Restrict)
+  ideaConversions   IdeaConversion[] @relation("IdeaConversionPost")
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   @@index([status, createdAt])
   @@index([categoryId])
@@ -81,20 +107,41 @@ model Category {
 }
 
 model Todo {
-  id          String     @id @default(cuid())
-  title       String
-  description String?
-  categoryId  String?
-  category    Category?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  status      TodoStatus @default(TODO)
-  priority    Int        @default(0)
-  dueDate     DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  dailyTasks  DailyTask[]
+  id                 String           @id @default(cuid())
+  title              String
+  description        String?
+  categoryId         String?
+  category           Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  status             TodoStatus       @default(TODO)
+  priority           Int?             @default(0)
+  dueDate            DateTime?
+  projectId          String?
+  project            Project?         @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  completionCriteria String?
+  sourceInboxItemId  String?          @unique
+  sourceInboxItem    InboxItem?       @relation("TodoSourceInbox", fields: [sourceInboxItemId], references: [id], onDelete: Restrict)
+  subtasks           TodoSubtask[]
+  ideaConversions    IdeaConversion[] @relation("IdeaConversionTodo")
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+  dailyTasks         DailyTask[]
 
   @@index([status])
   @@index([categoryId])
+  @@index([projectId])
+}
+
+model TodoSubtask {
+  id        String   @id @default(cuid())
+  todoId    String
+  todo      Todo     @relation(fields: [todoId], references: [id], onDelete: Cascade)
+  title     String   @db.VarChar(300)
+  completed Boolean  @default(false)
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([todoId, sortOrder])
 }
 
 model User {
@@ -116,6 +163,10 @@ model User {
   oauthAccessTokens  OauthAccessToken[]
   oauthConsents      OauthConsent[]
   dailyPlans         DailyPlan[]
+  inboxItems         InboxItem[]
+  inboxEvents        InboxEvent[]
+  ideas              Idea[]
+  ideaConversions    IdeaConversion[]
 }
 
 model DailyQuote {
@@ -352,8 +403,96 @@ model Project {
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  ideas       Idea[]
+  todos       Todo[]
 
   @@index([sortOrder])
+}
+
+model InboxItem {
+  id             String          @id @default(cuid())
+  ownerId        String
+  owner          User            @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  kind           InboxKind
+  status         InboxStatus     @default(RECEIVED)
+  rawInput       String          @db.Text
+  rawSha256      String          @db.Char(64)
+  parsedBody     String          @db.Text
+  parserVersion  Int
+  requestKey     String          @db.VarChar(200)
+  failureCode    String?         @db.VarChar(64)
+  failureMessage String?         @db.VarChar(500)
+  appliedAt      DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  execution      InboxExecution?
+  events         InboxEvent[]
+  sourcePost     Post?           @relation("PostSourceInbox")
+  sourceIdea     Idea?           @relation("IdeaSourceInbox")
+  sourceTodo     Todo?           @relation("TodoSourceInbox")
+
+  @@unique([ownerId, requestKey])
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@index([ownerId, kind, status, createdAt(sort: Desc)])
+}
+
+model InboxExecution {
+  inboxItemId String          @id
+  inboxItem   InboxItem       @relation(fields: [inboxItemId], references: [id], onDelete: Restrict)
+  targetType  InboxTargetType
+  targetId    String
+  createdAt   DateTime        @default(now())
+
+  @@index([targetType, targetId])
+}
+
+model InboxEvent {
+  id          String    @id @default(cuid())
+  inboxItemId String
+  inboxItem   InboxItem @relation(fields: [inboxItemId], references: [id], onDelete: Restrict)
+  actorUserId String
+  actorUser   User      @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+  eventType   String    @db.VarChar(64)
+  metadata    Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([inboxItemId, createdAt])
+  @@index([actorUserId, createdAt])
+}
+
+model Idea {
+  id                String           @id @default(cuid())
+  ownerId           String
+  owner             User             @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  title             String
+  content           String           @db.Text
+  tags              String[]         @default([])
+  projects          Project[]
+  sourceInboxItemId String?          @unique
+  sourceInboxItem   InboxItem?       @relation("IdeaSourceInbox", fields: [sourceInboxItemId], references: [id], onDelete: Restrict)
+  conversions       IdeaConversion[]
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  @@index([ownerId, createdAt(sort: Desc)])
+}
+
+model IdeaConversion {
+  id         String               @id @default(cuid())
+  ownerId    String
+  owner      User                 @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  ideaId     String
+  idea       Idea                 @relation(fields: [ideaId], references: [id], onDelete: Cascade)
+  targetType IdeaConversionTarget
+  requestKey String               @db.VarChar(200)
+  postId     String?              @unique
+  post       Post?                @relation("IdeaConversionPost", fields: [postId], references: [id], onDelete: SetNull)
+  todoId     String?              @unique
+  todo       Todo?                @relation("IdeaConversionTodo", fields: [todoId], references: [id], onDelete: SetNull)
+  createdAt  DateTime             @default(now())
+
+  @@unique([ownerId, requestKey])
+  @@index([ideaId, createdAt])
 }
 
 model McpCredential {

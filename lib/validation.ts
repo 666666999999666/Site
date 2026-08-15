@@ -8,7 +8,8 @@ const POST_KEYS = [
   "status", "publishedAt",
 ] as const
 const TODO_KEYS = [
-  "title", "description", "categoryId", "status", "priority", "dueDate",
+  "title", "description", "categoryId", "projectId", "status", "priority", "dueDate",
+  "completionCriteria", "subtasks",
 ] as const
 const CATEGORY_CREATE_KEYS = [
   "name", "type", "description", "color", "sortOrder",
@@ -33,6 +34,10 @@ export type PublicSettingKey = typeof PUBLIC_SETTING_KEYS[number]
 
 function isObject(value: unknown): value is JsonObject {
   return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function unicodeLength(value: string): number {
+  return Array.from(value).length
 }
 
 export async function readJsonObject(request: Request): Promise<JsonObject> {
@@ -61,7 +66,7 @@ function requiredString(
   if (typeof value !== "string") throw new ValidationError(`${label}必须是字符串`)
   const result = value.trim()
   if (!result) throw new ValidationError(`${label}必填`)
-  if (result.length > maxLength) {
+  if (unicodeLength(result) > maxLength) {
     throw new ValidationError(`${label}不能超过 ${maxLength} 个字符`)
   }
   return result
@@ -76,7 +81,7 @@ function optionalString(
   if (value === null || value === "") return null
   if (typeof value !== "string") throw new ValidationError(`${label}必须是字符串`)
   const result = value.trim()
-  if (result.length > maxLength) {
+  if (unicodeLength(result) > maxLength) {
     throw new ValidationError(`${label}不能超过 ${maxLength} 个字符`)
   }
   return result || null
@@ -96,6 +101,20 @@ function optionalInteger(
     throw new ValidationError(`${label}必须在 ${min} 到 ${max} 之间`)
   }
   return value
+}
+
+export function validateEmptyObject(value: JsonObject): void {
+  rejectUnknownKeys(value, [])
+}
+
+function optionalNullableInteger(
+  value: unknown,
+  label: string,
+  min: number,
+  max: number
+): number | null | undefined {
+  if (value === null || value === "") return null
+  return optionalInteger(value, label, min, max)
 }
 
 function optionalEnum<T extends string>(
@@ -242,9 +261,62 @@ export interface TodoInput {
   title?: string
   description?: string | null
   categoryId?: string | null
+  projectId?: string | null
   status?: "TODO" | "DONE"
-  priority?: number
+  priority?: number | null
   dueDate?: Date | null
+  completionCriteria?: string | null
+  subtasks?: TodoSubtaskInput[]
+}
+
+export interface TodoSubtaskInput {
+  id?: string
+  title: string
+  completed?: boolean
+  sortOrder?: number
+}
+
+function parseTodoSubtask(
+  value: unknown,
+  partial: boolean,
+  allowId = false
+): Partial<TodoSubtaskInput> & { title?: string } {
+  if (!isObject(value)) throw new ValidationError("子任务必须是 JSON 对象")
+  rejectUnknownKeys(value, allowId
+    ? ["id", "title", "completed", "sortOrder"]
+    : ["title", "completed", "sortOrder"])
+  if (partial) requireAtLeastOneKey(value)
+
+  const result: Partial<TodoSubtaskInput> = {}
+  if (!partial || value.title !== undefined) {
+    result.title = requiredString(value.title, "子任务标题", 300)
+  }
+  if (allowId && value.id !== undefined) {
+    const id = optionalString(value.id, "子任务 ID", 128)
+    if (!id) throw new ValidationError("子任务 ID 不能为空")
+    result.id = id
+  }
+  if (value.completed !== undefined) {
+    if (typeof value.completed !== "boolean") {
+      throw new ValidationError("子任务完成状态必须是布尔值")
+    }
+    result.completed = value.completed
+  }
+  if (value.sortOrder !== undefined) {
+    result.sortOrder = optionalInteger(value.sortOrder, "子任务排序值", 0, 10_000)
+  }
+  return result
+}
+
+function optionalTodoSubtasks(value: unknown, allowIds: boolean): TodoSubtaskInput[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) throw new ValidationError("子任务必须是数组")
+  if (value.length > 100) throw new ValidationError("子任务不能超过 100 个")
+
+  const subtasks = value.map((subtask) => parseTodoSubtask(subtask, false, allowIds) as TodoSubtaskInput)
+  const ids = subtasks.flatMap((subtask) => subtask.id ? [subtask.id] : [])
+  if (new Set(ids).size !== ids.length) throw new ValidationError("子任务 ID 不能重复")
+  return subtasks
 }
 
 function parseTodo(value: JsonObject, partial: boolean): TodoInput {
@@ -253,16 +325,21 @@ function parseTodo(value: JsonObject, partial: boolean): TodoInput {
   const result: TodoInput = {}
   if (!partial || value.title !== undefined) result.title = requiredString(value.title, "标题", 300)
   if (value.description !== undefined) {
-    result.description = optionalString(value.description, "描述", 20_000)
+    result.description = optionalString(value.description, "描述", 100_000)
   }
   if (value.categoryId !== undefined) result.categoryId = optionalString(value.categoryId, "分区", 128)
+  if (value.projectId !== undefined) result.projectId = optionalString(value.projectId, "项目", 128)
   if (value.status !== undefined) {
     result.status = optionalEnum(value.status, "Todo 状态", ["TODO", "DONE"])
   }
   if (value.priority !== undefined) {
-    result.priority = optionalInteger(value.priority, "优先级", 0, 2)
+    result.priority = optionalNullableInteger(value.priority, "优先级", 0, 2)
   }
   if (value.dueDate !== undefined) result.dueDate = optionalDate(value.dueDate, "截止时间")
+  if (value.completionCriteria !== undefined) {
+    result.completionCriteria = optionalString(value.completionCriteria, "完成标准", 20_000)
+  }
+  if (value.subtasks !== undefined) result.subtasks = optionalTodoSubtasks(value.subtasks, partial)
   return result
 }
 
@@ -272,6 +349,14 @@ export function validateTodoCreate(value: JsonObject): TodoInput & { title: stri
 
 export function validateTodoUpdate(value: JsonObject): TodoInput {
   return parseTodo(value, true)
+}
+
+export function validateTodoSubtaskCreate(value: JsonObject): TodoSubtaskInput {
+  return parseTodoSubtask(value, false) as TodoSubtaskInput
+}
+
+export function validateTodoSubtaskUpdate(value: JsonObject): Partial<Omit<TodoSubtaskInput, "id">> {
+  return parseTodoSubtask(value, true)
 }
 
 export function validateTodoDraft(value: JsonObject): { markDone: boolean } {

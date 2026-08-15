@@ -49,7 +49,7 @@ export function PostsList({
     setPending(true)
     setError("")
     try {
-      await apiRequest(`/api/posts/${post.id}`, { method: "DELETE" })
+      await apiRequest(`/api/posts/${post.id}`, jsonRequest("DELETE", {}))
       setPosts((current) => current.filter((item) => item.id !== post.id))
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "删除文章失败")
