@@ -120,7 +120,7 @@ bash ops/deploy.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
 
 部署脚本会串行加锁、创建部署前备份、把候选镜像解析为不可变 digest，并校验镜像内源码指纹与目标 Git 提交一致。切换后等待数据库/Web/Nginx 全部 Healthy，执行中英文页面、未登录写保护和站点基础文件冒烟测试，再把提交、digest 和指纹写入 `.deploy-state`。失败时输出诊断并恢复上一版本代码、镜像和部署状态。数据库 migration 仍应设计为向后兼容，因为应用回滚不会自动逆转数据库变更。
 
-仓库中共有两份 Gitee Go 定义：`pipeline-deploy` 在 `main` 推送时自动构建、部署、幂等安装服务器 Cron 并执行 `status`；`pipeline-maintenance` 只在故障、临时备份、恢复验证或证书轮换时手动执行固定动作。它不接受任意 Shell，也不承担自动定时调度。GitHub 当前只作为代码镜像仓库，不运行部署或生产维护工作流。
+仓库中共有两份 Gitee Go 定义：`pipeline-deploy` 在 `main` 推送时自动构建、部署并执行 `status`；`pipeline-maintenance` 只在故障、临时备份、恢复验证或证书轮换时手动执行固定动作。它不接受任意 Shell，也不承担自动定时调度。GitHub 当前只作为代码镜像仓库，不运行部署或生产维护工作流。
 
 生产机是 2 核 2G 规格，禁止在服务器执行 `docker build`、`npm ci`、`next build` 或全量测试。Compose 将数据库、Web 和 Nginx 分别限制为 512MB、768MB 和 128MB；主机保留 1GB、`swappiness=10` 的应急 Swap。镜像编译和完整质量检查只能在本地或托管 CI 完成。
 
@@ -141,13 +141,13 @@ bash ops/verify-backup.sh
 
 恢复验证会启动不映射端口的临时 PostgreSQL 容器，真实执行 `pg_restore` 并读取文章、项目、设置、Todo、用户和 migration 表，然后自动删除临时容器。备份默认保留 30 天。
 
-生产维护由服务器用户 Cron 直接调度：每日 03:00 完整备份、每周日 03:30 隔离恢复验证、每周一 09:00 证书检查、每小时第 15 分钟清理 MCP/OAuth 过期数据。部署流水线每次都会幂等同步这组任务：
+生产维护由服务器 `ubuntu` 用户 Cron 直接调度：每日 03:00 完整备份、每周日 03:30 隔离恢复验证、每周一 09:00 证书检查、每小时第 15 分钟清理 MCP/OAuth 过期数据。Cron 属于一次性主机配置，不由启用了 `NoNewPrivileges` 的 Gitee Agent 在每次发布时重装；新机器恢复或计划发生变化时，从受信任的服务器登录会话执行：
 
 ```bash
 bash ops/maintenance.sh install-cron
 ```
 
-Cron 安装会移除旧的数据库-only 备份和证书任务，统一日志写入 `backups/maintenance.log`。完整架构说明见 [`docs/architecture.md`](docs/architecture.md)，生产操作见 [`docs/operations.md`](docs/operations.md)，整机恢复见 [`docs/disaster-recovery.md`](docs/disaster-recovery.md)。
+Cron 安装会移除旧的数据库-only 备份和证书任务，统一日志写入 `backups/maintenance.log`。不要为自动安装 Cron 而关闭 Gitee Agent 的 `NoNewPrivileges` 安全限制。完整架构说明见 [`docs/architecture.md`](docs/architecture.md)，生产操作见 [`docs/operations.md`](docs/operations.md)，整机恢复见 [`docs/disaster-recovery.md`](docs/disaster-recovery.md)。
 
 ## 安全边界
 

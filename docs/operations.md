@@ -41,7 +41,6 @@ Gitee Agent 执行：
 
 ```bash
 bash ops/deploy.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
-bash ops/maintenance.sh install-cron
 bash ops/maintenance.sh status
 ```
 
@@ -91,7 +90,7 @@ bash ops/maintenance.sh status
 | `backup` | 创建完整生产备份集 |
 | `verify-backup` | 在隔离 PostgreSQL 容器恢复最新备份 |
 | `ssl` | 检查 30 天证书余量和本机 HTTPS |
-| `install-cron` | 幂等安装本项目定时任务并移除两条旧任务 |
+| `install-cron` | 从受信任的服务器登录会话幂等安装定时任务并移除两条旧任务；不通过 Gitee Agent 执行 |
 | `install-tls` | 校验证书和私钥后原子替换、测试并 reload |
 | `content-dry-run` | 只读扫描旧 Tiptap 正文 |
 | `uploads-dry-run` | 只读扫描孤儿上传 |
@@ -101,7 +100,7 @@ bash ops/maintenance.sh status
 
 ## 5. 定时任务
 
-生产环境以 `ubuntu` 用户 Cron 作为唯一自动调度源。`pipeline-deploy` 每次发布后运行 `install-cron` 幂等同步任务；Gitee Go 的 `pipeline-maintenance` 仅供手动应急，不设置定时触发，避免重复备份和重复维护。
+生产环境以 `ubuntu` 用户 Cron 作为唯一自动调度源。Cron 是一次性主机配置，不属于应用发布：Gitee Agent 服务启用了 `NoNewPrivileges`，不能利用 `sudo` 或 `crontab` 的 setgid 权限写入 `/var/spool/cron`，也不应为此放宽该安全限制。`pipeline-deploy` 只负责发布并执行强制 `status`；Gitee Go 的 `pipeline-maintenance` 仅供不需要主机提权的手动应急动作，不设置定时触发。
 
 当前计划：
 
@@ -112,7 +111,7 @@ bash ops/maintenance.sh status
 | 每周一 09:00 | 证书余量和 HTTPS 检查 | 轻量 |
 | 每小时第 15 分钟 | MCP/OAuth 过期数据维护 | 轻量 |
 
-安装或修复调度：
+新机器恢复、计划变化或需要修复调度时，从受信任的服务器登录会话执行：
 
 ```bash
 bash ops/maintenance.sh install-cron

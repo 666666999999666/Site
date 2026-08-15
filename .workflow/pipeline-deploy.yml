@@ -43,7 +43,6 @@ stages:
       printf '%s' "${TCR_PASSWORD}" | docker login ccr.ccs.tencentyun.com --username "${TCR_USERNAME}" --password-stdin >/dev/null
       set -x
       bash ops/deploy.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
-      bash ops/maintenance.sh install-cron
       bash ops/maintenance.sh status
     hostGroupID:
       ID: tencent-cloud
