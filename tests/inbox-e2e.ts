@@ -24,6 +24,8 @@ async function main() {
   const requestKey = `e2e-${Date.now()}-${Math.random().toString(36).slice(2)}`
   const rawInput = 'idea：<img src=x onerror="window.__inboxXss=1"> 私人原文'
   let createdIdeaHref = ""
+  let createdIdeaId = ""
+  let createdInboxItemId = ""
 
   const api = await request.newContext({ baseURL })
   try {
@@ -80,6 +82,19 @@ async function main() {
     assert.equal(item.status, "APPLIED")
     assert.match(item.execution.targetHref, /^\/admin\/ideas\//)
     createdIdeaHref = item.execution.targetHref
+    createdIdeaId = item.execution.targetId
+    createdInboxItemId = item.id
+
+    const invalidDeleteOrigin = await api.delete(
+      `/api/inbox/items/${encodeURIComponent(item.id)}`,
+      { headers: { Origin: "https://attacker.invalid" }, data: {} }
+    )
+    assert.equal(invalidDeleteOrigin.status(), 403)
+    const invalidDeleteBody = await api.delete(
+      `/api/inbox/items/${encodeURIComponent(item.id)}`,
+      { headers: { Origin: baseURL }, data: { force: true } }
+    )
+    assert.equal(invalidDeleteBody.status(), 422)
 
     const duplicate = await api.post("/api/inbox/items", {
       headers: { Origin: baseURL },
@@ -184,6 +199,22 @@ async function main() {
     assert.match(await card.locator("pre").innerText(), /<img src=x onerror=/)
     assert.equal(await page.locator('img[src="x"]').count(), 0)
     assert.equal(await page.evaluate(() => (window as typeof window & { __inboxXss?: number }).__inboxXss), undefined)
+
+    page.once("dialog", async (dialog) => {
+      assert.match(dialog.message(), /正式内容会保留/)
+      await dialog.accept()
+    })
+    await card.getByRole("button", { name: "删除记录" }).click()
+    await card.waitFor({ state: "detached" })
+
+    const deletedInboxItem = await context.request.get(
+      `/api/inbox/items/${encodeURIComponent(createdInboxItemId)}`
+    )
+    assert.equal(deletedInboxItem.status(), 404)
+    const retainedIdea = await context.request.get(
+      `/api/ideas/${encodeURIComponent(createdIdeaId)}`
+    )
+    assert.equal(retainedIdea.status(), 200)
     await context.close()
   } finally {
     await browser.close()

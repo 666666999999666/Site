@@ -306,3 +306,25 @@ export async function retryInboxItem(ownerId: string, itemId: string): Promise<I
   })
   return applyInboxItem(ownerId, item.id)
 }
+
+export async function deleteInboxItem(ownerId: string, itemId: string): Promise<void> {
+  await prisma.$transaction(async (transaction) => {
+    await lockInboxItem(transaction, ownerId, itemId)
+
+    await transaction.post.updateMany({
+      where: { sourceInboxItemId: itemId },
+      data: { sourceInboxItemId: null },
+    })
+    await transaction.idea.updateMany({
+      where: { sourceInboxItemId: itemId },
+      data: { sourceInboxItemId: null },
+    })
+    await transaction.todo.updateMany({
+      where: { sourceInboxItemId: itemId },
+      data: { sourceInboxItemId: null },
+    })
+    await transaction.inboxExecution.deleteMany({ where: { inboxItemId: itemId } })
+    await transaction.inboxEvent.deleteMany({ where: { inboxItemId: itemId } })
+    await transaction.inboxItem.delete({ where: { id: itemId } })
+  })
+}

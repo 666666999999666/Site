@@ -21,7 +21,7 @@
 
 第二阶段失败时，原文仍保留，记录转为 `FAILED`，后台可重新执行确定性分流。`ownerId + requestKey`、`InboxExecution.inboxItemId` 以及三个正式对象的 `sourceInboxItemId` 唯一约束共同防止双击或并发重试产生重复对象。
 
-数据库触发器禁止更新 `InboxItem.rawInput` 与 `rawSha256`。应用不提供删除 Inbox 记录的接口；删除正式文章、Idea 或 Todo 不会删除原文或执行历史。
+数据库触发器禁止更新 `InboxItem.rawInput` 与 `rawSha256`。管理员可以显式删除单条 Inbox 记录；删除会移除该记录的原文、执行记录和事件，并解除正式文章、Idea 或 Todo 的来源关联，但不会删除已经创建的正式内容。单独删除正式文章、Idea 或 Todo 仍不会自动删除 Inbox 原文或执行历史。
 
 ## 权限与渲染
 
@@ -44,7 +44,7 @@ npx tsc --noEmit
 npx prisma validate
 ```
 
-真实数据库与端到端脚本会写入不可删除的 Inbox 历史，**只能连接一次性的隔离测试数据库**。数据库集成脚本会拒绝非本机地址以及名称不含 `test` 的数据库：
+真实数据库与端到端脚本会创建并删除 Inbox 测试数据，**只能连接一次性的隔离测试数据库**。数据库集成脚本会拒绝非本机地址以及名称不含 `test` 的数据库：
 
 ```bash
 DATABASE_URL=postgresql://.../prefix_inbox_test npm run test:inbox:integration

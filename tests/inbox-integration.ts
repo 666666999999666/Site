@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { prisma, disconnectDatabase } from "../lib/db"
 import { createInboxRawHash, parseInboxInput } from "../lib/inbox"
-import { captureInboxItem, retryInboxItem } from "../lib/inbox/service"
+import { captureInboxItem, deleteInboxItem, retryInboxItem } from "../lib/inbox/service"
 
 function assertDisposableDatabase() {
   const connectionString = process.env.DATABASE_URL
@@ -162,6 +162,16 @@ async function main() {
   assert.equal(retainedHistory.rawInput, "idea：# 私人想法\n保留完整正文")
   assert.equal(retainedHistory.execution?.targetId, formalIdea.id)
   assert.ok(retainedHistory.events.some((event) => event.eventType === "APPLIED"))
+
+  await assert.rejects(() => deleteInboxItem(otherOwner.id, article.id), /不存在/)
+  assert.ok(await prisma.inboxItem.findUnique({ where: { id: article.id } }))
+
+  await deleteInboxItem(owner.id, article.id)
+  assert.equal(await prisma.inboxItem.findUnique({ where: { id: article.id } }), null)
+  assert.equal(await prisma.inboxExecution.count({ where: { inboxItemId: article.id } }), 0)
+  assert.equal(await prisma.inboxEvent.count({ where: { inboxItemId: article.id } }), 0)
+  const retainedPost = await prisma.post.findUniqueOrThrow({ where: { id: post.id } })
+  assert.equal(retainedPost.sourceInboxItemId, null)
 
   console.log("Inbox PostgreSQL integration checks passed")
 }

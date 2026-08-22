@@ -3,6 +3,7 @@ import test from "node:test"
 import {
   InboxRequestError,
   validateInboxCaptureBody,
+  validateInboxDeleteBody,
   validateInboxListQuery,
   validateInboxRetryBody,
 } from "../lib/inbox-request"
@@ -16,7 +17,7 @@ test("capture input keeps raw text unchanged and trims only the request key", ()
   })
 })
 
-test("capture and retry inputs reject unknown fields", () => {
+test("capture, retry, and delete inputs reject unknown fields", () => {
   assert.throws(
     () => validateInboxCaptureBody({ rawInput: "idea：内容", requestKey: "key-1", kind: "IDEA" }),
     (error) => error instanceof InboxRequestError && error.statusCode === 422
@@ -25,6 +26,11 @@ test("capture and retry inputs reject unknown fields", () => {
     () => validateInboxRetryBody({ rawInput: "cannot replace it" }),
     (error) => error instanceof InboxRequestError && error.statusCode === 422
   )
+  assert.throws(
+    () => validateInboxDeleteBody({ force: true }),
+    (error) => error instanceof InboxRequestError && error.statusCode === 422
+  )
+  assert.doesNotThrow(() => validateInboxDeleteBody({}))
 })
 
 test("list filters accept only documented kinds and statuses", () => {

@@ -45,9 +45,17 @@ export function validateInboxCaptureBody(value: unknown): {
   return { rawInput: body.rawInput, requestKey }
 }
 
-export function validateInboxRetryBody(value: unknown): void {
+function validateEmptyInboxBody(value: unknown): void {
   const body = requireObject(value)
   rejectUnknownKeys(body, [])
+}
+
+export function validateInboxRetryBody(value: unknown): void {
+  validateEmptyInboxBody(value)
+}
+
+export function validateInboxDeleteBody(value: unknown): void {
+  validateEmptyInboxBody(value)
 }
 
 const KINDS = new Set<InboxKindValue>(["BLOG", "IDEA", "TODO"])

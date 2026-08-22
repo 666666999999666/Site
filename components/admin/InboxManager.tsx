@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { FormEvent, useMemo, useRef, useState } from "react"
-import { ArrowUpRight, RotateCcw, Send } from "lucide-react"
+import { ArrowUpRight, RotateCcw, Send, Trash2 } from "lucide-react"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
 import type {
   InboxItemSummaryView,
@@ -80,6 +80,7 @@ export function InboxManager({ initialItems }: { initialItems: InboxItemSummaryV
   const [statusFilter, setStatusFilter] = useState<InboxStatusValue | "ALL">("ALL")
   const [pending, setPending] = useState(false)
   const [retryingId, setRetryingId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [detailsById, setDetailsById] = useState<Record<string, InboxItemView>>({})
   const [loadingDetails, setLoadingDetails] = useState<Record<string, boolean>>({})
   const [error, setError] = useState("")
@@ -147,6 +148,38 @@ export function InboxManager({ initialItems }: { initialItems: InboxItemSummaryV
     }
   }
 
+  async function deleteItem(itemId: string) {
+    if (deletingId || retryingId) return
+    const confirmed = window.confirm(
+      "确定删除这条分流记录吗？原文和执行历史将永久删除，已经创建的文章、Idea 或 Todo 等正式内容会保留。"
+    )
+    if (!confirmed) return
+
+    setDeletingId(itemId)
+    setError("")
+    try {
+      await apiRequest<{ success: true }>(
+        `/api/inbox/items/${encodeURIComponent(itemId)}`,
+        jsonRequest("DELETE", {})
+      )
+      setItems((current) => current.filter((item) => item.id !== itemId))
+      setDetailsById((current) => {
+        const next = { ...current }
+        delete next[itemId]
+        return next
+      })
+      setLoadingDetails((current) => {
+        const next = { ...current }
+        delete next[itemId]
+        return next
+      })
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "删除失败")
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
   const characterCount = Array.from(rawInput).length
 
   return (
@@ -192,7 +225,7 @@ export function InboxManager({ initialItems }: { initialItems: InboxItemSummaryV
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h2 id="inbox-history-heading" className="text-xl font-semibold">最近分流记录</h2>
-            <p className="mt-1 text-sm text-muted-foreground">原文永久保留，正式对象后续编辑不会回写这里。</p>
+            <p className="mt-1 text-sm text-muted-foreground">原文随记录保留；删除记录不会删除已经创建的正式内容。</p>
           </div>
           <div className="flex flex-wrap gap-2">
             <label className="text-sm text-muted-foreground">
@@ -257,13 +290,23 @@ export function InboxManager({ initialItems }: { initialItems: InboxItemSummaryV
                         type="button"
                         variant="outline"
                         size="sm"
-                        disabled={retryingId !== null}
+                        disabled={retryingId !== null || deletingId !== null}
                         onClick={() => retry(item.id)}
                       >
                         <RotateCcw />
                         {retryingId === item.id ? "重试中…" : "重试"}
                       </Button>
                     )}
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      disabled={deletingId !== null || retryingId !== null}
+                      onClick={() => void deleteItem(item.id)}
+                    >
+                      <Trash2 />
+                      {deletingId === item.id ? "删除中…" : "删除记录"}
+                    </Button>
                   </div>
                   <details
                     className="rounded-md border border-border/60 p-3"
