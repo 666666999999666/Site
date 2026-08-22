@@ -5,14 +5,15 @@ import {
   useLayoutEffect,
   useRef,
   useState,
-  type MouseEvent as ReactMouseEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react"
 import { Crepe } from "@milkdown/crepe"
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener"
-import { editorViewCtx, parserCtx } from "@milkdown/kit/core"
+import { commandsCtx, editorViewCtx, parserCtx } from "@milkdown/kit/core"
 import { Slice } from "@milkdown/kit/prose/model"
 import { Selection } from "@milkdown/kit/prose/state"
+import { clearTextInCurrentBlockCommand } from "@milkdown/kit/preset/commonmark"
 import { insertTableCommand } from "@milkdown/kit/preset/gfm"
 import { callCommand } from "@milkdown/kit/utils"
 import "@milkdown/crepe/theme/common/style.css"
@@ -188,7 +189,16 @@ export function PostEditor({
   const onChangeRef = useRef(onChange)
   const onUploadRef = useRef(onUpload)
   const loadingRef = useRef(false)
+  const tableDialogTimerRef = useRef<number | null>(null)
   const [tableDialogOpen, setTableDialogOpen] = useState(false)
+
+  function requestTableInsertion() {
+    if (tableDialogTimerRef.current !== null) window.clearTimeout(tableDialogTimerRef.current)
+    tableDialogTimerRef.current = window.setTimeout(() => {
+      tableDialogTimerRef.current = null
+      setTableDialogOpen(true)
+    }, 0)
+  }
 
   // 将 Tiptap JSON 自动转换为 Markdown
   const normalizedValue = normalizeContent(value || "")
@@ -249,6 +259,25 @@ export function PostEditor({
             { label: "三级标题", level: 3 },
             { label: "四级标题", level: 4 },
           ],
+          buildTopBar: (builder) => {
+            const tableItem = builder
+              .getGroup("insert")
+              .group.items.find((item) => item.key === "table")
+            if (tableItem) tableItem.onRun = () => {}
+          },
+        },
+        [Crepe.Feature.BlockEdit]: {
+          buildMenu: (builder) => {
+            const tableItem = builder
+              .getGroup("advanced")
+              .group.items.find((item) => item.key === "table")
+            if (tableItem) {
+              tableItem.onRun = (ctx) => {
+                ctx.get(commandsCtx).call(clearTextInCurrentBlockCommand.key)
+                requestTableInsertion()
+              }
+            }
+          },
         },
       },
     })
@@ -278,6 +307,10 @@ export function PostEditor({
     return () => {
       cancelled = true
       controlObserver.disconnect()
+      if (tableDialogTimerRef.current !== null) {
+        window.clearTimeout(tableDialogTimerRef.current)
+        tableDialogTimerRef.current = null
+      }
       if (crepeRef.current) {
         crepeRef.current.destroy()
         crepeRef.current = null
@@ -309,22 +342,21 @@ export function PostEditor({
     }
   }, [normalizedValue])
 
-  function interceptTableInsertion(event: ReactPointerEvent<HTMLDivElement>) {
+  function interceptTableKeyboard(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (event.key !== "Enter" && event.key !== " ") return
     const target = event.target
     if (!(target instanceof Element)) return
     if (!target.closest('[data-editor-action="insert-table"]')) return
     event.preventDefault()
     event.stopPropagation()
-    window.setTimeout(() => setTableDialogOpen(true), 0)
+    requestTableInsertion()
   }
 
-  function interceptTableClick(event: ReactMouseEvent<HTMLDivElement>) {
+  function interceptTablePointerUp(event: ReactPointerEvent<HTMLDivElement>) {
     const target = event.target
     if (!(target instanceof Element)) return
     if (!target.closest('[data-editor-action="insert-table"]')) return
-    event.preventDefault()
-    event.stopPropagation()
-    setTableDialogOpen(true)
+    requestTableInsertion()
   }
 
   function insertSelectedTable(rows: number, columns: number) {
@@ -347,8 +379,8 @@ export function PostEditor({
     <>
       <div
         className="post-editor-shell rounded-lg border border-border/50 bg-card"
-        onPointerDownCapture={interceptTableInsertion}
-        onClickCapture={interceptTableClick}
+        onKeyDownCapture={interceptTableKeyboard}
+        onPointerUpCapture={interceptTablePointerUp}
       >
         <div ref={divRef} className="milkdown-editor-wrapper" style={{ minHeight: "500px" }} />
       </div>

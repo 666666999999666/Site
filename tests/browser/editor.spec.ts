@@ -157,10 +157,37 @@ test("table insertion asks for dimensions and renders clear borders in both them
   await setCaret(page, ".ProseMirror > p:first-child", 5)
 
   const tableButton = page.getByRole("button", { name: "插入表格" })
+  const tableButtonBox = await tableButton.boundingBox()
+  expect(tableButtonBox).not.toBeNull()
+  await page.mouse.move(
+    tableButtonBox!.x + tableButtonBox!.width / 2,
+    tableButtonBox!.y + tableButtonBox!.height / 2
+  )
+  await page.mouse.down()
+  await page.waitForTimeout(250)
+  await expect(page.getByRole("heading", { name: "插入表格" })).toBeHidden()
+  await page.mouse.up()
+  await expect(page.getByRole("heading", { name: "插入表格" })).toBeVisible()
+  await page.waitForTimeout(250)
+  await expect(page.getByRole("heading", { name: "插入表格" })).toBeVisible()
+  await expect(page.locator(".ProseMirror table:visible")).toHaveCount(0)
+  await page.getByRole("button", { name: "取消" }).click()
+
   await tableButton.focus()
   await page.keyboard.press("Enter")
   await expect(page.getByRole("heading", { name: "插入表格" })).toBeVisible()
+  await page.getByRole("button", { name: "取消" }).click()
+
+  await page.locator(".ProseMirror > p:first-child").hover()
+  await page.getByRole("button", { name: "在下方插入内容" }).click()
+  const blockTableItem = page.locator(".milkdown-slash-menu").getByText("Table", { exact: true })
+  await expect(blockTableItem).toBeVisible()
+  await blockTableItem.click()
+  await expect(page.getByRole("heading", { name: "插入表格" })).toBeVisible()
+  await page.waitForTimeout(250)
+  await expect(page.getByRole("heading", { name: "插入表格" })).toBeVisible()
   await expect(page.locator(".ProseMirror table:visible")).toHaveCount(0)
+
   await page.getByLabel("行数（含表头）").selectOption("4")
   await page.getByLabel("列数").selectOption("2")
   await page.screenshot({ path: "test-results/editor-table-dialog-light.png", fullPage: false })
