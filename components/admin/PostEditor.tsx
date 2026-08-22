@@ -1,14 +1,33 @@
 "use client"
 
-import { useEffect, useLayoutEffect, useRef } from "react"
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react"
 import { Crepe } from "@milkdown/crepe"
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener"
 import { editorViewCtx, parserCtx } from "@milkdown/kit/core"
 import { Slice } from "@milkdown/kit/prose/model"
 import { Selection } from "@milkdown/kit/prose/state"
+import { insertTableCommand } from "@milkdown/kit/preset/gfm"
+import { callCommand } from "@milkdown/kit/utils"
 import "@milkdown/crepe/theme/common/style.css"
 import "@milkdown/crepe/theme/frame.css"
 import { normalizeContent } from "@/lib/content"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
 
 const topBarLabels = [
   "加粗",
@@ -42,6 +61,7 @@ function enhanceEditorControls(root: HTMLElement) {
   root.querySelectorAll(".milkdown-top-bar .top-bar-item").forEach((element, index) => {
     const label = topBarLabels[index]
     if (label) labelControl(element, label)
+    if (label === "插入表格") element.setAttribute("data-editor-action", "insert-table")
   })
 
   root.querySelectorAll(".milkdown-toolbar .toolbar-item").forEach((element, index) => {
@@ -83,6 +103,70 @@ function enhanceEditorControls(root: HTMLElement) {
   })
 }
 
+function TableInsertDialog({
+  open,
+  onOpenChange,
+  onInsert,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onInsert: (rows: number, columns: number) => void
+}) {
+  const [rows, setRows] = useState(3)
+  const [columns, setColumns] = useState(3)
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent showCloseButton={false}>
+        <DialogHeader>
+          <DialogTitle>插入表格</DialogTitle>
+          <DialogDescription>先选择表格大小。行数包含第一行表头，插入后仍可继续增删行列。</DialogDescription>
+        </DialogHeader>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label htmlFor="editor-table-rows">行数（含表头）</Label>
+            <select
+              id="editor-table-rows"
+              value={rows}
+              onChange={(event) => setRows(Number(event.target.value))}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {Array.from({ length: 19 }, (_, index) => index + 2).map((count) => (
+                <option key={count} value={count}>{count} 行</option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="editor-table-columns">列数</Label>
+            <select
+              id="editor-table-columns"
+              value={columns}
+              onChange={(event) => setColumns(Number(event.target.value))}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+            >
+              {Array.from({ length: 12 }, (_, index) => index + 1).map((count) => (
+                <option key={count} value={count}>{count} 列</option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <p className="rounded-md bg-muted px-3 py-2 text-center text-sm font-medium">
+          将插入 {rows} 行 × {columns} 列
+        </p>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>取消</Button>
+          <Button type="button" onClick={() => onInsert(rows, columns)}>
+            插入 {rows}×{columns} 表格
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 /**
  * Markdown 所见即所得编辑器（基于 Milkdown + Crepe）
  *
@@ -104,6 +188,7 @@ export function PostEditor({
   const onChangeRef = useRef(onChange)
   const onUploadRef = useRef(onUpload)
   const loadingRef = useRef(false)
+  const [tableDialogOpen, setTableDialogOpen] = useState(false)
 
   // 将 Tiptap JSON 自动转换为 Markdown
   const normalizedValue = normalizeContent(value || "")
@@ -224,9 +309,55 @@ export function PostEditor({
     }
   }, [normalizedValue])
 
+  function interceptTableInsertion(event: ReactPointerEvent<HTMLDivElement>) {
+    const target = event.target
+    if (!(target instanceof Element)) return
+    if (!target.closest('[data-editor-action="insert-table"]')) return
+    event.preventDefault()
+    event.stopPropagation()
+    window.setTimeout(() => setTableDialogOpen(true), 0)
+  }
+
+  function interceptTableClick(event: ReactMouseEvent<HTMLDivElement>) {
+    const target = event.target
+    if (!(target instanceof Element)) return
+    if (!target.closest('[data-editor-action="insert-table"]')) return
+    event.preventDefault()
+    event.stopPropagation()
+    setTableDialogOpen(true)
+  }
+
+  function insertSelectedTable(rows: number, columns: number) {
+    const crepe = crepeRef.current
+    if (!crepe) return
+    const inserted = crepe.editor.action(callCommand(insertTableCommand.key, {
+      row: rows,
+      col: columns,
+    }))
+    if (!inserted) return
+    window.setTimeout(() => {
+      setTableDialogOpen(false)
+      requestAnimationFrame(() => {
+        crepe.editor.action((ctx) => ctx.get(editorViewCtx).focus())
+      })
+    }, 50)
+  }
+
   return (
-    <div className="border border-border/50 rounded-lg overflow-hidden bg-card">
-      <div ref={divRef} className="milkdown-editor-wrapper" style={{ minHeight: "500px" }} />
-    </div>
+    <>
+      <div
+        className="post-editor-shell rounded-lg border border-border/50 bg-card"
+        onPointerDownCapture={interceptTableInsertion}
+        onClickCapture={interceptTableClick}
+      >
+        <div ref={divRef} className="milkdown-editor-wrapper" style={{ minHeight: "500px" }} />
+      </div>
+
+      <TableInsertDialog
+        open={tableDialogOpen}
+        onOpenChange={setTableDialogOpen}
+        onInsert={insertSelectedTable}
+      />
+    </>
   )
 }

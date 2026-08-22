@@ -205,6 +205,8 @@
   --editor-control-icon: color-mix(in srgb, var(--foreground) 78%, transparent);
   --editor-block-selected: color-mix(in srgb, var(--editor-interaction) 12%, var(--background));
   --editor-block-dragging: color-mix(in srgb, var(--editor-interaction) 20%, var(--background));
+  --editor-table-border: oklch(0.55 0 0);
+  --editor-table-header: oklch(0.96 0 0);
   --crepe-color-background: var(--background);
   --crepe-color-on-background: var(--foreground);
   --crepe-color-surface: var(--card);
@@ -233,6 +235,34 @@
   --editor-control-icon: color-mix(in srgb, var(--foreground) 82%, transparent);
   --editor-block-selected: color-mix(in srgb, var(--editor-interaction) 18%, var(--background));
   --editor-block-dragging: color-mix(in srgb, var(--editor-interaction) 26%, var(--background));
+  --editor-table-border: oklch(0.72 0 0);
+  --editor-table-header: oklch(0.22 0 0);
+}
+
+.post-editor-shell,
+.milkdown-editor-wrapper,
+.milkdown-editor-wrapper .milkdown {
+  overflow: visible;
+}
+
+.milkdown-editor-wrapper .milkdown .milkdown-top-bar {
+  top: 0;
+  z-index: 40;
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  box-shadow: 0 4px 12px color-mix(in srgb, var(--foreground) 12%, transparent);
+}
+
+.milkdown-editor-wrapper .milkdown .milkdown-table-block table {
+  outline: 1px solid var(--editor-table-border);
+  outline-offset: -1px;
+}
+
+.milkdown-editor-wrapper .milkdown .milkdown-table-block :is(th, td) {
+  border: 1px solid var(--editor-table-border);
+}
+
+.milkdown-editor-wrapper .milkdown .milkdown-table-block th {
+  background: var(--editor-table-header);
 }
 
 .milkdown-editor-wrapper .ProseMirror {

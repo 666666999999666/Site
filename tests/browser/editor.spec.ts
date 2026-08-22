@@ -152,6 +152,78 @@ test("editor icon controls have names and keyboard-operable block actions", asyn
   await expect(page.locator(".ProseMirror > p").nth(1)).toBeEmpty()
 })
 
+test("table insertion asks for dimensions and renders clear borders in both themes", async ({ page }) => {
+  await openEditor(page)
+  await setCaret(page, ".ProseMirror > p:first-child", 5)
+
+  const tableButton = page.getByRole("button", { name: "插入表格" })
+  await tableButton.focus()
+  await page.keyboard.press("Enter")
+  await expect(page.getByRole("heading", { name: "插入表格" })).toBeVisible()
+  await expect(page.locator(".ProseMirror table:visible")).toHaveCount(0)
+  await page.getByLabel("行数（含表头）").selectOption("4")
+  await page.getByLabel("列数").selectOption("2")
+  await page.screenshot({ path: "test-results/editor-table-dialog-light.png", fullPage: false })
+  const insertButton = page.getByRole("button", { name: "插入 4×2 表格" })
+  const insertButtonBox = await insertButton.boundingBox()
+  expect(insertButtonBox).not.toBeNull()
+  await page.mouse.click(
+    insertButtonBox!.x + insertButtonBox!.width / 2,
+    insertButtonBox!.y + insertButtonBox!.height / 2
+  )
+
+  const table = page.locator(".ProseMirror table:visible").first()
+  await expect(table).toBeVisible()
+  await expect(table.locator("tr")).toHaveCount(4)
+  await expect(table.locator("tr").first().locator("th")).toHaveCount(2)
+  await expect(table.locator("tr").nth(1).locator("td")).toHaveCount(2)
+
+  for (const dark of [false, true]) {
+    await page.evaluate((enabled) => document.documentElement.classList.toggle("dark", enabled), dark)
+    const border = await table.locator("td").first().evaluate((cell) => {
+      const style = getComputedStyle(cell)
+      return { color: style.borderTopColor, width: style.borderTopWidth }
+    })
+    expect(border.width).toBe("1px")
+    expect(border.color).not.toBe("rgba(0, 0, 0, 0)")
+    expect(border.color).not.toBe("transparent")
+    await page.screenshot({
+      path: `test-results/editor-table-${dark ? "dark" : "light"}.png`,
+      fullPage: false,
+    })
+  }
+})
+
+test("daily sidebar children stay collapsed until requested and open on child pages", async ({ page }) => {
+  await page.goto("/sidebar")
+  const navigation = page.getByRole("navigation")
+  await expect(navigation.getByRole("link", { name: "历史记录" })).toBeHidden()
+  await expect(navigation.getByRole("link", { name: "每日提醒语" })).toBeHidden()
+
+  await navigation.getByRole("button", { name: "展开每日三件事菜单" }).click()
+  await expect(navigation.getByRole("link", { name: "历史记录" })).toBeVisible()
+  await expect(navigation.getByRole("link", { name: "每日提醒语" })).toBeVisible()
+  await page.screenshot({ path: "test-results/admin-sidebar-expanded.png", fullPage: false })
+
+  await navigation.getByRole("button", { name: "收起每日三件事菜单" }).click()
+  await expect(navigation.getByRole("link", { name: "历史记录" })).toBeHidden()
+
+  await page.goto("/admin/daily/history")
+  await expect(page.getByRole("navigation").getByRole("link", { name: "历史记录" })).toBeVisible()
+})
+
+test("top toolbar remains visible while scrolling through a long article", async ({ page }) => {
+  await openEditor(page)
+  const toolbar = page.locator(".milkdown-top-bar")
+  await expect(toolbar).toBeVisible()
+
+  await page.locator(".ProseMirror > *").last().scrollIntoViewIfNeeded()
+  const toolbarBox = await toolbar.boundingBox()
+  expect(toolbarBox).not.toBeNull()
+  expect(toolbarBox!.y).toBeGreaterThanOrEqual(0)
+  expect(toolbarBox!.y).toBeLessThanOrEqual(2)
+})
+
 test("drag source and drop indicator remain visible in both themes", async ({ page }) => {
   await openEditor(page)
 

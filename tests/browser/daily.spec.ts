@@ -65,6 +65,11 @@ test("Daily Top 3 supports the complete admin workflow and responsive layouts", 
   try {
     await page.goto("/admin")
     await expect(page.getByRole("heading", { name: "今日三件事" })).toBeVisible()
+    const sidebar = page.locator("aside nav")
+    await expect(sidebar.getByRole("link", { name: "历史记录" })).toBeHidden()
+    await sidebar.getByRole("button", { name: "展开每日三件事菜单" }).click()
+    await expect(sidebar.getByRole("link", { name: "历史记录" })).toBeVisible()
+    await expect(sidebar.getByRole("link", { name: "每日提醒语" })).toBeVisible()
     await expect(page.getByRole("textbox", { name: "第 1 件事", exact: true })).toBeVisible()
     await expect(page.getByRole("textbox", { name: "第 2 件事", exact: true })).toBeVisible()
     await expect(page.getByRole("textbox", { name: "第 3 件事", exact: true })).toBeVisible()
@@ -95,6 +100,7 @@ test("Daily Top 3 supports the complete admin workflow and responsive layouts", 
 
     await page.goto("/admin/daily/history")
     await expect(page.getByRole("heading", { name: "历史记录" })).toBeVisible()
+    await expect(page.locator("aside nav").getByRole("link", { name: "每日提醒语" })).toBeVisible()
     await expect(page.getByText(`${marker} 手动事项`)).toBeVisible()
     await expect(page.getByText(`${marker} Todo`)).toBeVisible()
 

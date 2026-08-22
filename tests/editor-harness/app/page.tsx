@@ -13,6 +13,8 @@ const initialValue = [
   "> QUOTE",
   "",
   "TAIL",
+  "",
+  ...Array.from({ length: 30 }, (_, index) => [`LONG CONTENT ${index + 1}`, ""]).flat(),
 ].join("\n")
 
 export default function EditorHarnessPage() {
