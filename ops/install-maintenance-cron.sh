@@ -40,6 +40,8 @@ awk '
   printf '# BEGIN QZSITE MANAGED\n'
   printf '0 3 * * * cd %q && nice -n 10 bash ops/maintenance.sh backup >> %q 2>&1\n' \
     "$APP_DIR" "$BACKUP_DIR/maintenance.log"
+  printf '20 3 * * * cd %q && nice -n 10 bash ops/maintenance.sh study-uploads >> %q 2>&1\n' \
+    "$APP_DIR" "$BACKUP_DIR/maintenance.log"
   printf '30 3 * * 0 cd %q && nice -n 10 bash ops/maintenance.sh verify-backup >> %q 2>&1\n' \
     "$APP_DIR" "$BACKUP_DIR/maintenance.log"
   printf '0 9 * * 1 cd %q && bash ops/maintenance.sh ssl >> %q 2>&1\n' \
@@ -54,6 +56,7 @@ awk '
 
 grep -Fqx '# BEGIN QZSITE MANAGED' "$installed" || fail "Managed maintenance cron header was not installed"
 grep -Fq 'ops/maintenance.sh backup' "$installed" || fail "Database backup cron entry was not installed"
+grep -Fq 'ops/maintenance.sh study-uploads' "$installed" || fail "Study upload cleanup cron entry was not installed"
 grep -Fq 'ops/maintenance.sh verify-backup' "$installed" || fail "Backup verification cron entry was not installed"
 grep -Fq 'ops/maintenance.sh ssl' "$installed" || fail "SSL check cron entry was not installed"
 grep -Fq 'ops/maintenance.sh mcp' "$installed" || fail "MCP maintenance cron entry was not installed"

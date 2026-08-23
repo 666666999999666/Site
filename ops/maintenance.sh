@@ -40,10 +40,16 @@ case "$action" in
   uploads-dry-run)
     bash "$APP_DIR/ops/cleanup-uploads.sh" --dry-run
     ;;
+  study-uploads-dry-run)
+    bash "$APP_DIR/ops/cleanup-study-uploads.sh" --dry-run
+    ;;
+  study-uploads)
+    bash "$APP_DIR/ops/cleanup-study-uploads.sh" --apply
+    ;;
   mcp)
     run_mcp_maintenance
     ;;
   *)
-    fail "Allowed actions: status, backup, verify-backup, ssl, install-cron, install-tls, content-dry-run, uploads-dry-run, mcp"
+    fail "Allowed actions: status, backup, verify-backup, ssl, install-cron, install-tls, content-dry-run, uploads-dry-run, study-uploads-dry-run, study-uploads, mcp"
     ;;
 esac

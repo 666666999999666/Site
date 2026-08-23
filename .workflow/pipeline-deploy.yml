@@ -42,7 +42,13 @@ stages:
       set +x
       printf '%s' "${TCR_PASSWORD}" | docker login ccr.ccs.tencentyun.com --username "${TCR_USERNAME}" --password-stdin >/dev/null
       set -x
-      bash ops/deploy.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
+      git fetch --prune origin '+refs/heads/main:refs/remotes/origin/main'
+      target_commit="$(git rev-parse --verify 'origin/main^{commit}')"
+      bootstrap="$(mktemp /tmp/qzsite-deploy-entry.XXXXXX)"
+      trap 'rm -f -- "$bootstrap"; docker logout ccr.ccs.tencentyun.com >/dev/null 2>&1 || true' EXIT
+      git show "${target_commit}:ops/deploy-entry.sh" > "$bootstrap"
+      chmod 700 "$bootstrap"
+      bash "$bootstrap" "$target_commit" ccr.ccs.tencentyun.com/lqzzql/web:latest
       bash ops/maintenance.sh status
     hostGroupID:
       ID: tencent-cloud

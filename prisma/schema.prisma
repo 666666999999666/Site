@@ -67,6 +67,41 @@ enum McpAuditStatus {
   INTERRUPTED
 }
 
+enum QuestionCardState {
+  NEW
+  LEARNING
+  REVIEW
+  RELEARNING
+}
+
+enum QuestionRating {
+  AGAIN
+  HARD
+  GOOD
+  EASY
+}
+
+enum QuestionReviewSource {
+  TYPED
+  DIRECT_REVEAL
+}
+
+enum QuestionRevealMode {
+  TYPED
+  DIRECT_REVEAL
+}
+
+enum QuestionResetReason {
+  CONTENT_RESET
+  ANSWER_CLEARED
+  ANSWER_COMPLETED
+}
+
+enum QuestionImageFieldType {
+  PROMPT
+  REFERENCE
+}
+
 model Post {
   id                String           @id @default(cuid())
   title             String
@@ -167,6 +202,14 @@ model User {
   inboxEvents        InboxEvent[]
   ideas              Idea[]
   ideaConversions    IdeaConversion[]
+  questions                 Question[]
+  questionReviewLogs        QuestionReviewLog[]
+  questionReviewTickets     QuestionReviewTicket[]
+  questionAttempts          QuestionAttempt[]
+  questionScheduleResetLogs QuestionScheduleResetLog[]
+  questionPreference        QuestionPreference?
+  questionImages            QuestionImage[]
+  questionImageReferences   QuestionImageReference[]
 }
 
 model DailyQuote {
@@ -597,4 +640,182 @@ model McpRateLimit {
 
   @@id([credentialId, toolName, windowStart])
   @@index([windowStart])
+}
+
+model Question {
+  id                      String            @id @default(cuid())
+  ownerId                 String
+  owner                   User              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  promptMarkdown          String            @db.Text
+  referenceAnswerMarkdown String?           @db.Text
+  enabled                 Boolean           @default(true)
+  newQueueAt              DateTime?
+  latestRating            QuestionRating?
+  contentVersion          Int               @default(1)
+  scheduleVersion         Int               @default(1)
+  dueAt                   DateTime
+  stability               Float             @default(0)
+  difficulty              Float             @default(0)
+  elapsedDays             Int               @default(0)
+  scheduledDays           Int               @default(0)
+  learningSteps           Int               @default(0)
+  reps                    Int               @default(0)
+  lapses                  Int               @default(0)
+  state                   QuestionCardState @default(NEW)
+  lastReviewAt            DateTime?
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
+
+  reviewLogs      QuestionReviewLog[]
+  reviewTickets   QuestionReviewTicket[]
+  attempts        QuestionAttempt[]
+  scheduleResets  QuestionScheduleResetLog[]
+  imageReferences QuestionImageReference[]
+
+  @@unique([id, ownerId])
+  @@index([ownerId, enabled, state, dueAt, id])
+  @@index([ownerId, enabled, newQueueAt, id])
+  @@index([ownerId, updatedAt(sort: Desc), id])
+}
+
+model QuestionReviewTicket {
+  id                String                @id @default(cuid())
+  reviewKey         String                @unique @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  ownerId           String
+  owner             User                  @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  questionId        String
+  question          Question              @relation(fields: [questionId, ownerId], references: [id, ownerId], onDelete: Restrict)
+  contentVersion    Int
+  scheduleVersion   Int
+  issuedAt          DateTime              @default(now())
+  expiresAt         DateTime
+  answerDigest      String?               @db.Char(64)
+  revealMode        QuestionRevealMode?
+  revealedAt        DateTime?
+  cancelledAt       DateTime?
+  consumedAt        DateTime?
+  successorTicketId String?               @unique
+  successorTicket   QuestionReviewTicket? @relation("QuestionTicketSuccessor", fields: [successorTicketId, ownerId], references: [id, ownerId], onDelete: Restrict)
+  predecessorTicket QuestionReviewTicket? @relation("QuestionTicketSuccessor")
+  reviewLog         QuestionReviewLog?
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@unique([id, ownerId])
+  @@unique([reviewKey, questionId, ownerId])
+  @@unique([successorTicketId, ownerId])
+  @@index([ownerId, expiresAt])
+  @@index([questionId, issuedAt(sort: Desc)])
+}
+
+model QuestionReviewLog {
+  id                    String               @id @default(cuid())
+  reviewKey             String               @unique @db.Uuid
+  questionId            String
+  ownerId               String
+  owner                 User                 @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  question              Question             @relation(fields: [questionId, ownerId], references: [id, ownerId], onDelete: Restrict)
+  ticket                QuestionReviewTicket @relation(fields: [reviewKey, questionId, ownerId], references: [reviewKey, questionId, ownerId], onDelete: Restrict)
+  source                QuestionReviewSource
+  rating                QuestionRating
+  stateBefore           QuestionCardState
+  reviewedAt            DateTime
+  reviewDate            DateTime             @db.Date
+  beforeCard            Json
+  afterCard             Json
+  fsrsReviewLog         Json
+  schedulerVersion      String               @db.VarChar(32)
+  parametersSnapshot    Json
+  contentVersion        Int
+  scheduleVersionBefore Int
+  scheduleVersionAfter  Int
+  revisionCount         Int                  @default(0)
+  ratingLockedAt        DateTime?
+  advancedAt            DateTime?
+  createdAt             DateTime             @default(now())
+  updatedAt             DateTime             @updatedAt
+  attempt               QuestionAttempt?
+
+  @@unique([id, questionId, ownerId])
+  @@unique([reviewKey, questionId, ownerId])
+  @@index([ownerId, reviewDate])
+  @@index([ownerId, reviewDate, stateBefore])
+  @@index([questionId, reviewedAt(sort: Desc), id])
+}
+
+model QuestionAttempt {
+  id             String            @id @default(cuid())
+  ownerId        String
+  owner          User              @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  questionId     String
+  question       Question          @relation(fields: [questionId, ownerId], references: [id, ownerId], onDelete: Restrict)
+  reviewLogId    String            @unique
+  reviewLog      QuestionReviewLog @relation(fields: [reviewLogId, questionId, ownerId], references: [id, questionId, ownerId], onDelete: Restrict)
+  answerMarkdown String            @db.Text
+  createdAt      DateTime          @default(now())
+
+  @@unique([reviewLogId, questionId, ownerId])
+  @@index([questionId, createdAt(sort: Desc), id])
+  @@index([ownerId, createdAt(sort: Desc)])
+}
+
+model QuestionScheduleResetLog {
+  id                    String              @id @default(cuid())
+  ownerId               String
+  owner                 User                @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  questionId            String
+  question              Question            @relation(fields: [questionId, ownerId], references: [id, ownerId], onDelete: Restrict)
+  reason                QuestionResetReason
+  resetAt               DateTime
+  beforeCard            Json
+  afterCard             Json
+  contentVersionBefore  Int
+  contentVersionAfter   Int
+  scheduleVersionBefore Int
+  scheduleVersionAfter  Int
+  createdAt             DateTime            @default(now())
+
+  @@index([questionId, resetAt(sort: Desc), id])
+  @@index([ownerId, resetAt(sort: Desc)])
+}
+
+model QuestionPreference {
+  userId        String   @id
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dailyNewLimit Int      @default(10)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model QuestionImage {
+  id             String                   @id @default(cuid())
+  ownerId        String
+  owner          User                     @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  storageKey     String                   @unique @db.VarChar(200)
+  mimeType       String                   @db.VarChar(64)
+  byteSize       Int
+  sha256         String                   @db.Char(64)
+  createdAt      DateTime                 @default(now())
+  unreferencedAt DateTime?                @default(now())
+  references     QuestionImageReference[]
+
+  @@unique([id, ownerId])
+  @@index([ownerId, createdAt(sort: Desc)])
+  @@index([unreferencedAt])
+}
+
+model QuestionImageReference {
+  id         String                 @id @default(cuid())
+  ownerId    String
+  owner      User                   @relation(fields: [ownerId], references: [id], onDelete: Restrict)
+  imageId    String
+  image      QuestionImage          @relation(fields: [imageId, ownerId], references: [id, ownerId], onDelete: Restrict)
+  questionId String
+  question   Question               @relation(fields: [questionId, ownerId], references: [id, ownerId], onDelete: Restrict)
+  fieldType  QuestionImageFieldType
+  createdAt  DateTime               @default(now())
+
+  @@unique([imageId, questionId, fieldType])
+  @@index([questionId, fieldType])
+  @@index([ownerId, imageId])
 }

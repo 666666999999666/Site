@@ -57,7 +57,8 @@ COPY --from=prisma-cli /prisma/node_modules/ /prisma/node_modules/
 COPY --from=builder /app/scripts/ /prisma/tools/scripts/
 COPY --from=builder /app/lib/content.ts /prisma/tools/lib/content.ts
 
-RUN mkdir -p /app/public/uploads && chown -R node:node /app/public/uploads
+RUN mkdir -p /app/public/uploads /app/data/study-uploads \
+    && chown -R node:node /app/public/uploads /app/data/study-uploads
 
 EXPOSE 3000
 ENV PORT=3000

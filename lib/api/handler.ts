@@ -29,6 +29,12 @@ export function handleApiError(e: unknown) {
         { status: 400 }
       )
     }
+    if (e.code === "P2034") {
+      return NextResponse.json(
+        { error: "题目状态已变化，请刷新后重试", code: "REVIEW_CONFLICT" },
+        { status: 409 }
+      )
+    }
   }
 
   if (e instanceof Prisma.PrismaClientInitializationError) {

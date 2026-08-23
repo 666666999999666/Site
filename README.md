@@ -133,15 +133,16 @@ bash ops/backup.sh manual
 bash ops/verify-backup.sh
 ```
 
-每个备份集包含：
+当前 `ops/backup.sh` 创建的每个新备份集包含：
 
 - PostgreSQL custom-format dump
-- `data/uploads` 压缩包
-- SHA-256 校验清单
+- `data/uploads` 公开上传压缩包
+- `data/study-uploads` 私有题图压缩包
+- 同时覆盖上述三项的 SHA-256 校验清单
 
-恢复验证会启动不映射端口的临时 PostgreSQL 容器，真实执行 `pg_restore` 并读取文章、项目、设置、Todo、用户和 migration 表，然后自动删除临时容器。备份默认保留 30 天。
+恢复验证会安全解包备份集内的上传归档，并启动不映射端口的临时 PostgreSQL 容器真实执行 `pg_restore`。若恢复出的数据库存在 `"QuestionImage"` 表，则同组私有题图归档必须存在，并逐条核对 `storageKey`、`byteSize` 和 `sha256`；不存在 `"QuestionImage"` 表的上线前旧备份，允许仅含数据库 dump、公开 uploads 和覆盖两项的校验清单。验证结束后自动删除临时容器。备份默认保留 30 天。
 
-生产维护由服务器 `ubuntu` 用户 Cron 直接调度：每日 03:00 完整备份、每周日 03:30 隔离恢复验证、每周一 09:00 证书检查、每小时第 15 分钟清理 MCP/OAuth 过期数据。Cron 属于一次性主机配置，不由启用了 `NoNewPrivileges` 的 Gitee Agent 在每次发布时重装；新机器恢复或计划发生变化时，从受信任的服务器登录会话执行：
+生产维护由服务器 `ubuntu` 用户 Cron 直接调度：每日 03:00 完整备份、每日 03:20 清理满 24 小时且无引用的私有题图、每周日 03:30 隔离恢复验证、每周一 09:00 证书检查、每小时第 15 分钟清理 MCP/OAuth 过期数据。Cron 属于一次性主机配置，不由启用了 `NoNewPrivileges` 的 Gitee Agent 在每次发布时重装；新机器恢复或计划发生变化时，从受信任的服务器登录会话执行：
 
 ```bash
 bash ops/maintenance.sh install-cron

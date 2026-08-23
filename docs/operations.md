@@ -1,10 +1,10 @@
 # QZ Site 生产运维手册
 
-> **文档定位**：本文是当前生产操作的唯一常规手册，最后核对日期为 **2026-08-09**。整机或磁盘故障恢复见 [`disaster-recovery.md`](disaster-recovery.md)。
+> **文档定位**：本文是当前生产操作的唯一常规手册，最后核对日期为 **2026-08-23**。整机或磁盘故障恢复见 [`disaster-recovery.md`](disaster-recovery.md)。
 
 ## 1. 运维边界
 
-**生产 PostgreSQL 和 `data/uploads` 是内容事实来源**。本地数据库、Seed 数据和本地上传不能覆盖生产数据。
+**生产 PostgreSQL、公开 `data/uploads` 和私有 `data/study-uploads` 是内容事实来源**。本地数据库、Seed 数据和本地上传不能覆盖生产数据。
 
 生产机为 2 核 2G，只负责：
 
@@ -37,23 +37,23 @@ PostgreSQL 和 Nginx 镜像只在版本变更或新机器恢复时拉取，不�
 
 ## 3. 自动部署
 
-Gitee Agent 执行：
+Gitee Agent 先从目标提交提取 `deploy-entry.sh`，再由入口把同一提交的部署、公共函数、完整备份和私有目录准备脚本暂存到旧工作区中执行。这样首次从旧版脚本升级、失败后重试时，也不会在 checkout 前退回旧版两文件备份。等价的日常入口为：
 
 ```bash
-bash ops/deploy.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
+bash ops/deploy-entry.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
 bash ops/maintenance.sh status
 ```
 
 `ops/deploy.sh` 的顺序是：
 
 1. 获取全局操作锁并确认目标提交属于 `origin/main`。
-2. 创建 PostgreSQL、uploads 和 SHA-256 同时点备份。
+2. 使用目标提交的新版备份逻辑创建 PostgreSQL、公开 uploads、私有题图和 SHA-256 同组备份。
 3. 拉取候选 tag，并解析为不可变 `@sha256:` digest。
 4. 切换到目标提交。
 5. 对比目标源码与候选镜像内的 SHA-256 源码指纹。
 6. 以 digest 更新 Compose，执行 migration 并等待三个服务 Healthy。
 7. 验证 Nginx 配置并 reload。
-8. 执行中英文页面、健康接口、未登录 Todo 写保护、OAuth discovery、MCP 401/Origin/旧 Gateway 和站点文件冒烟测试。
+8. 执行中英文页面、健康接口、未登录 Todo 写保护、OAuth discovery、MCP 401/Origin/旧 Gateway、站点文件，以及回环限定的 Question 创建/揭晓/评分/清理冒烟测试。
 9. 将 Git 提交、镜像 digest 和源码指纹写入 `.deploy-state`。
 10. 再次核对运行容器、镜像、源码和 `.deploy-state`。
 
@@ -79,6 +79,7 @@ bash ops/maintenance.sh status
 - 未登录 Todo 写请求返回 401。
 - OAuth Resource/Authorization Server discovery 正常，未认证 MCP 返回标准 401 Challenge。
 - 非本站 Origin 被 MCP 拒绝，旧远程 Tool Gateway 返回 410。
+- 仅通过 `docker compose exec --no-TTY web` 请求 `127.0.0.1:3000` 的 Question 写链路完成创建、揭晓、Good 评分并清理临时身份；非 2xx 使检查失败，脚本不输出响应正文。
 
 ## 4. 固定维护入口
 
@@ -94,6 +95,8 @@ bash ops/maintenance.sh status
 | `install-tls` | 校验证书和私钥后原子替换、测试并 reload |
 | `content-dry-run` | 只读扫描旧 Tiptap 正文 |
 | `uploads-dry-run` | 只读扫描孤儿上传 |
+| `study-uploads-dry-run` | 只读扫描私有题图和过期答案摘要 |
+| `study-uploads` | 先创建完整备份，再清理私有题图和过期答案摘要 |
 | `mcp` | 清理过期审批、暂存包、限流桶、中断审计和未完成 OAuth Client |
 
 其他值会被拒绝。不得增加 `eval`、任意命令变量或通用远程 Shell。
@@ -106,7 +109,8 @@ bash ops/maintenance.sh status
 
 | 时间 | 动作 | 资源控制 |
 |---|---|---|
-| 每日 03:00 | 完整数据库与 uploads 备份 | 串行执行、进程锁保护 |
+| 每日 03:00 | 完整数据库、公开 uploads 与私有题图备份 | 串行执行、进程锁保护 |
+| 每日 03:20 | 清理孤立私有题图和过期答案摘要 | 先备份、24 小时保护期、进程锁保护 |
 | 每周日 03:30 | 在临时容器真实恢复最新备份 | 384MB/0.75 CPU |
 | 每周一 09:00 | 证书余量和 HTTPS 检查 | 轻量 |
 | 每小时第 15 分钟 | MCP/OAuth 过期数据维护 | 轻量 |
@@ -117,7 +121,7 @@ bash ops/maintenance.sh status
 bash ops/maintenance.sh install-cron
 ```
 
-脚本使用带标记的 crontab 区块，重复执行不会产生重复任务，并会删除旧的 `/home/ubuntu/backup-db.sh` 和 `/home/ubuntu/check-ssl.sh` 条目。统一日志位于 `backups/maintenance.log`；任务失败时保留日志和备份中间信息，不直接删除。
+**“问题中学”功能首次发布成功后，也必须从受信任的主机登录会话执行一次 `bash ops/maintenance.sh install-cron`**，现有生产 Cron 不会因为代码发布而自动增加每日 03:20 清理。脚本使用带标记的 crontab 区块，重复执行不会产生重复任务，并会删除旧的 `/home/ubuntu/backup-db.sh` 和 `/home/ubuntu/check-ssl.sh` 条目。执行后用 `crontab -l` 确认存在 `ops/maintenance.sh study-uploads`；统一日志位于 `backups/maintenance.log`，任务失败时保留日志和备份中间信息，不直接删除。
 
 ## 6. 备份与验证
 
@@ -131,10 +135,15 @@ bash ops/maintenance.sh verify-backup
 每个 `BACKUP_SET` 包含：
 
 - `qzsite-<timestamp>-<label>.dump`：PostgreSQL custom-format dump。
-- `qzsite-<timestamp>-<label>-uploads.tar.gz`：同一时点的 uploads。
-- `qzsite-<timestamp>-<label>.sha256`：两份文件的校验值。
+- `qzsite-<timestamp>-<label>-uploads.tar.gz`：同一时点的公开 `data/uploads`。
+- `qzsite-<timestamp>-<label>-study-uploads.tar.gz`：同一时点的私有 `data/study-uploads`。
+- `qzsite-<timestamp>-<label>.sha256`：上述三份数据文件的校验值。
 
-备份默认保留 30 天。验证脚本会检查 SHA-256、uploads 归档结构，并在不映射端口的临时 PostgreSQL 16 容器中真实执行 `pg_restore`，读取文章、项目、设置、Todo、用户和 migration 数量后自动删除容器。
+私有题图归档不要求 Compose 的 Web 服务已经启动。备份脚本优先取得当前运行 Web 容器的精确镜像 ID；没有运行容器时使用 `.env` 的本地 `WEB_IMAGE`，以该镜像默认非 Root 身份启动 `--network none`、只读根文件系统的一次性容器，只读挂载 `data/study-uploads` 并流式生成 tar。镜像不存在、身份为 Root、目录不可读或 tar 失败时整组备份失败。
+
+备份默认保留 30 天。验证脚本会检查清单与 SHA-256；拒绝公开或私有归档中的路径穿越、异常根目录、链接、重复项和非普通文件；随后把两份归档解包到一次性隔离目录，并在不映射端口的临时 PostgreSQL 16 容器中真实执行 `pg_restore`。包含 Questions 表的新备份还会逐一核对数据库中的私有题图记录、大小和 SHA-256，最后自动删除容器和隔离目录。
+
+兼容边界：在“问题中学”上线前创建、数据库中不含 Questions 表的旧备份，允许没有 `-study-uploads.tar.gz`，仍按原来的数据库、公开 uploads 和两项清单验证；一旦数据库中含 Questions 表，私有题图归档及其清单项缺失都必须判定为失败。恢复时始终按一个 `BACKUP_SET` 成组使用，不混用不同时间戳的数据库和任一上传归档。
 
 验证失败时：
 
@@ -205,6 +214,8 @@ bash ops/cleanup-uploads.sh --dry-run
 - `.env`、备份、证书和私钥不进入 Git；文件权限为 `600`，目录为 `700`。
 - TCR 密码只通过 Gitee Secret 和 `docker login --password-stdin` 使用，任务结束自动 logout。
 - Web 使用非 Root `node` 用户，Nginx 只读挂载 uploads。
+- Nginx 普通访问日志只记录不含查询串和 Referrer 的 `$uri`；精确 `/api/questions` 搜索入口额外关闭继承的 error log，避免 upstream 故障把可匹配标准答案的搜索串写入请求行日志。其他路由继续保留错误日志。
+- `/api/internal/question-smoke` 只能由 Web 容器内的 `127.0.0.1` POST 调用；Nginx 的 HTTP、IP TLS、www TLS 和正式域名 TLS 四个公开 server 都对该精确路径直接返回 404，不代理、不重定向。
 - 后台密码若曾经通过聊天传输，站点所有者必须在后台改为新的独立长密码。
 - Better Auth Session、OAuth 内部密钥和 JWKS 私钥都由生产 `SESSION_SECRET` 保护；轮换该值会使现有后台 Session 和加密 JWKS 私钥失效，必须按计划重新登录并重新授权 Agent。
 - 远程 Agent 只使用 OAuth；Markdown 图片上传票据短期、单会话有效且数据库只保存 Hash。旧 `qzmcp_v1_...` 固定凭证已停用。
@@ -225,7 +236,7 @@ Agent 正常重启后服务端释放旧注册可能延迟。先等待 6 分钟�
 
 - 生产文章、项目、Todo、用户数量未意外变化。
 - migration 只执行一次且状态为 applied。
-- 上传文件在容器重建后仍可读取。
+- 公开上传和私有题图在容器重建后仍可读取；题图数据库记录与文件大小、SHA-256 一致。
 - 最新完整备份能够恢复。
 - Gitee 与 GitHub `main` 最终指向同一提交。
 - OAuth discovery、DCR 与 Token 端点正常，两个实际客户端分别显示为独立 Agent。

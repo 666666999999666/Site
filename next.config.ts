@@ -5,9 +5,16 @@ const withNextIntl = createNextIntlPlugin()
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  outputFileTracingRoot: process.cwd(),
   distDir: process.env.NEXT_DIST_DIR || ".next",
   allowedDevOrigins: ["127.0.0.1"],
   poweredByHeader: false,
+  webpack(config, { dev }) {
+    if (dev && process.env.QUESTION_TEST_DISABLE_WEBPACK_CACHE === "1") {
+      config.cache = false
+    }
+    return config
+  },
   outputFileTracingIncludes: {
     "/*": [
       "./node_modules/bcryptjs/**/*",

@@ -12,7 +12,8 @@ function createPrismaClient() {
   if (!connectionString || !connectionString.includes('://')) {
     throw new Error('DATABASE_URL is required outside the production build phase')
   }
-  const adapter = new PrismaPg({ connectionString })
+  const schema = new URL(connectionString).searchParams.get('schema') ?? undefined
+  const adapter = new PrismaPg({ connectionString }, schema ? { schema } : undefined)
   return new PrismaClient({ adapter })
 }
 

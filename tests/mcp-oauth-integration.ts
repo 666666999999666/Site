@@ -271,6 +271,7 @@ async function main() {
     mcpRoute,
     authMetadataRoute,
     legacyToolRoute,
+    oauthResourceValidation,
     oauthRoute,
     nextServer,
   ] = await Promise.all([
@@ -279,6 +280,7 @@ async function main() {
     import("../app/api/mcp/route"),
     import("../app/.well-known/oauth-authorization-server/api/oauth/route"),
     import("../app/api/mcp/gateway/tools/[tool]/route"),
+    import("../lib/auth/oauth-resource-validation"),
     import("../app/api/oauth/[...all]/route"),
     import("next/server"),
   ])
@@ -322,11 +324,11 @@ async function main() {
   }))
   assert.equal(invalidOriginMcp.status, 403)
   assert.equal(legacyToolRoute.POST().status, 410)
-  const missingAuthorizeResource = await oauthRoute.validateOAuthMcpResource(
+  const missingAuthorizeResource = await oauthResourceValidation.validateOAuthMcpResource(
     new Request(`${origin}/api/oauth/oauth2/authorize?client_id=test`)
   )
   assert.equal(missingAuthorizeResource?.status, 400)
-  const wrongTokenResource = await oauthRoute.validateOAuthMcpResource(
+  const wrongTokenResource = await oauthResourceValidation.validateOAuthMcpResource(
     new Request(`${origin}/api/oauth/oauth2/token`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },

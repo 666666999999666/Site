@@ -23,6 +23,7 @@ import { formatChineseDate } from "@/lib/daily-date"
 import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DailyReviewCard } from "@/components/questions/DailyReviewCard"
 
 type SaveState = "idle" | "pending" | "saving" | "saved" | "error"
 
@@ -349,6 +350,8 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
           ))}
         </div>
       </section>
+
+      <DailyReviewCard />
 
       <section className="border-y border-border/60 py-7" aria-labelledby="daily-progress-heading">
         <div className="flex items-center justify-between gap-4">

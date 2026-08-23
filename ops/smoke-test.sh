@@ -12,6 +12,11 @@ curl_args=(
   --retry 3
   --retry-delay 2
 )
+smoke_ca_file="${SMOKE_CA_FILE:-}"
+if [[ -n "$smoke_ca_file" ]]; then
+  [[ -f "$smoke_ca_file" ]] || fail "Smoke CA file does not exist"
+  curl_args+=(--cacert "$smoke_ca_file")
+fi
 if [[ -n "$curl_resolve" ]]; then
   curl_args+=(--resolve "$curl_resolve")
 fi
@@ -130,4 +135,30 @@ upload_without_ticket_status="$(
 [[ "$upload_without_ticket_status" == "401" ]] \
   || fail "Remote import upload without a ticket returned HTTP $upload_without_ticket_status instead of 401"
 
-log "Public smoke tests passed"
+question_smoke_result=""
+if ! question_smoke_result="$(
+  compose exec --no-TTY web node -e '
+    fetch("http://127.0.0.1:3000/api/internal/question-smoke", {
+      method: "POST",
+      redirect: "manual",
+      signal: AbortSignal.timeout(60000),
+    }).then(async response => {
+      await response.body?.cancel()
+      if (!response.ok) {
+        console.error(`Internal Question smoke returned HTTP ${response.status}`)
+        process.exitCode = 1
+        return
+      }
+      process.stdout.write("ok")
+    }).catch(() => {
+      console.error("Internal Question smoke request failed")
+      process.exitCode = 1
+    })
+  '
+)"; then
+  fail "Internal Question create/reveal/rating smoke test failed"
+fi
+[[ "$question_smoke_result" == "ok" ]] \
+  || fail "Internal Question smoke test returned an unexpected success marker"
+
+log "Public and loopback-only Question smoke tests passed"

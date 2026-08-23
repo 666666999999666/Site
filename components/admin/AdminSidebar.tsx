@@ -9,6 +9,7 @@ import {
   ChevronDown,
   FileText,
   FolderKanban,
+  GraduationCap,
   Inbox,
   LayoutDashboard,
   Lightbulb,
@@ -26,6 +27,7 @@ const dailyItems = [
 
 const items = [
   { href: "/admin/overview", label: "概览", icon: LayoutDashboard },
+  { href: "/admin/questions", label: "问题中学", icon: GraduationCap },
   { href: "/admin/inbox", label: "智能收件箱", icon: Inbox },
   { href: "/admin/posts", label: "文章", icon: FileText },
   { href: "/admin/ideas", label: "Idea", icon: Lightbulb },

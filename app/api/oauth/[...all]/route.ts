@@ -1,7 +1,7 @@
 import { toNextJsHandler } from "better-auth/next-js"
 import { z } from "zod"
 import { auth } from "@/lib/auth/better-auth"
-import { mcpResourceUrl } from "@/lib/auth/oauth-config"
+import { validateOAuthMcpResource } from "@/lib/auth/oauth-resource-validation"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -41,13 +41,6 @@ function denyDirectPasswordLogin(request: Request): Response | null {
   return null
 }
 
-function oauthResourceError(description: string): Response {
-  return Response.json(
-    { error: "invalid_target", error_description: description },
-    { status: 400, headers: { "Cache-Control": "no-store" } }
-  )
-}
-
 function oauthClientMetadataError(description: string): Response {
   return Response.json(
     { error: "invalid_client_metadata", error_description: description },
@@ -78,28 +71,6 @@ async function validateDynamicClientRegistration(request: Request): Promise<Resp
     }
   } catch {
     return oauthClientMetadataError("DCR metadata 必须是有效 JSON")
-  }
-  return null
-}
-
-export async function validateOAuthMcpResource(request: Request): Promise<Response | null> {
-  const url = new URL(request.url)
-  const pathname = url.pathname.replace(/\/$/, "")
-  let resources: string[] | null = null
-
-  if (request.method === "GET" && pathname === "/api/oauth/oauth2/authorize") {
-    resources = url.searchParams.getAll("resource")
-  } else if (request.method === "POST" && pathname === "/api/oauth/oauth2/token") {
-    const body = new URLSearchParams(await request.clone().text())
-    const grantType = body.get("grant_type")
-    if (grantType === "authorization_code" || grantType === "refresh_token") {
-      resources = body.getAll("resource")
-    }
-  }
-
-  if (resources === null) return null
-  if (resources.length !== 1 || resources[0] !== mcpResourceUrl()) {
-    return oauthResourceError("resource 必须精确指向本站 MCP Resource")
   }
   return null
 }
