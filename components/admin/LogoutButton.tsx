@@ -4,22 +4,38 @@ import { useState } from "react"
 import { House, LogOut } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { apiRequest } from "@/lib/api-client"
+import { cn } from "@/lib/utils"
 
-export function LogoutButton() {
+interface CollapsibleButtonProps {
+  collapsed?: boolean
+}
+
+export function LogoutButton({ collapsed = false }: CollapsibleButtonProps = {}) {
   const router = useRouter()
   return (
     <button
       type="button"
       onClick={() => router.push("/zh")}
-      className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+      title={collapsed ? "返回网站" : undefined}
+      className={cn(
+        "flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
+        collapsed && "justify-center px-0"
+      )}
     >
-      <House className="size-4" />
-      返回网站
+      <House aria-hidden="true" className="size-4 shrink-0" />
+      <span className={cn(collapsed && "sr-only")}>返回网站</span>
     </button>
   )
 }
 
-export function SignOutButton() {
+interface SignOutButtonProps extends CollapsibleButtonProps {
+  onRequestExpand?: () => void
+}
+
+export function SignOutButton({
+  collapsed = false,
+  onRequestExpand,
+}: SignOutButtonProps = {}) {
   const router = useRouter()
   const [showConfirm, setShowConfirm] = useState(false)
   const [pending, setPending] = useState(false)
@@ -38,15 +54,22 @@ export function SignOutButton() {
     }
   }
 
-  if (!showConfirm) {
+  if (!showConfirm || collapsed) {
     return (
       <button
         type="button"
-        onClick={() => setShowConfirm(true)}
-        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+        onClick={() => {
+          onRequestExpand?.()
+          setShowConfirm(true)
+        }}
+        title={collapsed ? "退出登录" : undefined}
+        className={cn(
+          "flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
+          collapsed && "justify-center px-0"
+        )}
       >
-        <LogOut className="size-4" />
-        退出登录
+        <LogOut aria-hidden="true" className="size-4 shrink-0" />
+        <span className={cn(collapsed && "sr-only")}>退出登录</span>
       </button>
     )
   }

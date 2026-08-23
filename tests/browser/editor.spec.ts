@@ -239,6 +239,63 @@ test("daily sidebar children stay collapsed until requested and open on child pa
   await expect(page.getByRole("navigation").getByRole("link", { name: "历史记录" })).toBeVisible()
 })
 
+test("desktop admin sidebar collapses to an accessible icon rail", async ({ page }) => {
+  await page.goto("/sidebar")
+
+  const sidebar = page.getByRole("complementary", { name: "后台侧栏" })
+  const navigation = sidebar.getByRole("navigation", { name: "后台导航" })
+  const overview = navigation.getByRole("link", { name: "概览" })
+  const collapse = sidebar.getByRole("button", { name: "收起后台侧栏" })
+
+  await expect(sidebar).toHaveCSS("width", "224px")
+  await page.screenshot({ path: "test-results/admin-sidebar-expanded-light.png", fullPage: false })
+  await collapse.click()
+
+  const expand = sidebar.getByRole("button", { name: "展开后台侧栏" })
+  await expect(sidebar).toHaveCSS("width", "64px")
+  await expect(expand).toBeVisible()
+  await expect(overview).toBeVisible()
+  await expect(overview).toHaveAttribute("title", "概览")
+  await expect(navigation.getByRole("button", { name: "展开每日三件事菜单" })).toHaveCount(0)
+  await page.screenshot({ path: "test-results/admin-sidebar-collapsed-light.png", fullPage: false })
+
+  await sidebar.getByRole("button", { name: "切换深色模式" }).click()
+  await expect(page.locator("html")).toHaveClass(/dark/)
+  await page.screenshot({ path: "test-results/admin-sidebar-collapsed-dark.png", fullPage: false })
+
+  const signOut = sidebar.getByRole("button", { name: "退出登录" })
+  await signOut.focus()
+  await page.keyboard.press("Enter")
+
+  await expect(sidebar).toHaveCSS("width", "224px")
+  await expect(sidebar.getByRole("button", { name: "收起后台侧栏" })).toBeVisible()
+  await expect(sidebar.getByText("当前设备的后台会话将失效。")).toBeVisible()
+  await expect(sidebar.getByRole("button", { name: "确认退出" })).toBeVisible()
+  await expect(overview).not.toHaveAttribute("title", "概览")
+  await page.screenshot({ path: "test-results/admin-sidebar-expanded-dark.png", fullPage: false })
+  await sidebar.getByRole("button", { name: "取消" }).focus()
+  await page.keyboard.press("Enter")
+  await expect(sidebar.getByText("当前设备的后台会话将失效。")).toHaveCount(0)
+})
+
+test("mobile admin navigation remains independent from the desktop sidebar", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/sidebar")
+
+  await expect(page.getByRole("complementary", { name: "后台侧栏", includeHidden: true })).toBeHidden()
+
+  const open = page.getByRole("button", { name: "打开后台菜单" })
+  await expect(open).toBeVisible()
+  await open.click()
+
+  const navigation = page.getByRole("navigation", { name: "后台导航" })
+  await expect(navigation.getByRole("link", { name: "问题中学" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "收起后台侧栏" })).toHaveCount(0)
+
+  await page.getByRole("button", { name: "关闭后台菜单" }).click()
+  await expect(navigation).toHaveCount(0)
+})
+
 test("top toolbar remains visible while scrolling through a long article", async ({ page }) => {
   await openEditor(page)
   const toolbar = page.locator(".milkdown-top-bar")
