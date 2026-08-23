@@ -29,27 +29,42 @@ runtime_uid="${BASH_REMATCH[1]}"
 runtime_gid="${BASH_REMATCH[2]}"
 ((runtime_uid != 0)) || fail "$role Web image must not run as root"
 
-mkdir -p -- "$APP_DIR/data/study-uploads"
-data_root="$(realpath -- "$APP_DIR/data")"
-study_uploads_dir="$(realpath -- "$APP_DIR/data/study-uploads")"
-[[ "$study_uploads_dir" == "$data_root/study-uploads" ]] \
-  || fail "Study upload directory resolved outside the expected data directory"
-[[ -d "$study_uploads_dir" && ! -L "$APP_DIR/data/study-uploads" ]] \
-  || fail "Study upload path must be a real directory"
+data_path="$APP_DIR/data"
+[[ -d "$data_path" && ! -L "$data_path" ]] \
+  || fail "Application data path must be a real directory"
+data_root="$(realpath -- "$data_path")"
+[[ "$data_root" == "$data_path" ]] \
+  || fail "Application data directory resolved outside the expected path"
+study_uploads_path="$data_root/study-uploads"
+if [[ -e "$study_uploads_path" || -L "$study_uploads_path" ]]; then
+  [[ -d "$study_uploads_path" && ! -L "$study_uploads_path" ]] \
+    || fail "Study upload path must be a real directory"
+  [[ "$(realpath -- "$study_uploads_path")" == "$study_uploads_path" ]] \
+    || fail "Study upload directory resolved outside the expected data directory"
+fi
 
+# Docker intentionally creates a missing bind source through the daemon, because
+# an existing production data directory may be owned by a container runtime UID.
 docker run --rm --read-only --network none \
   --user 0:0 \
-  --volume "$study_uploads_dir:/study-uploads" \
+  --volume "$study_uploads_path:/study-uploads:rw" \
   --entrypoint sh \
   "$image" \
   -ceu '
     target=/study-uploads
+    test -d "$target"
     chown -R "$1:$2" "$target"
     chmod 0750 "$target"
     actual="$(stat -c "%u:%g:%a" "$target")"
     test "$actual" = "$1:$2:750"
   ' -- "$runtime_uid" "$runtime_gid" \
   || fail "Could not assign study uploads to the $role Web runtime"
+
+study_uploads_dir="$(realpath -- "$study_uploads_path")"
+[[ "$study_uploads_dir" == "$study_uploads_path" ]] \
+  || fail "Study upload directory resolved outside the expected data directory"
+[[ -d "$study_uploads_dir" && ! -L "$study_uploads_path" ]] \
+  || fail "Study upload path must be a real directory"
 
 docker run --rm --read-only --network none \
   --volume "$study_uploads_dir:/study-uploads" \

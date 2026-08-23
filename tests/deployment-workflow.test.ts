@@ -63,6 +63,21 @@ test("a failed candidate restores upload ownership with the exact prior runtime 
   assert.match(prepare, /mktemp \/study-uploads\/\.deploy-write-probe\.XXXXXX/)
 })
 
+test("study upload preparation supports a Docker-owned host data directory", () => {
+  const prepare = readFileSync("ops/prepare-study-uploads.sh", "utf8")
+  const dockerProvision = '--volume "$study_uploads_path:/study-uploads:rw"'
+  const canonicalizeProvisioned =
+    'study_uploads_dir="$(realpath -- "$study_uploads_path")"'
+
+  assert.doesNotMatch(prepare, /mkdir -p -- "\$APP_DIR\/data\/study-uploads"/)
+  assert.match(prepare, /\[\[ -d "\$data_path" && ! -L "\$data_path" \]\]/)
+  assert.match(prepare, /data_root="\$\(realpath -- "\$data_path"\)"/)
+  assert.match(prepare, /\[\[ "\$data_root" == "\$data_path" \]\]/)
+  assert.match(prepare, /study_uploads_path="\$data_root\/study-uploads"/)
+  assert.ok(prepare.includes(dockerProvision))
+  assert.ok(prepare.indexOf(dockerProvision) < prepare.indexOf(canonicalizeProvisioned))
+})
+
 test("an incomplete rollback never overwrites deployment state with the old release", () => {
   const deploy = readFileSync("ops/deploy.sh", "utf8")
 
