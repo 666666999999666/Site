@@ -23,6 +23,7 @@ function isIgnored(relativePath, directory) {
 
   if (parts.some((part) => ignoredDirectories.has(part))) return true
   if (normalized.startsWith("lib/generated/prisma/")) return true
+  if (parts[0] === "ops" && name.startsWith(".deploy-bootstrap-")) return true
   if (name.startsWith(".deploy-state") || name === ".source-fingerprint") return true
   if (name === "next-env.d.ts" || name.endsWith(".tsbuildinfo")) return true
   if (name.endsWith(".md")) return true
