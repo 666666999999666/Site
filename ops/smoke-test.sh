@@ -43,6 +43,8 @@ grep -Eiq '^location:[[:space:]]*(https?://[^/]+)?/zh([?#]|[[:space:]]*$)' "$tmp
 zh_page="$(curl --fail "${curl_args[@]}" "$site_url/zh")"
 [[ -n "$zh_page" ]] \
   || fail "Chinese home page returned an empty response"
+[[ "$zh_page" == *'<html lang="zh-CN"'* ]] \
+  || fail "Chinese home page did not declare the zh-CN document language"
 
 expect_retired_english() {
   local route="$1"

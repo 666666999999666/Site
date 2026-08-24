@@ -105,6 +105,7 @@ test("deployment smoke enforces the Chinese-only public route contract", () => {
   assert.match(smoke, /root_status=.*[\s\S]*?\[\[ "\$root_status" == "308" \]\]/)
   assert.match(smoke, /\^location:\[\[:space:\]\]\*\(https\?:\/\/\[\^\/\]\+\)\?\/zh/)
   assert.match(smoke, /zh_page=.*[\s\S]*?"\$site_url\/zh"/)
+  assert.match(smoke, /zh_page[\s\S]*?<html lang="zh-CN"/)
   assert.match(smoke, /expect_retired_english "\/en"/)
   assert.match(smoke, /expect_retired_english "\/en\/blog\?source=smoke"/)
   assert.match(smoke, /\[\[ "\$status" == "410" \]\]/)
