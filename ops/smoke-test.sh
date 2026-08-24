@@ -28,13 +28,74 @@ health="$(curl --fail "${curl_args[@]}" "$site_url/api/health")"
 [[ "$health" == *'"status":"ok"'* ]] \
   || fail "Public health endpoint returned an unexpected response"
 
-zh_page="$(curl --fail "${curl_args[@]}" "$site_url/zh")"
-[[ "$zh_page" == *'切换到英文'* && "$zh_page" == *'管理入口'* ]] \
-  || fail "Chinese page did not contain the expected localized controls"
+root_status="$(
+  curl "${curl_args[@]}" \
+    --dump-header "$tmp_dir/root.headers" \
+    --output /dev/null \
+    --write-out '%{http_code}' \
+    "$site_url/"
+)"
+[[ "$root_status" == "308" ]] \
+  || fail "Site root returned HTTP $root_status instead of 308"
+grep -Eiq '^location:[[:space:]]*(https?://[^/]+)?/zh([?#]|[[:space:]]*$)' "$tmp_dir/root.headers" \
+  || fail "Site root did not redirect to /zh"
 
-en_page="$(curl --fail "${curl_args[@]}" "$site_url/en")"
-[[ "$en_page" == *'Switch to Chinese'* && "$en_page" == *'Admin entry'* ]] \
-  || fail "English page did not contain the expected localized controls"
+zh_page="$(curl --fail "${curl_args[@]}" "$site_url/zh")"
+[[ -n "$zh_page" ]] \
+  || fail "Chinese home page returned an empty response"
+
+expect_retired_english() {
+  local route="$1"
+  local label="$2"
+  local status
+  local headers="$tmp_dir/$label.headers"
+
+  status="$(
+    curl "${curl_args[@]}" \
+      --dump-header "$headers" \
+      --output /dev/null \
+      --write-out '%{http_code}' \
+      "$site_url$route"
+  )"
+  [[ "$status" == "410" ]] \
+    || fail "Retired English route $route returned HTTP $status instead of 410"
+  if grep -Eiq '^location:' "$headers"; then
+    fail "Retired English route $route unexpectedly returned a Location header"
+  fi
+  grep -Eiq '^content-type:[[:space:]]*text/plain;[[:space:]]*charset=utf-8' "$headers" \
+    || fail "Retired English route $route did not return the plain-text UTF-8 contract"
+  grep -Eiq '^x-robots-tag:[[:space:]]*noindex' "$headers" \
+    || fail "Retired English route $route did not opt out of indexing"
+  grep -Eiq '^cache-control:[[:space:]]*no-store' "$headers" \
+    || fail "Retired English route $route did not disable caching"
+}
+
+expect_retired_english "/en" "retired-en-root"
+expect_retired_english "/en/blog?source=smoke" "retired-en-blog"
+
+energy_status="$(
+  curl "${curl_args[@]}" \
+    --output /dev/null \
+    --write-out '%{http_code}' \
+    "$site_url/energy"
+)"
+[[ "$energy_status" != "410" ]] \
+  || fail "/energy was incorrectly classified as a retired English route"
+
+curl --fail "${curl_args[@]}" "$site_url/zh/blog/series" > /dev/null
+curl --fail "${curl_args[@]}" "$site_url/zh/blog/tags" > /dev/null
+curl --fail "${curl_args[@]}" "$site_url/zh/blog/archive" > /dev/null
+
+feed="$(curl --fail "${curl_args[@]}" "$site_url/feed.xml")"
+[[ "$feed" == *'<rss'* && "$feed" != *"$site_url/en"* ]] \
+  || fail "RSS feed is invalid or contains a retired English URL"
+
+sitemap="$(curl --fail "${curl_args[@]}" "$site_url/sitemap.xml")"
+[[ "$sitemap" == *'/zh/blog/series'* \
+  && "$sitemap" == *'/zh/blog/tags'* \
+  && "$sitemap" == *'/zh/blog/archive'* \
+  && "$sitemap" != *"$site_url/en"* ]] \
+  || fail "Sitemap is missing Chinese blog routes or contains a retired English URL"
 
 todo_status="$(
   curl "${curl_args[@]}" \
@@ -49,7 +110,6 @@ todo_status="$(
   || fail "Unauthenticated Todo write returned HTTP $todo_status instead of 401"
 
 curl --fail "${curl_args[@]}" "$site_url/robots.txt" > /dev/null
-curl --fail "${curl_args[@]}" "$site_url/sitemap.xml" > /dev/null
 
 resource_metadata="$(curl --fail "${curl_args[@]}" "$site_url/.well-known/oauth-protected-resource/api/mcp")"
 [[ "$resource_metadata" == *'"resource":"https://liaoqizai.site/api/mcp"'* \

@@ -110,6 +110,9 @@ model Post {
   slug              String           @unique
   categoryId        String?
   category          Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  seriesId          String?
+  series            Series?          @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  seriesOrder       Int?
   tags              String[]
   coverImage        String?
   draftMetadata     Json?
@@ -124,6 +127,21 @@ model Post {
 
   @@index([status, createdAt])
   @@index([categoryId])
+  @@unique([seriesId, seriesOrder])
+}
+
+model Series {
+  id          String   @id @default(cuid())
+  title       String
+  slug        String   @unique
+  description String
+  coverImage  String?
+  sortOrder   Int      @default(0)
+  posts       Post[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sortOrder, title])
 }
 
 model Category {

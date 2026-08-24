@@ -14,7 +14,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   try {
     await ensureAuthenticated()
     const { id } = await params
-    const post = await prisma.post.findUnique({ where: { id }, include: { category: true } })
+    const post = await prisma.post.findUnique({ where: { id }, include: { category: true, series: true } })
     if (!post) throw new NotFoundError("未找到文章")
     return privateNoStore(NextResponse.json(post))
   } catch (e) {

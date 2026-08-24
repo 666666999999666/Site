@@ -3,7 +3,7 @@
 import dynamic from "next/dynamic"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
-import type { Category, Post } from "@/lib/generated/prisma/client"
+import type { Category, Post, Series } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
 import { normalizeContent } from "@/lib/content"
 import { Button } from "@/components/ui/button"
@@ -16,13 +16,15 @@ const PostEditor = dynamic(
   { ssr: false }
 )
 
-type PostWithCategory = Post & { category: Category | null }
+type PostWithRelations = Post & { category: Category | null; series: Series | null }
 
 interface DraftData {
   title: string
   content: string
   excerpt: string
   categoryId: string
+  seriesId?: string
+  seriesOrder?: string
   tags: string
   publishedAt: string
 }
@@ -44,17 +46,22 @@ function validLocalDraft(value: unknown): value is LocalDraft {
   if (typeof draft.savedAt !== "number" || !draft.data || typeof draft.data !== "object") {
     return false
   }
-  return ["title", "content", "excerpt", "categoryId", "tags", "publishedAt"].every(
+  const requiredFieldsValid = ["title", "content", "excerpt", "categoryId", "tags", "publishedAt"].every(
     (key) => typeof draft.data?.[key as keyof DraftData] === "string"
   )
+  return requiredFieldsValid &&
+    (draft.data.seriesId === undefined || typeof draft.data.seriesId === "string") &&
+    (draft.data.seriesOrder === undefined || typeof draft.data.seriesOrder === "string")
 }
 
 export function PostForm({
   post,
   categories,
+  series,
 }: {
-  post?: PostWithCategory
+  post?: PostWithRelations
   categories: Category[]
+  series: Series[]
 }) {
   const router = useRouter()
   const storageKey = `qz-post-draft:${post?.id || "new"}`
@@ -63,6 +70,10 @@ export function PostForm({
     content: normalizeContent(post?.content || ""),
     excerpt: post?.excerpt || "",
     categoryId: post?.categoryId || "",
+    seriesId: post?.seriesId || "",
+    seriesOrder: post?.seriesOrder === null || post?.seriesOrder === undefined
+      ? ""
+      : String(post.seriesOrder),
     tags: (post?.tags || []).join(", "),
     publishedAt: post?.publishedAt ? toLocalDatetimeInput(post.publishedAt) : "",
   }), [post])
@@ -71,6 +82,8 @@ export function PostForm({
   const [content, setContent] = useState(initialData.content)
   const [excerpt, setExcerpt] = useState(initialData.excerpt)
   const [categoryId, setCategoryId] = useState(initialData.categoryId)
+  const [seriesId, setSeriesId] = useState(initialData.seriesId ?? "")
+  const [seriesOrder, setSeriesOrder] = useState(initialData.seriesOrder ?? "")
   const [tags, setTags] = useState(initialData.tags)
   const [publishedAt, setPublishedAt] = useState(initialData.publishedAt)
   const [recovery, setRecovery] = useState<LocalDraft | null>(null)
@@ -84,15 +97,19 @@ export function PostForm({
     content,
     excerpt,
     categoryId,
+    seriesId,
+    seriesOrder,
     tags,
     publishedAt,
-  }), [categoryId, content, excerpt, publishedAt, tags, title])
+  }), [categoryId, content, excerpt, publishedAt, seriesId, seriesOrder, tags, title])
   // #21: 按字段比较 dirty 状态，避免大内容每次按键都 JSON.stringify 两次
   const dirty =
     currentData.title !== initialData.title ||
     currentData.content !== initialData.content ||
     currentData.excerpt !== initialData.excerpt ||
     currentData.categoryId !== initialData.categoryId ||
+    currentData.seriesId !== initialData.seriesId ||
+    currentData.seriesOrder !== initialData.seriesOrder ||
     currentData.tags !== initialData.tags ||
     currentData.publishedAt !== initialData.publishedAt
 
@@ -159,6 +176,8 @@ export function PostForm({
     setContent(recovery.data.content)
     setExcerpt(recovery.data.excerpt)
     setCategoryId(recovery.data.categoryId)
+    setSeriesId(recovery.data.seriesId ?? "")
+    setSeriesOrder(recovery.data.seriesOrder ?? "")
     setTags(recovery.data.tags)
     setPublishedAt(recovery.data.publishedAt)
     setRecovery(null)
@@ -204,6 +223,10 @@ export function PostForm({
         content,
         excerpt,
         categoryId: categoryId || null,
+        seriesId: seriesId || null,
+        seriesOrder: seriesId
+          ? (seriesOrder.trim() ? Number(seriesOrder) : null)
+          : null,
         tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
         status,
         publishedAt: publishIso,
@@ -269,6 +292,40 @@ export function PostForm({
             onChange={(event) => setTags(event.target.value)}
             placeholder="技术, 学习"
           />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(0,1fr)_10rem]">
+        <div className="space-y-2">
+          <Label htmlFor="series">系列</Label>
+          <select
+            id="series"
+            value={seriesId}
+            onChange={(event) => {
+              setSeriesId(event.target.value)
+              if (!event.target.value) setSeriesOrder("")
+            }}
+            className="h-10 w-full rounded-md border border-border/50 bg-background px-3 text-sm"
+          >
+            <option value="">无系列</option>
+            {series.map((item) => (
+              <option key={item.id} value={item.id}>{item.title}</option>
+            ))}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="seriesOrder">系列内顺序</Label>
+          <Input
+            id="seriesOrder"
+            type="number"
+            min={0}
+            max={10000}
+            value={seriesOrder}
+            onChange={(event) => setSeriesOrder(event.target.value)}
+            placeholder="自动取下一位"
+            disabled={!seriesId}
+          />
+          <p className="text-xs text-muted-foreground">留空时自动排到末尾</p>
         </div>
       </div>
 

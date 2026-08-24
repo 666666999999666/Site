@@ -5,8 +5,9 @@ type JsonObject = Record<string, unknown>
 
 const POST_KEYS = [
   "title", "content", "excerpt", "categoryId", "tags", "coverImage", "draftMetadata",
-  "status", "publishedAt",
+  "seriesId", "seriesOrder", "status", "publishedAt",
 ] as const
+const SERIES_KEYS = ["title", "slug", "description", "coverImage", "sortOrder"] as const
 const TODO_KEYS = [
   "title", "description", "categoryId", "projectId", "status", "priority", "dueDate",
   "completionCriteria", "subtasks",
@@ -190,6 +191,8 @@ export interface PostInput {
   content?: string
   excerpt?: string | null
   categoryId?: string | null
+  seriesId?: string | null
+  seriesOrder?: number | null
   tags?: string[]
   coverImage?: string | null
   draftMetadata?: JsonObject | null
@@ -235,6 +238,10 @@ function parsePost(value: JsonObject, partial: boolean): PostInput {
   }
   if (value.excerpt !== undefined) result.excerpt = optionalString(value.excerpt, "摘要", 1000)
   if (value.categoryId !== undefined) result.categoryId = optionalString(value.categoryId, "分区", 128)
+  if (value.seriesId !== undefined) result.seriesId = optionalString(value.seriesId, "系列", 128)
+  if (value.seriesOrder !== undefined) {
+    result.seriesOrder = optionalNullableInteger(value.seriesOrder, "系列顺序", 0, 10_000)
+  }
   if (value.tags !== undefined) result.tags = optionalTags(value.tags)
   if (value.coverImage !== undefined) result.coverImage = optionalUploadPath(value.coverImage)
   if (value.draftMetadata !== undefined) {
@@ -255,6 +262,51 @@ export function validatePostCreate(value: JsonObject): Required<Pick<PostInput, 
 
 export function validatePostUpdate(value: JsonObject): PostInput {
   return parsePost(value, true)
+}
+
+export interface SeriesInput {
+  title?: string
+  slug?: string
+  description?: string
+  coverImage?: string | null
+  sortOrder?: number
+}
+
+function optionalSeriesSlug(value: unknown): string | undefined {
+  if (value === undefined) return undefined
+  const slug = requiredString(value, "系列 slug", 120).normalize("NFKC").toLocaleLowerCase()
+  if (!/^[\p{Letter}\p{Number}]+(?:-[\p{Letter}\p{Number}]+)*$/u.test(slug)) {
+    throw new ValidationError("系列 slug 只能包含字母、数字和单个连字符")
+  }
+  return slug
+}
+
+function parseSeries(value: JsonObject, partial: boolean): SeriesInput {
+  rejectUnknownKeys(value, SERIES_KEYS)
+  if (partial) requireAtLeastOneKey(value)
+  const result: SeriesInput = {}
+  if (!partial || value.title !== undefined) {
+    result.title = requiredString(value.title, "系列标题", 120)
+  }
+  if (value.slug !== undefined) result.slug = optionalSeriesSlug(value.slug)
+  if (!partial || value.description !== undefined) {
+    result.description = requiredString(value.description, "系列简介", 1000)
+  }
+  if (value.coverImage !== undefined) result.coverImage = optionalUploadPath(value.coverImage)
+  if (value.sortOrder !== undefined) {
+    result.sortOrder = optionalInteger(value.sortOrder, "系列排序", -10_000, 10_000)
+  }
+  return result
+}
+
+export function validateSeriesCreate(
+  value: JsonObject
+): SeriesInput & { title: string; description: string } {
+  return parseSeries(value, false) as SeriesInput & { title: string; description: string }
+}
+
+export function validateSeriesUpdate(value: JsonObject): SeriesInput {
+  return parseSeries(value, true)
 }
 
 export interface TodoInput {

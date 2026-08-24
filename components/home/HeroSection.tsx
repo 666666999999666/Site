@@ -15,14 +15,14 @@ export function HeroSection({
 }) {
   const t = useTranslations("home")
   return (
-    <section className="py-24 sm:py-36">
+    <section className="border-b border-border/40 py-14 sm:py-20">
       <Container size="narrow">
         <div className="text-center">
-          <h1 className="mb-3 text-4xl font-bold tracking-tight text-foreground sm:text-5xl">
-            {name}
+          <p className="mb-3 text-sm font-medium text-muted-foreground">{name} · {role}</p>
+          <h1 className="mb-4 text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
+            {t("title")}
           </h1>
-          <p className="mb-3 text-base font-medium text-foreground/80">{role}</p>
-          <p className="mb-8 text-lg text-muted-foreground">
+          <p className="mx-auto mb-8 max-w-2xl text-base leading-7 text-muted-foreground sm:text-lg">
             {description}
           </p>
           <div className="flex items-center justify-center gap-3">

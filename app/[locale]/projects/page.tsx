@@ -5,6 +5,7 @@ import { getTranslations } from "next-intl/server"
 import { Container } from "@/components/layout/Container"
 import { getAllProjects } from "@/lib/projects"
 import { GitHubIcon } from "@/components/icons/GitHubIcon"
+import { hasPublicProjectEvidence } from "@/lib/public-projects"
 
 export const dynamic = "force-dynamic"
 
@@ -15,27 +16,26 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale } = await params
   const t = await getTranslations({ locale, namespace: "projects" })
-  const pathname = `/${locale}/projects`
+  const pathname = "/zh/projects"
 
   return {
     title: t("metadataTitle"),
     description: t("metadataDescription"),
     alternates: {
       canonical: pathname,
-      languages: { zh: "/zh/projects", en: "/en/projects" },
     },
     openGraph: {
       title: t("metadataTitle"),
       description: t("metadataDescription"),
       url: pathname,
-      locale: locale === "en" ? "en_US" : "zh_CN",
+      locale: "zh_CN",
     },
   }
 }
 
 export default async function ProjectsPage() {
   const t = await getTranslations("projects")
-  const projects = await getAllProjects()
+  const projects = (await getAllProjects()).filter(hasPublicProjectEvidence)
 
   return (
     <section className="py-16">

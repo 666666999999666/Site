@@ -9,8 +9,8 @@ export type PublicSettings = Record<PublicSettingKey, string>
 export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
   owner_name: "QZ Site",
   email: "",
-  home_tagline: "记录学习、想法与项目实践。",
-  home_role: "开发者 / 持续学习者",
+  home_tagline: "记录 Agent 应用、Python 与 Web 工程实践。",
+  home_role: "Agent 应用开发 / Python 学习与实践",
   about_intro: "",
   about_whatido: "",
   about_skills: "",

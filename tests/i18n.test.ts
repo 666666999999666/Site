@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
-import { readFile } from "node:fs/promises"
+import { access, readFile } from "node:fs/promises"
 import test from "node:test"
+import { routing } from "../i18n/routing"
 
 type Messages = Record<string, unknown>
 
@@ -13,20 +14,42 @@ function leafPaths(value: Messages, prefix = ""): string[] {
   }).sort()
 }
 
-async function readMessages(locale: "zh" | "en"): Promise<Messages> {
-  const raw = await readFile(new URL(`../messages/${locale}.json`, import.meta.url), "utf8")
+async function readChineseMessages(): Promise<Messages> {
+  const raw = await readFile(new URL("../messages/zh.json", import.meta.url), "utf8")
   return JSON.parse(raw) as Messages
 }
 
-test("Chinese and English message files have identical keys", async () => {
-  const [zh, en] = await Promise.all([readMessages("zh"), readMessages("en")])
-  assert.deepEqual(leafPaths(en), leafPaths(zh))
+test("the Chinese message catalog is the only public locale catalog", async () => {
+  const zh = await readChineseMessages()
+  const paths = leafPaths(zh)
+
+  assert.ok(paths.length > 0)
+  assert.ok(paths.includes("nav.home"))
+  assert.ok(paths.includes("adminEntry.label"))
+  assert.ok(!paths.includes("nav.switchLanguage"))
+  assert.equal((zh.adminEntry as Messages).label, "管理入口")
 })
 
-test("English system messages do not fall back to hard-coded Chinese", async () => {
-  const en = await readMessages("en")
-  const values = JSON.stringify(en)
-  assert.doesNotMatch(values, /[\u3400-\u9fff]/u)
-  assert.match(values, /Switch to Chinese/)
-  assert.match(values, /Admin entry/)
+test("routing is explicitly Chinese-only without locale detection or cookies", () => {
+  assert.deepEqual([...routing.locales], ["zh"])
+  assert.equal(routing.defaultLocale, "zh")
+  assert.equal(routing.localePrefix, "always")
+  assert.equal(routing.localeCookie, false)
+  assert.equal(routing.localeDetection, false)
+  assert.equal(routing.alternateLinks, false)
+})
+
+test("retired English product artifacts are absent", async () => {
+  const retiredArtifacts = [
+    new URL("../messages/en.json", import.meta.url),
+    new URL("../components/layout/LanguageToggle.tsx", import.meta.url),
+  ]
+
+  for (const artifact of retiredArtifacts) {
+    await assert.rejects(
+      access(artifact),
+      (error: NodeJS.ErrnoException) => error.code === "ENOENT",
+      `${artifact.pathname} must remain deleted`
+    )
+  }
 })

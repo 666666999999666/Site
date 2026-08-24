@@ -7,6 +7,7 @@ const ignoredDirectories = new Set([
   ".git",
   ".next",
   ".superpowers",
+  ".worktrees",
   ".tmp-pgtest",
   "backups",
   "data",

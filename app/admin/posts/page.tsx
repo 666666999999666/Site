@@ -7,12 +7,13 @@ import { PostsList } from "@/components/admin/PostsList"
 import { cn } from "@/lib/utils"
 
 export default async function PostsPage() {
-  const [posts, categories] = await Promise.all([
+  const [posts, categories, series] = await Promise.all([
     prisma.post.findMany({
       orderBy: { createdAt: "desc" },
-      include: { category: true },
+      include: { category: true, series: true },
     }),
     prisma.category.findMany({ where: { type: "BLOG" }, orderBy: { sortOrder: "asc" } }),
+    prisma.series.findMany({ orderBy: [{ sortOrder: "asc" }, { title: "asc" }, { id: "asc" }] }),
   ])
   return (
     <Container>
@@ -26,9 +27,11 @@ export default async function PostsPage() {
         key={[
           ...posts.map((post) => `${post.id}:${post.updatedAt.toISOString()}:${post.categoryId}`),
           ...categories.map((category) => `${category.id}:${category.name}:${category.sortOrder}`),
+          ...series.map((item) => `${item.id}:${item.title}:${item.slug}:${item.sortOrder}:${item.updatedAt.toISOString()}`),
         ].join("|")}
         initialPosts={posts}
         categories={categories}
+        series={series}
       />
     </Container>
   )

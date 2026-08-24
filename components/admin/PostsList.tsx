@@ -3,13 +3,15 @@
 import { useState } from "react"
 import Link from "next/link"
 import { Pencil, Search, Trash2 } from "lucide-react"
-import type { Category, Post } from "@/lib/generated/prisma/client"
+import type { Category, Post, Series } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
 import { CategoryManager } from "./CategoryManager"
+import { SeriesManager } from "./SeriesManager"
+import type { SeriesMutationInput } from "./SeriesManager"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 
-type PostWithCategory = Post & { category: Category | null }
+type PostWithRelations = Post & { category: Category | null; series: Series | null }
 
 function formatDate(date: Date) {
   return new Date(date).toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })
@@ -18,13 +20,16 @@ function formatDate(date: Date) {
 export function PostsList({
   initialPosts,
   categories: initialCategories,
+  series: initialSeries,
 }: {
-  initialPosts: PostWithCategory[]
+  initialPosts: PostWithRelations[]
   categories: Category[]
+  series: Series[]
 }) {
   const [query, setQuery] = useState("")
   const [posts, setPosts] = useState(initialPosts)
   const [categories, setCategories] = useState(initialCategories)
+  const [series, setSeries] = useState(initialSeries)
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
@@ -33,7 +38,7 @@ export function PostsList({
     setPending(true)
     setError("")
     try {
-      const data = await apiRequest<PostWithCategory[]>(
+      const data = await apiRequest<PostWithRelations[]>(
         `/api/posts?q=${encodeURIComponent(query)}`
       )
       setPosts(data)
@@ -92,24 +97,66 @@ export function PostsList({
     if (activeGroupId === id) setActiveGroupId(null)
   }
 
+  function sortSeries(items: Series[]) {
+    return items.sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, "zh-CN"))
+  }
+
+  async function createSeries(input: SeriesMutationInput) {
+    const item = await apiRequest<Series>("/api/series", jsonRequest("POST", input))
+    setSeries((current) => sortSeries([...current, item]))
+  }
+
+  async function updateSeries(
+    id: string,
+    input: SeriesMutationInput
+  ) {
+    const item = await apiRequest<Series>(`/api/series/${id}`, jsonRequest("PATCH", input))
+    setSeries((current) => current
+      .map((candidate) => candidate.id === id ? item : candidate)
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title, "zh-CN")))
+    setPosts((current) => current.map((post) => (
+      post.seriesId === id ? { ...post, series: item } : post
+    )))
+  }
+
+  async function deleteSeries(id: string) {
+    await apiRequest(`/api/series/${id}`, { method: "DELETE" })
+    setSeries((current) => current.filter((item) => item.id !== id))
+    setPosts((current) => current.map((post) => (
+      post.seriesId === id ? { ...post, seriesId: null, seriesOrder: null, series: null } : post
+    )))
+  }
+
   const filteredPosts = activeGroupId
     ? posts.filter((post) => post.categoryId === activeGroupId)
     : posts
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-6 lg:flex-row">
-      <aside className="w-full shrink-0 lg:w-52">
-        <h2 className="mb-2 px-3 text-sm font-medium text-muted-foreground">分区</h2>
-        <CategoryManager
-          groups={categories}
-          activeGroupId={activeGroupId}
-          itemLabel="文章"
-          disabled={pending}
-          onSelect={setActiveGroupId}
-          onCreate={createCategory}
-          onUpdate={updateCategory}
-          onDelete={deleteCategory}
-        />
+      <aside className="w-full shrink-0 space-y-7 lg:w-56">
+        <section aria-labelledby="post-categories-heading">
+          <h2 id="post-categories-heading" className="mb-2 px-3 text-sm font-medium text-muted-foreground">分区</h2>
+          <CategoryManager
+            groups={categories}
+            activeGroupId={activeGroupId}
+            itemLabel="文章"
+            disabled={pending}
+            onSelect={setActiveGroupId}
+            onCreate={createCategory}
+            onUpdate={updateCategory}
+            onDelete={deleteCategory}
+          />
+        </section>
+        <section aria-labelledby="post-series-heading">
+          <h2 id="post-series-heading" className="mb-2 px-1 text-sm font-medium text-muted-foreground">系列</h2>
+          <SeriesManager
+            items={series}
+            disabled={pending}
+            onCreate={createSeries}
+            onUpdate={updateSeries}
+            onDelete={deleteSeries}
+          />
+        </section>
       </aside>
 
       <div className="min-w-0 flex-1 space-y-4">
@@ -118,6 +165,7 @@ export function PostsList({
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="搜索标题或内容"
+              aria-label="搜索文章标题或内容"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => {
@@ -157,6 +205,7 @@ export function PostsList({
                   </Link>
                   <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
                     <span>{post.category?.name || "无分区"}</span>
+                    {post.series && <span>{post.series.title} · {post.seriesOrder ?? 0}</span>}
                     <span>{post.status === "PUBLISHED" ? "已发布" : "草稿"}</span>
                     <span>{formatDate(post.updatedAt)}</span>
                   </div>
@@ -190,6 +239,7 @@ export function PostsList({
               <tr>
                 <th className="p-3 text-left font-normal text-muted-foreground">标题</th>
                 <th className="w-28 p-3 text-left font-normal text-muted-foreground">分区</th>
+                <th className="w-36 p-3 text-left font-normal text-muted-foreground">系列</th>
                 <th className="w-24 p-3 text-left font-normal text-muted-foreground">状态</th>
                 <th className="w-28 p-3 text-left font-normal text-muted-foreground">最后更新</th>
                 <th className="w-16 p-3"><span className="sr-only">操作</span></th>
@@ -198,7 +248,7 @@ export function PostsList({
             <tbody>
               {filteredPosts.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-8 text-center text-muted-foreground">还没有文章</td>
+                  <td colSpan={6} className="p-8 text-center text-muted-foreground">还没有文章</td>
                 </tr>
               ) : filteredPosts.map((post) => (
                 <tr key={post.id} className="border-t border-border/50 transition-colors hover:bg-muted/30">
@@ -208,6 +258,9 @@ export function PostsList({
                     </Link>
                   </td>
                   <td className="p-3 text-muted-foreground">{post.category?.name || "无"}</td>
+                  <td className="p-3 text-muted-foreground">
+                    {post.series ? `${post.series.title} · ${post.seriesOrder ?? 0}` : "无"}
+                  </td>
                   <td className="p-3">
                     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                       post.status === "PUBLISHED"

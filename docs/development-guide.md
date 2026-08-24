@@ -1,6 +1,6 @@
 # QZ Site 开发与变更指南
 
-> **文档定位**：本文说明后续开发应先读什么、代码应该改在哪里、不同改动需要做哪些验证。最后核对日期为 **2026-07-29**。系统结构和设计原因见 [`architecture.md`](architecture.md)，生产操作见 [`operations.md`](operations.md)。
+> **文档定位**：本文说明后续开发应先读什么、代码应该改在哪里、不同改动需要做哪些验证。最后核对日期为 **2026-08-25**。系统结构和设计原因见 [`architecture.md`](architecture.md)，生产操作见 [`operations.md`](operations.md)。
 
 ## 1. 开始开发前
 
@@ -56,12 +56,12 @@ Seed 是幂等初始化工具：已有管理员、设置、项目和分区不会
 
 | 需求 | 优先位置 | 原则 |
 |---|---|---|
-| 新公开页面或 Metadata | `app/[locale]/` | 同时考虑中英文路由、SEO 和空状态 |
+| 新公开页面或 Metadata | `app/[locale]/` | 只开放 `zh`，同时考虑中文 canonical、SEO 和空状态 |
 | 新后台页面 | `app/admin/`、`components/admin/` | 服务端布局继续做真实 Session 校验 |
 | 新 HTTP 接口 | `app/api/` | 认证、输入校验、统一错误处理缺一不可 |
 | 可复用业务规则 | `lib/` | 可独立测试或被多个入口使用时再抽取 |
 | 数据结构变化 | `prisma/schema.prisma`、`prisma/migrations/` | Schema 与 migration 同提交 |
-| 中英文界面文案 | `messages/zh.json`、`messages/en.json` | 两种语言键保持一致 |
+| 中文界面文案 | `messages/zh.json` | 保持集中管理，不重新建立英文语言包或切换入口 |
 | 生产操作 | `ops/` | 固定参数、默认只读、写操作先备份 |
 | Gitee 流水线 | `.workflow/` | 构建不落生产机，Secret 不回显 |
 
@@ -75,11 +75,13 @@ Seed 是幂等初始化工具：已有管理员、设置、项目和分区不会
 2. 数据库驱动页面需要即时反映后台内容时，继续使用动态渲染。
 3. 对公开详情页同时处理 `Metadata`、canonical、Open Graph 和不存在状态。
 4. 公开文章查询必须限制 `status: "PUBLISHED"`。
-5. 新界面文案同步维护 `zh` 和 `en`，`npm test` 会检查两份语言包的键完全一致。
-6. 页面级 Metadata 使用 `generateMetadata({params})` 按 locale 生成，不在双语路由中导出固定中文 `metadata`。
-7. 数据库创作内容保持原文；除非出现明确内容需求，不增加 `titleZh/titleEn` 一类重复字段。
+5. 新界面文案只维护 `messages/zh.json`；测试应验证中文文案包完整、路由 locale 只有 `zh`，并防止英文包或语言切换入口被重新引入。
+6. 页面级 Metadata 的 canonical、Open Graph、JSON-LD、sitemap 和 RSS 只生成 `/zh` URL，不生成英文 alternate 或 hreflang。
+7. 数据库创作内容保持作者原文；英文文章、技术名词和英文 slug 不属于英文界面模块。除非出现明确内容需求，不增加 `titleZh/titleEn` 一类重复字段。
 8. 在 390px、768px 和 1440px 宽度检查布局、文字换行和交互。
 9. `next-intl` 的 Client Provider 只存在于 `app/[locale]/layout.tsx`。同时被 `/admin` 使用的共享组件不能直接调用 `useTranslations()`，应由公开页面调用方传入翻译后的文案，并回归测试已登录后台的完整页面渲染。
+
+`/en` 与任何 `/en/**` 是永久退役合同：必须返回 `410 Gone`，不得附带 `Location`，也不得通过 cookie、浏览器语言或未知 locale 回退重新渲染。匹配必须按完整路径段进行，不能误伤 `/energy`、`/english`。`robots.txt` 不应屏蔽 `/en`，否则搜索引擎无法抓取并确认 410。
 
 ### 4.2 新增管理 API
 

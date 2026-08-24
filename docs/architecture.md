@@ -1,6 +1,6 @@
 # QZ Site 项目架构与设计说明
 
-> **文档定位**：本文描述当前有效的系统结构、模块边界和关键设计约束，是后续开发理解项目的首要技术文档。最后核对日期为 **2026-08-09**。代码行为、数据模型或部署拓扑变化时，应在同一提交中更新本文。
+> **文档定位**：本文描述当前有效的系统结构、模块边界和关键设计约束，是后续开发理解项目的首要技术文档。最后核对日期为 **2026-08-25**。代码行为、数据模型或部署拓扑变化时，应在同一提交中更新本文。
 
 ## 1. 项目目标与范围
 
@@ -56,13 +56,13 @@ flowchart LR
 | 页面与路由 | `app/` | Next.js App Router 页面、布局、Metadata 和 Route Handler |
 | 交互组件 | `components/` | 前台、后台、主题、布局和基础 UI 组件 |
 | 领域与基础能力 | `lib/` | 数据访问、认证、校验、正文转换、发布时间规则和上传路径规则 |
-| 国际化 | `i18n/`、`messages/` | `zh`/`en` 路由、导航封装与界面文案 |
+| 中文文案与路由 | `i18n/`、`messages/` | 单一 `zh` locale、导航封装与中文界面文案；保留 `next-intl` 以集中管理文案 |
 | 数据模型 | `prisma/` | Schema、正式 migration 和幂等 Seed |
 | 数据维护工具 | `scripts/` | 旧正文转换和孤儿上传扫描 |
 | 生产运维 | `ops/` | 部署、备份、恢复验证、SSL 和受限维护入口 |
 | 入口代理 | `nginx/` | 正式域名/IP 虚拟主机、TLS、上传静态服务和安全头 |
 | 流水线 | `.workflow/` | Gitee Go 自动部署与受限维护定义 |
-| 自动化验证 | `tests/` | 业务规则、内容、校验、上传签名和语言包一致性测试 |
+| 自动化验证 | `tests/` | 业务规则、内容、校验、上传签名、中文文案和退役路由合同测试 |
 | MCP | `app/api/mcp/`、`mcp/`、`lib/mcp/` | Streamable HTTP、本地导入 stdio、credential、审批、审计和持久化限流 |
 
 ### 3.1 依赖方向
@@ -96,18 +96,24 @@ MCP Streamable HTTP / 本地导入 stdio
 
 | 路径 | 可见性 | 数据特点 |
 |---|---|---|
-| `/zh`、`/en` | 公开 | 首页设置、最新文章、项目 |
-| `/{locale}/blog` | 公开 | 仅查询 `PUBLISHED` 文章，支持分区和关键词 |
-| `/{locale}/blog/{slug}` | 公开 | 草稿与不存在文章统一返回 404 |
-| `/{locale}/projects`、`/{locale}/about` | 公开 | 项目和公开设置 |
+| `/` | 公开重定向 | `308` 到 `/zh`，并保留查询参数 |
+| `/zh` | 公开 | 首页设置、精选系列、最新文章和轻量项目入口 |
+| `/zh/blog`、`/zh/blog/{slug}` | 公开 | 仅查询 `PUBLISHED` 文章；草稿与不存在文章统一返回 404 |
+| `/zh/blog/series/**`、`/zh/blog/tags/**`、`/zh/blog/archive` | 公开 | 系列、标签和归档浏览入口 |
+| `/zh/projects`、`/zh/about` | 公开 | 项目和公开设置 |
+| `/feed.xml` | 公开 | 只发布中文站 URL 的 RSS |
+| `/en`、`/en/**` | 永久下线 | 返回 `410 Gone`，不重定向且不发送 `Location` |
+| 其他未知 locale | 不存在 | 返回 404，不回退为中文页面 |
 | `/admin/**` | 登录后 | 文章、Todo、分区、项目和设置管理 |
 | `/api/health` | 公开 | 同时验证 Web 与数据库连接 |
 
 公开内容页使用 `force-dynamic`，后台修改后不依赖重新构建即可生效。当前数据量较小，直接从 PostgreSQL 查询比引入缓存失效机制更容易保证正确性。
 
-公开页面的系统文案和 Metadata 使用 `messages/zh.json`、`messages/en.json`，两份语言包必须保持同一组键。数据库中的文章、分类、项目和个人介绍属于所有者创作内容，当前保持原文，不增加重复的中英文字段。语言切换表示切换界面、导航、空状态、错误提示和 SEO 元信息，不承诺自动翻译用户内容。
+公开页面的系统文案和 Metadata 统一使用 `messages/zh.json`。数据库中的文章、分类、项目和个人介绍属于所有者创作内容，保持作者原文；不因站点收口为中文界面而删除英文文章、英文技术名词或英文 slug，也不增加重复的中英文字段。
 
-`app/[locale]/layout.tsx` 是 `NextIntlClientProvider` 的边界，`/admin` 有意保持为不带语言前缀的中文管理界面。只在公开路由中使用的组件可以直接调用 `next-intl` Hook；被公开路由与后台共同使用的组件不得假设 Provider 一定存在，应由调用方传入已翻译文案。`ThemeToggle` 即采用该方式，避免已登录后台在服务端渲染时因缺少国际化上下文返回 500。
+`app/[locale]/layout.tsx` 保留为 `NextIntlClientProvider` 的边界，但只有 `zh` 能进入该布局；`next-intl` 在这里是中文文案基础设施，不再代表双语产品能力。`/admin` 有意保持为不带语言前缀的中文管理界面。只在公开路由中使用的组件可以直接调用 `next-intl` Hook；被公开路由与后台共同使用的组件不得假设 Provider 一定存在，应由调用方传入中文文案。`ThemeToggle` 即采用该方式，避免已登录后台在服务端渲染时因缺少 Provider 返回 500。
+
+`proxy.ts` 在 locale 中间件之前精确识别 `/en` 与 `/en/` 前缀，返回无 `Location` 的 `410 Gone`；`/energy`、`/english` 等普通路径不得误判。locale cookie、浏览器语言检测和 alternate links 均关闭，未知 locale 不回退渲染中文页。sitemap、RSS、canonical、Open Graph 和 JSON-LD 只输出 `/zh` URL。
 
 后台入口使用右下角固定猫图标，属于站点所有者快捷入口。`app/[locale]/layout.tsx` 为移动端主内容保留底部空间，并使用安全区偏移，避免按钮遮挡最后一项内容；Header 不再承担后台入口。
 
@@ -256,7 +262,7 @@ Next.js 使用 `output: "standalone"`。镜像构建阶段会导入动态页面�
 
 TLS、HTTP 到 HTTPS 跳转、安全响应头、上传静态服务和请求体上限由 Nginx 管理。不要再在 Next.js 重复配置同名安全头，否则可能产生重复或冲突响应头。
 
-HTML 的 CSP 由 `proxy.ts` 按请求生成：脚本只允许同一 nonce 与受信动态加载，禁止内联事件处理器；Mermaid 渲染期间必须创建临时样式节点，因此 CSS 保留 `unsafe-inline`，不能把它误写成脚本也允许 `unsafe-inline`。`NEXT_LOCALE` 的 `Secure` 属性直接配置在 `i18n/routing.ts`，保证首次写入和后续更新一致。
+HTML 的 CSP 由 `proxy.ts` 按请求生成：脚本只允许同一 nonce 与受信动态加载，禁止内联事件处理器；Mermaid 渲染期间必须创建临时样式节点，因此 CSS 保留 `unsafe-inline`，不能把它误写成脚本也允许 `unsafe-inline`。单语言路由关闭 locale cookie 与浏览器语言检测；旧 `NEXT_LOCALE=en` cookie 不能重新启用英文页面。
 
 ### 6.8 MCP 使用独立安全边界
 
@@ -284,7 +290,7 @@ push Gitee main
 -> 校验目标 Git 源码与镜像源码指纹
 -> Compose 更新与 migration
 -> db/web/nginx 健康检查
--> 中英文、未登录写保护、OAuth discovery、MCP 401 Challenge、非法 Origin 与旧 Gateway 410 冒烟测试
+-> 中文页面、退役英文路径 410、未登录写保护、OAuth discovery、MCP 401 Challenge、非法 Origin 与旧 Gateway 410 冒烟测试
 -> 运行提交、镜像 digest、源码指纹写入 .deploy-state
 ```
 

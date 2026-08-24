@@ -1,5 +1,6 @@
 import fs from "fs/promises"
 import { prisma } from "@/lib/db"
+import { hasNoUploadReferences } from "@/lib/upload-reference-policy"
 import { uploadFilePath } from "@/lib/uploads"
 
 /**
@@ -8,6 +9,7 @@ import { uploadFilePath } from "@/lib/uploads"
  * 引用检查（跨表字段不同，不能混用）：
  * - Post：content 用 contains 匹配，coverImage 用 equals 匹配，excludeId 仅此表生效
  * - Project：coverImage 字段用 equals 精确匹配（coverImage 是单个 URL），不传 excludeId
+ * - Series：coverImage 字段用 equals 精确匹配，防止删除仍被系列使用的共享封面
  *
  * @param urls 要删除的 URL 列表
  * @param excludeId 排除的 Post 记录 ID（仅 Post 表生效；Project 表不传）
@@ -29,9 +31,12 @@ export async function deleteUploadFiles(urls: string[], excludeId?: string): Pro
     const projectCount = await prisma.project.count({
       where: { coverImage: url },
     })
+    const seriesCount = await prisma.series.count({
+      where: { coverImage: url },
+    })
 
     // 没有其他记录引用时才删除文件
-    if (postCount === 0 && projectCount === 0) {
+    if (hasNoUploadReferences({ postCount, projectCount, seriesCount })) {
       try {
         await fs.unlink(filePath)
       } catch {

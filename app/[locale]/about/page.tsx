@@ -14,20 +14,19 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { locale } = await params
   const t = await getTranslations({ locale, namespace: "about" })
-  const pathname = `/${locale}/about`
+  const pathname = "/zh/about"
 
   return {
     title: t("metadataTitle"),
     description: t("metadataDescription"),
     alternates: {
       canonical: pathname,
-      languages: { zh: "/zh/about", en: "/en/about" },
     },
     openGraph: {
       title: t("metadataTitle"),
       description: t("metadataDescription"),
       url: pathname,
-      locale: locale === "en" ? "en_US" : "zh_CN",
+      locale: "zh_CN",
     },
   }
 }

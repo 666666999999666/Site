@@ -1,12 +1,10 @@
 import { defineRouting } from 'next-intl/routing';
 
 export const routing = defineRouting({
-  locales: ['zh', 'en'],
+  locales: ['zh'],
   defaultLocale: 'zh',
-  localeCookie: {
-    name: 'NEXT_LOCALE',
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-  },
+  localePrefix: 'always',
+  localeCookie: false,
+  localeDetection: false,
+  alternateLinks: false,
 });

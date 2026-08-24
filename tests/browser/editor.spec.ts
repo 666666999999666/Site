@@ -296,6 +296,24 @@ test("mobile admin navigation remains independent from the desktop sidebar", asy
   await expect(navigation).toHaveCount(0)
 })
 
+test("mobile article contents moves focus to the chosen heading and restores it on Escape", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto("/mobile-toc")
+
+  const trigger = page.getByRole("button", { name: "打开文章目录" })
+  await trigger.click()
+  const targetLink = page.getByRole("dialog", { name: "文章目录" }).getByRole("link", { name: "工具边界" })
+  await targetLink.focus()
+  await page.keyboard.press("Enter")
+  await expect(page.getByRole("dialog", { name: "文章目录" })).toHaveCount(0)
+  await expect(page.locator("#tool-boundary")).toBeFocused()
+  await expect(page).toHaveURL(/#tool-boundary$/)
+
+  await trigger.click()
+  await page.keyboard.press("Escape")
+  await expect(trigger).toBeFocused()
+})
+
 test("top toolbar remains visible while scrolling through a long article", async ({ page }) => {
   await openEditor(page)
   const toolbar = page.locator(".milkdown-top-bar")

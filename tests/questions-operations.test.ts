@@ -151,6 +151,7 @@ test("Docker build context excludes private and generated test artifacts", async
     "test-results",
     "playwright-report",
     "coverage",
+    ".worktrees",
   ]) {
     assert.ok(entries.has(required), `.dockerignore must exclude ${required}`)
   }

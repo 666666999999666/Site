@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect } from "react"
-import { useLocale, useTranslations } from "next-intl"
+import { useTranslations } from "next-intl"
 import { Button } from "@/components/ui/button"
 import { Link } from "@/i18n/navigation"
 
@@ -12,7 +12,6 @@ export default function PublicError({
   error: Error & { digest?: string }
   reset: () => void
 }) {
-  const locale = useLocale()
   const common = useTranslations("common")
   const t = useTranslations("errors")
 
@@ -28,7 +27,6 @@ export default function PublicError({
         <Button type="button" onClick={reset}>{common("retry")}</Button>
         <Link
           href="/"
-          locale={locale}
           className="inline-flex h-8 items-center justify-center rounded-lg border border-border px-3 text-sm font-medium hover:bg-muted"
         >
           {common("backHome")}

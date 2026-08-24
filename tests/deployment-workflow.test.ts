@@ -98,3 +98,52 @@ test("database health waits for the final TCP server and target database", () =>
   assert.match(compose, /--command 'SELECT 1' \| grep -qx 1/)
   assert.doesNotMatch(compose, /pg_isready/)
 })
+
+test("deployment smoke enforces the Chinese-only public route contract", () => {
+  const smoke = readFileSync("ops/smoke-test.sh", "utf8")
+
+  assert.match(smoke, /root_status=.*[\s\S]*?\[\[ "\$root_status" == "308" \]\]/)
+  assert.match(smoke, /\^location:\[\[:space:\]\]\*\(https\?:\/\/\[\^\/\]\+\)\?\/zh/)
+  assert.match(smoke, /zh_page=.*[\s\S]*?"\$site_url\/zh"/)
+  assert.match(smoke, /expect_retired_english "\/en"/)
+  assert.match(smoke, /expect_retired_english "\/en\/blog\?source=smoke"/)
+  assert.match(smoke, /\[\[ "\$status" == "410" \]\]/)
+  assert.match(smoke, /grep -Eiq '\^location:'/)
+  assert.match(smoke, /energy_status=.*[\s\S]*?\[\[ "\$energy_status" != "410" \]\]/)
+
+  for (const publicPath of [
+    "/zh/blog/series",
+    "/zh/blog/tags",
+    "/zh/blog/archive",
+    "/feed.xml",
+    "/sitemap.xml",
+  ]) {
+    assert.ok(smoke.includes(`$site_url${publicPath}`), `${publicPath} must be covered by smoke`)
+  }
+
+  assert.doesNotMatch(smoke, /Switch to Chinese|切换到英文/)
+})
+
+test("retired English routes bypass trailing-slash canonicalization", () => {
+  const nextConfig = readFileSync("next.config.ts", "utf8")
+  const proxy = readFileSync("proxy.ts", "utf8")
+
+  assert.match(nextConfig, /skipTrailingSlashRedirect:\s*true/)
+  const retiredEnglishCheck = proxy.indexOf("if (isRetiredEnglishPath(pathname))")
+  const trailingSlashCheck = proxy.indexOf('if (pathname.length > 1 && pathname.endsWith("/"))')
+  assert.ok(retiredEnglishCheck >= 0)
+  assert.ok(trailingSlashCheck > retiredEnglishCheck)
+  assert.match(proxy, /const canonicalUrl = new URL\(req\.url\)/)
+  assert.doesNotMatch(proxy, /const canonicalUrl = req\.nextUrl\.clone\(\)/)
+  assert.match(proxy, /canonicalUrl\.pathname\s*=\s*pathname\.replace\(\/\\\/\+\$\/,\s*""\)/)
+
+  for (const matcher of [
+    "'/api/:path*'",
+    "'/.well-known/:path*'",
+    "'/feed.xml/:path*'",
+    "'/robots.txt/:path*'",
+    "'/sitemap.xml/:path*'",
+  ]) {
+    assert.ok(proxy.includes(matcher), `${matcher} must retain trailing-slash redirects`)
+  }
+})

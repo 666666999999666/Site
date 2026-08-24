@@ -2,12 +2,12 @@
 
 import { useTranslations } from "next-intl"
 import { Link } from "@/i18n/navigation"
-import type { Post, Category } from "@/lib/generated/prisma/client"
+import type { Post, Category, Series } from "@/lib/generated/prisma/client"
 
-type PostWithCategory = Post & { category: Category | null }
+type PostWithCategory = Post & { category: Category | null; series?: Series | null }
 
-function formatDate(d: Date, locale: string) {
-  return new Date(d).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US", {
+function formatDate(d: Date) {
+  return new Date(d).toLocaleDateString("zh-CN", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -15,15 +15,15 @@ function formatDate(d: Date, locale: string) {
   })
 }
 
-export function BlogCard({ post, locale }: { post: PostWithCategory; locale: string }) {
+export function BlogCard({ post }: { post: PostWithCategory }) {
   const t = useTranslations("blog")
 
   return (
     <Link href={`/blog/${post.slug}`} className="group block h-full">
       <article className="flex flex-col h-full border border-border/50 rounded-lg p-5 transition-all group-hover:border-border group-hover:bg-muted/50">
-        {post.category && (
+        {(post.category || post.series) && (
           <span className="mb-2 block text-xs text-muted-foreground">
-            {post.category.name}
+            {[post.series?.title, post.category?.name].filter(Boolean).join(" · ")}
           </span>
         )}
         <h3 className="text-lg font-semibold text-muted-foreground group-hover:text-foreground transition-colors mb-2 line-clamp-2">
@@ -34,7 +34,7 @@ export function BlogCard({ post, locale }: { post: PostWithCategory; locale: str
         )}
         <div className="mt-auto flex items-center gap-2 text-xs text-muted-foreground">
           <time dateTime={(post.publishedAt ?? post.createdAt).toISOString()}>
-            {formatDate(post.publishedAt ?? post.createdAt, locale)}
+            {formatDate(post.publishedAt ?? post.createdAt)}
           </time>
           <span>·</span>
           <span>{t("minuteRead", { count: post.readTime })}</span>

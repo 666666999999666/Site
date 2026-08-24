@@ -1,9 +1,8 @@
 "use client"
 
-import { useLocale, useTranslations } from "next-intl"
+import { useTranslations } from "next-intl"
 import { GitHubIcon } from "@/components/icons/GitHubIcon"
 import { Link, usePathname } from "@/i18n/navigation"
-import { LanguageToggle } from "./LanguageToggle"
 import { MobileMenu } from "./MobileMenu"
 import { ThemeToggle } from "./ThemeToggle"
 
@@ -15,7 +14,6 @@ export function Header({
   githubUrl: string
 }) {
   const t = useTranslations("nav")
-  const locale = useLocale()
   const pathname = usePathname()
   const links = [
     { href: "/", label: t("home") },
@@ -34,7 +32,6 @@ export function Header({
       <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-4 sm:px-6">
         <Link
           href="/"
-          locale={locale}
           className="max-w-32 truncate text-sm font-semibold tracking-tight transition-opacity hover:opacity-80 sm:max-w-48"
         >
           {siteName}
@@ -45,7 +42,6 @@ export function Header({
             <Link
               key={link.href}
               href={link.href}
-              locale={locale}
               aria-current={isActive(link.href) ? "page" : undefined}
               className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                 isActive(link.href)
@@ -70,7 +66,6 @@ export function Header({
               <GitHubIcon className="size-4" />
             </a>
           )}
-          <LanguageToggle />
           <ThemeToggle
             switchLightLabel={t("switchLight")}
             switchDarkLabel={t("switchDark")}

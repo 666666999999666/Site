@@ -2,16 +2,11 @@ import "dotenv/config"
 import { readdir, stat, unlink } from "fs/promises"
 import path from "path"
 import { Client } from "pg"
-import { extractUploadUrls } from "../lib/content"
-
-interface PostRow {
-  content: string
-  coverImage: string | null
-}
-
-interface ProjectRow {
-  coverImage: string | null
-}
+import {
+  collectReferencedUploadNames,
+  type UploadCoverRow,
+  type UploadPostRow,
+} from "./upload-references"
 
 async function main() {
   const connectionString = process.env.DATABASE_URL
@@ -34,19 +29,13 @@ async function main() {
   await client.connect()
 
   try {
-    const [posts, projects] = await Promise.all([
-      client.query<PostRow>(`SELECT "content", "coverImage" FROM "Post"`),
-      client.query<ProjectRow>(`SELECT "coverImage" FROM "Project"`),
+    const [posts, projects, series] = await Promise.all([
+      client.query<UploadPostRow>(`SELECT "content", "coverImage" FROM "Post"`),
+      client.query<UploadCoverRow>(`SELECT "coverImage" FROM "Project"`),
+      client.query<UploadCoverRow>(`SELECT "coverImage" FROM "Series"`),
     ])
 
-    const referenced = new Set<string>()
-    for (const post of posts.rows) {
-      for (const url of extractUploadUrls(post.content)) referenced.add(path.basename(url))
-      if (post.coverImage) referenced.add(path.basename(post.coverImage))
-    }
-    for (const project of projects.rows) {
-      if (project.coverImage) referenced.add(path.basename(project.coverImage))
-    }
+    const referenced = collectReferencedUploadNames(posts.rows, projects.rows, series.rows)
 
     const cutoff = Date.now() - graceHours * 60 * 60 * 1000
     const files = await readdir(uploadDir, { withFileTypes: true })

@@ -24,6 +24,7 @@ docker-compose*.yml
 .env*
 !.env.example
 .superpowers
+.worktrees
 .tmp-pgtest
 test-results
 playwright-report

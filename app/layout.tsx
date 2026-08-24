@@ -1,6 +1,5 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { getLocale } from "next-intl/server";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { getSiteUrl } from "@/lib/site";
 import "./globals.css";
@@ -11,7 +10,10 @@ export const metadata: Metadata = {
     default: "QZ Site",
     template: "%s | QZ Site",
   },
-  description: "个人博客、Idea/Todo 与项目实践记录。",
+  description: "以博客为主线，记录 Agent 应用、Python 与 Web 工程实践，并提供可核验的项目证据。",
+  alternates: {
+    types: { "application/rss+xml": "/feed.xml" },
+  },
   openGraph: {
     type: "website",
     siteName: "QZ Site",
@@ -24,13 +26,12 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const locale = await getLocale().catch(() => "zh")
   // U14: 读取 proxy.ts 注入的 nonce，给内联主题脚本加 nonce 属性
   const nonce = (await headers()).get("x-nonce") ?? undefined
 
   return (
     <html
-      lang={locale === "en" ? "en" : "zh-CN"}
+      lang="zh-CN"
       className="antialiased"
       suppressHydrationWarning
     >

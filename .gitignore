@@ -78,5 +78,8 @@ docs/superpowers/
 # temp/debug files
 giteecicd*.md
 
+# local Git worktrees used to isolate parallel implementation branches
+/.worktrees/
+
 # Gitee Go pipeline config (tracked in git, contains no secrets)
 # .workflow/pipeline-deploy.yml uses ${TCR_USERNAME} and ${TCR_PASSWORD} variables

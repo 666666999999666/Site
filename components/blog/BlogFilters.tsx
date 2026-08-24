@@ -37,6 +37,8 @@ export function BlogFilters({ categories }: BlogFiltersProps) {
     <div className="space-y-4 mb-8">
       <div className="flex flex-wrap items-center gap-2">
         <button
+          type="button"
+          aria-pressed={currentCategory === ""}
           onClick={() => updateParams("category", "")}
           className={
             currentCategory === ""
@@ -48,6 +50,8 @@ export function BlogFilters({ categories }: BlogFiltersProps) {
         </button>
         {categories.map((cat) => (
           <button
+            type="button"
+            aria-pressed={currentCategory === cat.id}
             key={cat.id}
             onClick={() => updateParams("category", cat.id)}
             className={

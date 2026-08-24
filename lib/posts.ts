@@ -4,6 +4,7 @@ import { NotFoundError, ValidationError } from "./errors"
 import { resolvePublishedAt } from "./post-policy"
 import type { PostInput } from "./validation"
 import { Prisma } from "./generated/prisma/client"
+import { nextSeriesOrderFromMax } from "./series-order"
 
 export interface PostSearchInput {
   title?: string
@@ -27,7 +28,7 @@ export async function getRecentPosts(take = 5) {
     where: { status: "PUBLISHED" },
     orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
     take,
-    include: { category: true },
+    include: { category: true, series: true },
   })
 }
 
@@ -35,14 +36,14 @@ export async function getAllPosts() {
   return prisma.post.findMany({
     where: { status: "PUBLISHED" },
     orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-    include: { category: true },
+    include: { category: true, series: true },
   })
 }
 
 export async function getPostBySlug(slug: string) {
   return prisma.post.findUnique({
     where: { slug },
-    include: { category: true },
+    include: { category: true, series: true },
   })
 }
 
@@ -75,7 +76,7 @@ export async function searchPosts(input: PostSearchInput = {}) {
     where: and.length > 0 ? { AND: and } : undefined,
     orderBy: { createdAt: "desc" },
     take: input.take === undefined ? undefined : Math.min(Math.max(input.take, 1), 100),
-    include: { category: true },
+    include: { category: true, series: true },
   })
 }
 
@@ -93,6 +94,23 @@ async function ensureBlogCategory(
   }
 }
 
+async function ensureSeries(
+  seriesId: string | null | undefined,
+  database: PostDatabase = prisma
+) {
+  if (!seriesId) return
+  const series = await database.series.findUnique({ where: { id: seriesId }, select: { id: true } })
+  if (!series) throw new ValidationError("文章系列不存在")
+}
+
+async function getNextSeriesOrder(seriesId: string, database: PostDatabase = prisma) {
+  const result = await database.post.aggregate({
+    where: { seriesId },
+    _max: { seriesOrder: true },
+  })
+  return nextSeriesOrderFromMax(result._max.seriesOrder)
+}
+
 function jsonDatabaseValue(value: PostInput["draftMetadata"]) {
   if (value === undefined) return undefined
   return value === null ? Prisma.DbNull : value as Prisma.InputJsonValue
@@ -100,8 +118,15 @@ function jsonDatabaseValue(value: PostInput["draftMetadata"]) {
 
 export async function createPost(input: PostCreateInput, database: PostDatabase = prisma) {
   await ensureBlogCategory(input.categoryId, database)
+  await ensureSeries(input.seriesId, database)
+  if (!input.seriesId && input.seriesOrder !== undefined && input.seriesOrder !== null) {
+    throw new ValidationError("未选择系列时不能设置系列顺序")
+  }
   const status = input.status ?? "DRAFT"
   const content = normalizeContent(input.content)
+  const seriesOrder = input.seriesId
+    ? input.seriesOrder ?? await getNextSeriesOrder(input.seriesId, database)
+    : null
 
   return database.post.create({
     data: {
@@ -110,6 +135,8 @@ export async function createPost(input: PostCreateInput, database: PostDatabase 
       excerpt: input.excerpt ?? null,
       slug: await generateUniqueSlug(input.title, database),
       categoryId: input.categoryId ?? null,
+      seriesId: input.seriesId ?? null,
+      seriesOrder,
       tags: input.tags ?? [],
       coverImage: input.coverImage ?? null,
       ...(input.draftMetadata !== undefined
@@ -129,6 +156,11 @@ export async function updatePost(id: string, input: PostInput) {
   const current = await prisma.post.findUnique({ where: { id } })
   if (!current) throw new NotFoundError("文章不存在")
   await ensureBlogCategory(input.categoryId)
+  const nextSeriesId = input.seriesId === undefined ? current.seriesId : input.seriesId
+  await ensureSeries(nextSeriesId)
+  if (!nextSeriesId && input.seriesOrder !== undefined && input.seriesOrder !== null) {
+    throw new ValidationError("未选择系列时不能设置系列顺序")
+  }
   const nextStatus = input.status ?? current.status
   const data: Prisma.PostUncheckedUpdateInput = {}
 
@@ -140,6 +172,16 @@ export async function updatePost(id: string, input: PostInput) {
   }
   if (input.excerpt !== undefined) data.excerpt = input.excerpt
   if (input.categoryId !== undefined) data.categoryId = input.categoryId
+  if (input.seriesId !== undefined) {
+    data.seriesId = input.seriesId
+    if (input.seriesId === null) data.seriesOrder = null
+    else if (input.seriesId !== current.seriesId && input.seriesOrder === undefined) {
+      data.seriesOrder = await getNextSeriesOrder(input.seriesId)
+    }
+  }
+  if (input.seriesOrder !== undefined && nextSeriesId) {
+    data.seriesOrder = input.seriesOrder ?? await getNextSeriesOrder(nextSeriesId)
+  }
   if (input.tags !== undefined) data.tags = input.tags
   if (input.coverImage !== undefined) data.coverImage = input.coverImage
   if (input.draftMetadata !== undefined) {

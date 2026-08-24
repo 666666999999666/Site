@@ -1,6 +1,6 @@
 # QZ Site 生产运维手册
 
-> **文档定位**：本文是当前生产操作的唯一常规手册，最后核对日期为 **2026-08-23**。整机或磁盘故障恢复见 [`disaster-recovery.md`](disaster-recovery.md)。
+> **文档定位**：本文是当前生产操作的唯一常规手册，最后核对日期为 **2026-08-25**。整机或磁盘故障恢复见 [`disaster-recovery.md`](disaster-recovery.md)。
 
 ## 1. 运维边界
 
@@ -53,7 +53,7 @@ bash ops/maintenance.sh status
 5. 对比目标源码与候选镜像内的 SHA-256 源码指纹。
 6. 以 digest 更新 Compose，执行 migration 并等待三个服务 Healthy。
 7. 验证 Nginx 配置并 reload。
-8. 执行中英文页面、健康接口、未登录 Todo 写保护、OAuth discovery、MCP 401/Origin/旧 Gateway、站点文件，以及回环限定的 Question 创建/揭晓/评分/清理冒烟测试。
+8. 执行中文页面、退役英文路径 `410`、健康接口、未登录 Todo 写保护、OAuth discovery、MCP 401/Origin/旧 Gateway、站点文件，以及回环限定的 Question 创建/揭晓/评分/清理冒烟测试。
 9. 将 Git 提交、镜像 digest 和源码指纹写入 `.deploy-state`。
 10. 再次核对运行容器、镜像、源码和 `.deploy-state`。
 
@@ -75,11 +75,14 @@ bash ops/maintenance.sh status
 - 当前 Git 提交与 `.deploy-state` 一致。
 - Web 容器使用记录的镜像 digest。
 - 运行镜像指纹与服务器源码一致。
-- `/api/health`、`/zh`、`/en`、`robots.txt`、`sitemap.xml` 正常。
+- `/api/health`、`/zh`、`robots.txt`、`sitemap.xml` 正常；sitemap、RSS 与 canonical 不含 `/en` URL。
+- `/en`、`/en/` 和嵌套英文旧路径返回 `410 Gone`，不发送 `Location`；`/energy` 等普通路径不被误判。
 - 未登录 Todo 写请求返回 401。
 - OAuth Resource/Authorization Server discovery 正常，未认证 MCP 返回标准 401 Challenge。
 - 非本站 Origin 被 MCP 拒绝，旧远程 Tool Gateway 返回 410。
 - 仅通过 `docker compose exec --no-TTY web` 请求 `127.0.0.1:3000` 的 Question 写链路完成创建、揭晓、Good 评分并清理临时身份；非 2xx 使检查失败，脚本不输出响应正文。
+
+`robots.txt` 有意不屏蔽 `/en`：爬虫需要访问这些旧地址并观察 `410 Gone`，才能逐步移除旧索引。这与 sitemap、RSS 和页面 canonical 不再发布英文 URL 是同一退役策略。英文页面 `410` 与旧远程 Tool Gateway `410` 是两个独立合同，冒烟测试必须分别验证。
 
 ## 4. 固定维护入口
 

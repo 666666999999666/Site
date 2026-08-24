@@ -20,11 +20,13 @@ test("source fingerprint ignores persistent data but changes with source", async
 
   await mkdir(path.join(root, "app"), { recursive: true })
   await mkdir(path.join(root, "data", "uploads"), { recursive: true })
+  await mkdir(path.join(root, ".worktrees", "agent-product"), { recursive: true })
   await mkdir(path.join(root, "ops"), { recursive: true })
   await writeFile(path.join(root, "app", "page.tsx"), "export default function Page() {}\n")
   const initial = await fingerprint(root)
 
   await writeFile(path.join(root, "data", "uploads", "production.webp"), "mutable")
+  await writeFile(path.join(root, ".worktrees", "agent-product", "runtime.py"), "local agent source")
   await writeFile(path.join(root, ".deploy-state.temporary"), "runtime state")
   await writeFile(path.join(root, "ops", ".deploy-bootstrap-deploy.ABC123"), "staged deploy")
   assert.equal(await fingerprint(root), initial)

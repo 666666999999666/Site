@@ -1,6 +1,6 @@
 # QZ Site
 
-用于个人知识整理、Idea/Todo 收集和求职展示的单人网站。
+用于个人知识整理、Idea/Todo 收集和求职展示的单人网站。公开站点当前只提供中文界面，保留 `/zh` 路径结构；已经下线的 `/en` 与 `/en/*` 永久返回 `410 Gone`，不再提供语言切换。
 
 ## 技术栈
 
@@ -48,7 +48,7 @@ npm run test:mcp
 npm run build
 ```
 
-测试覆盖正文转换、目录 slug、发布时间规则、输入校验、上传文件签名和中英文语言包键一致性。Dockerfile 在镜像构建时也会执行 lint、测试和生产构建。
+测试覆盖正文转换、目录 slug、发布时间规则、输入校验、上传文件签名、中文文案包和单语言路由合同。Dockerfile 在镜像构建时也会执行 lint、测试和生产构建。
 
 ## 线上博客 MCP
 
@@ -118,7 +118,7 @@ Gitee `main` 推送由平台的 `build@docker` 步骤构建镜像，自有 Agent
 bash ops/deploy.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
 ```
 
-部署脚本会串行加锁、创建部署前备份、把候选镜像解析为不可变 digest，并校验镜像内源码指纹与目标 Git 提交一致。切换后等待数据库/Web/Nginx 全部 Healthy，执行中英文页面、未登录写保护和站点基础文件冒烟测试，再把提交、digest 和指纹写入 `.deploy-state`。失败时输出诊断并恢复上一版本代码、镜像和部署状态。数据库 migration 仍应设计为向后兼容，因为应用回滚不会自动逆转数据库变更。
+部署脚本会串行加锁、创建部署前备份、把候选镜像解析为不可变 digest，并校验镜像内源码指纹与目标 Git 提交一致。切换后等待数据库/Web/Nginx 全部 Healthy，执行中文页面、退役英文路径 `410`、未登录写保护和站点基础文件冒烟测试，再把提交、digest 和指纹写入 `.deploy-state`。失败时输出诊断并恢复上一版本代码、镜像和部署状态。数据库 migration 仍应设计为向后兼容，因为应用回滚不会自动逆转数据库变更。
 
 仓库中共有两份 Gitee Go 定义：`pipeline-deploy` 在 `main` 推送时自动构建、部署并执行 `status`；`pipeline-maintenance` 只在故障、临时备份、恢复验证或证书轮换时手动执行固定动作。它不接受任意 Shell，也不承担自动定时调度。GitHub 当前只作为代码镜像仓库，不运行部署或生产维护工作流。
 

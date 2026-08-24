@@ -5,6 +5,7 @@ const withNextIntl = createNextIntlPlugin()
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  skipTrailingSlashRedirect: true,
   outputFileTracingRoot: process.cwd(),
   distDir: process.env.NEXT_DIST_DIR || ".next",
   allowedDevOrigins: ["127.0.0.1"],

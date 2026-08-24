@@ -3,12 +3,12 @@
 import { useTranslations } from "next-intl"
 import { Link } from "@/i18n/navigation"
 import { Container } from "@/components/layout/Container"
-import type { Post, Category } from "@/lib/generated/prisma/client"
+import type { Post, Category, Series } from "@/lib/generated/prisma/client"
 
-type PostWithCategory = Post & { category: Category | null }
+type PostWithCategory = Post & { category: Category | null; series?: Series | null }
 
-function formatDate(d: Date, locale: string) {
-  return new Date(d).toLocaleDateString(locale === "zh" ? "zh-CN" : "en-US", {
+function formatDate(d: Date) {
+  return new Date(d).toLocaleDateString("zh-CN", {
     year: "numeric",
     month: "long",
     day: "numeric",
@@ -16,12 +16,12 @@ function formatDate(d: Date, locale: string) {
   })
 }
 
-export function RecentPosts({ posts, locale }: { posts: PostWithCategory[]; locale: string }) {
+export function RecentPosts({ posts }: { posts: PostWithCategory[] }) {
   const t = useTranslations("home")
 
   if (posts.length === 0) {
     return (
-      <section className="py-16">
+      <section className="py-12 sm:py-16">
         <Container>
           <p className="text-center text-muted-foreground">{t("emptyPosts")}</p>
         </Container>
@@ -30,7 +30,7 @@ export function RecentPosts({ posts, locale }: { posts: PostWithCategory[]; loca
   }
 
   return (
-    <section className="py-16">
+    <section className="py-12 sm:py-16">
       <Container>
         <div className="flex items-baseline justify-between mb-8">
           <h2 className="text-2xl font-bold text-foreground">{t("latestPosts")}</h2>
@@ -45,9 +45,9 @@ export function RecentPosts({ posts, locale }: { posts: PostWithCategory[]; loca
           {posts.map((p) => (
             <Link key={p.id} href={`/blog/${p.slug}`} className="group block h-full">
               <article className="flex flex-col h-full border border-border/50 rounded-lg p-5 transition-all group-hover:border-border group-hover:bg-muted/50">
-                {p.category && (
+                {(p.category || p.series) && (
                   <span className="text-xs text-muted-foreground mb-2 block">
-                    {p.category.name}
+                    {[p.series?.title, p.category?.name].filter(Boolean).join(" · ")}
                   </span>
                 )}
                 <h3 className="text-lg font-semibold text-muted-foreground group-hover:text-foreground transition-colors mb-2 line-clamp-2">
@@ -57,7 +57,7 @@ export function RecentPosts({ posts, locale }: { posts: PostWithCategory[]; loca
                   <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{p.excerpt}</p>
                 )}
                 <div className="mt-auto flex items-center gap-2 text-xs text-muted-foreground">
-                  <time>{formatDate(p.publishedAt ?? p.createdAt, locale)}</time>
+                  <time>{formatDate(p.publishedAt ?? p.createdAt)}</time>
                   <span>·</span>
                   <span>{t("minuteRead", { count: p.readTime })}</span>
                 </div>
