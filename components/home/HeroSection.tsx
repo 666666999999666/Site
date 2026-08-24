@@ -4,6 +4,10 @@ import { useTranslations } from "next-intl"
 import { Link } from "@/i18n/navigation"
 import { Container } from "@/components/layout/Container"
 
+export function formatHeroIdentity(name: string, role: string): string {
+  return [name.trim(), role.trim()].filter(Boolean).join(" · ")
+}
+
 export function HeroSection({
   name,
   role,
@@ -14,11 +18,15 @@ export function HeroSection({
   description: string
 }) {
   const t = useTranslations("home")
+  const identity = formatHeroIdentity(name, role)
+
   return (
     <section className="border-b border-border/40 py-14 sm:py-20">
       <Container size="narrow">
         <div className="text-center">
-          <p className="mb-3 text-sm font-medium text-muted-foreground">{name} · {role}</p>
+          {identity ? (
+            <p className="mb-3 text-sm font-medium text-muted-foreground">{identity}</p>
+          ) : null}
           <h1 className="mb-4 text-3xl font-bold tracking-tight text-foreground sm:text-5xl">
             {t("title")}
           </h1>
