@@ -26,7 +26,7 @@
 
 三条流水线不是三套部署方式。日常发布只走 `pipeline-deploy`；`pipeline-public-monitor` 只做真实公网巡检，`pipeline-maintenance` 是不接受任意 Shell 的受限应急入口。GitHub 只同步仓库，不运行生产 Action。
 
-Gitee 是唯一生产源。发布时必须先把精确 SHA 直接推到 Gitee `main` 以产生 `PushEvent`，随即把同一 SHA 推到 GitHub `main` 并分别核对远端值；不要依赖 GitHub 到 Gitee 的仓库镜像，因为镜像同步可以更新分支却不产生流水线触发事件。生产部署始终从固定 Gitee URL 获取并验证 `main`，不依赖服务器 Git `origin` 指向哪里。
+Gitee 是唯一生产源。日常从干净的本地 `main` 运行 `npm run release:publish`：脚本先确认两个远端都可 fast-forward，再把精确 SHA 直接推到 Gitee `main` 产生 `PushEvent` 并核对，最后同步并核对 GitHub `main`。如果 Gitee 已被镜像提前同步到本地 HEAD，脚本会失败，因为此时没有 ref 变更可用于证明流水线已触发。若 Gitee 已更新而 GitHub 同步失败，不得回退 Gitee；修复网络或权限后运行 `npm run release:publish -- --sync-github-only`，该恢复模式只补齐 GitHub，不证明新的 Gitee 事件。发布脚本退出 0 只表示 Gitee ref 发生真实更新且双远端一致，流水线记录和生产版本仍按下文独立核验。不要依赖 GitHub 到 Gitee 的仓库镜像；生产部署始终从固定 Gitee URL 获取并验证 `main`，不依赖服务器 Git `origin` 指向哪里。
 
 TCR 当前只需要：
 
