@@ -37,3 +37,5 @@ public/uploads/*
 .source-fingerprint
 ops/.deploy-bootstrap-*
 Dockerfile.release
+# Gitee Docker builds materialize upstream step artifacts at the context root.
+output.tar.gz

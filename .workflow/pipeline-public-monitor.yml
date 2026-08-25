@@ -34,7 +34,7 @@ stages:
       retry: "0"
 triggers:
   schedule:
-  - cron: '17 4 * * ?'
+  - cron: '17 4 * * *'
 notify: []
 strategy:
   blocking: true
