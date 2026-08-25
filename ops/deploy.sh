@@ -11,7 +11,8 @@ requested_image="${2:-}"
 [[ "$requested_image" == "$registry_repository:$target_commit" ]] \
   || fail "Deployment image must use the exact target Git SHA tag"
 
-exec 9>"/tmp/qzsite-operation.lock"
+prepare_operation_lock
+exec 9>>"$OPERATION_LOCK_PATH"
 flock -w "${QZSITE_DEPLOY_LOCK_WAIT_SECONDS:-30}" 9 \
   || fail "Another deployment or recovery operation is still running"
 [[ -d "$APP_DIR/.git" ]] || fail "$APP_DIR is not a Git worktree"

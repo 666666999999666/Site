@@ -21,7 +21,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
-exec 9>"/tmp/qzsite-operation.lock"
+prepare_operation_lock
+exec 9>>"$OPERATION_LOCK_PATH"
 if ! flock -n 9; then
   exit 0
 fi

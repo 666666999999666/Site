@@ -4,7 +4,8 @@ source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
 action="${1:-status}"
 
-exec 9>"/tmp/qzsite-operation.lock"
+prepare_operation_lock
+exec 9>>"$OPERATION_LOCK_PATH"
 flock -w 900 9 || fail "Another deployment or maintenance action is still running"
 
 run_mcp_maintenance() {

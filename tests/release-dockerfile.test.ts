@@ -45,7 +45,7 @@ test("release Dockerfile pins the validated Git SHA without changing the source 
 
     assert.match(rendered, new RegExp(`ARG APP_RELEASE_SHA=${sha}`))
     assert.match(rendered, /LABEL org\.opencontainers\.image\.revision=\$APP_RELEASE_SHA/)
-    assert.match(rendered, /RUN apk add --no-cache bash git postgresql16 postgresql16-client su-exec/)
+    assert.match(rendered, /RUN apk add --no-cache bash coreutils git postgresql16 postgresql16-client su-exec/)
     assert.match(rendered, /RUN bash scripts\/run-build-db-gate\.sh/)
     assert.match(rendered, /source-fingerprint\.mjs \/app \/app\/source-manifest\.json/)
     assert.match(rendered, /COPY --from=builder \/app\/source-manifest\.json \.\/\.source-manifest\.json/)

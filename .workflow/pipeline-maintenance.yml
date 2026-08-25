@@ -29,5 +29,3 @@ notify: []
 variables:
   global:
   - MAINTENANCE_ACTION
-  - TLS_CERT_B64
-  - TLS_KEY_B64

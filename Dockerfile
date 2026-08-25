@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/root/.npm \
 FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
-RUN apk add --no-cache bash git postgresql16 postgresql16-client su-exec
+RUN apk add --no-cache bash coreutils git postgresql16 postgresql16-client su-exec
 # Task 23: 构建时注入站点域名（NEXT_PUBLIC_* 会被内联进产物，运行时设置无效）。
 # 默认值为生产域名，确保即使 CI 不传 buildArgs 也不会泄露 localhost。
 ARG NEXT_PUBLIC_SITE_URL=https://liaoqizai.site

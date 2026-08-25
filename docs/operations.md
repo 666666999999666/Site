@@ -14,7 +14,7 @@
 - 切换 Compose 服务。
 - 执行轻量健康、来源和冒烟检查。
 
-禁止在生产机执行 `docker build`、`npm ci`、`next build`、完整测试或压力测试。部署、备份、恢复验证和维护共享 `/tmp/qzsite-operation.lock`，不会并发运行。
+禁止在生产机执行 `docker build`、`npm ci`、`next build`、完整测试或压力测试。部署、备份、恢复验证和维护统一由应用目录所有者 `ubuntu` 直接执行（脚本内部按需使用 `sudo -n`，禁止 `sudo bash ops/...`），共享由该用户持有且权限为 `600` 的 `/tmp/qzsite-operation.lock`，不会并发运行。
 
 ## 2. 流水线与仓库
 
@@ -95,7 +95,7 @@ bash ops/maintenance.sh status
 | `verify-backup` | 在隔离 PostgreSQL 容器恢复最新备份 |
 | `ssl` | 检查 30 天证书余量和本机 HTTPS |
 | `install-cron` | 从受信任的服务器登录会话幂等安装定时任务并移除两条旧任务；不通过 Gitee Agent 执行 |
-| `install-tls` | 校验证书和私钥后原子替换、测试并 reload |
+| `install-tls` | 仅从受信任 SSH 会话执行；校验证书和私钥后分步替换配对文件、测试并 reload；可捕获失败会恢复备份 |
 | `content-dry-run` | 只读扫描旧 Tiptap 正文 |
 | `uploads-dry-run` | 只读扫描孤儿上传 |
 | `study-uploads-dry-run` | 只读扫描私有题图和过期答案摘要 |
@@ -188,23 +188,26 @@ bash ops/configure-acme.sh
 
 默认镜像为 `certbot/certbot@sha256:d07bd043d61d6bee1114235ac12c2e9a5c54b6931b3ccf5e1174d6c8c4afaa95`。只有审查并提交新 digest 时才允许用 `ACME_IMAGE` 显式覆盖，禁止使用 tag 或 `latest`。
 
-脚本把账户配置以 `600` 权限保存到本机备份目录。续期只在证书少于 30 天时进行：预检本地不可变 Certbot 镜像后短暂停止 Nginx，使用 standalone HTTP-01 为 apex 与 `www` 签发，原子安装、启动并执行 `nginx -t` 与 HTTPS 健康检查；失败恢复旧证书。Cron 每日 02:10 和 14:10 调用，未到期时不访问外网。
+脚本把账户配置以 `600` 权限保存到本机备份目录。续期只在证书少于 30 天时进行：预检本地不可变 Certbot 镜像后短暂停止 Nginx，使用 standalone HTTP-01 为 apex 与 `www` 签发，分步安装证书与私钥，启动并执行 `nginx -t` 与 HTTPS 健康检查；可捕获的脚本失败会恢复旧证书。两个文件不宣称具备跨掉电/SIGKILL 的原子性；Nginx 只在配对校验和健康检查通过后接受新版本，异常中断需使用保留备份恢复。Cron 每日 02:10 和 14:10 调用，未到期时不访问外网。
 
-在首次 ACME 签发和一次自动续期都真实验收前，保留现有 Base64 手动换证链路。手动更新时，在 Gitee Go 将以下值设为受保护变量：
+在首次 ACME 签发和一次自动续期都真实验收前，保留现有 Base64 手动换证链路。该脚本需要非交互 `sudo` 读取当前文件，Gitee Agent 的 `NoNewPrivileges` 明确禁止这条链路；手动更新只能在受信任 SSH 会话中用不回显的安全输入，经固定文件描述符传入，不能放进进程环境：
 
-- `TLS_CERT_B64`：完整证书链的 Base64。
-- `TLS_KEY_B64`：未加密私钥的 Base64。
-- `MAINTENANCE_ACTION=install-tls`。
+```bash
+read -r -s tls_cert_b64
+read -r -s tls_key_b64
+bash ops/maintenance.sh install-tls 3<<<"$tls_cert_b64" 4<<<"$tls_key_b64"
+unset tls_cert_b64 tls_key_b64
+```
 
 `ops/install-tls.sh` 会自动：
 
-1. 解码到权限为 `600` 的临时文件。
+1. 从文件描述符 3/4 读取 Base64，解码到权限为 `600` 的临时文件；证书和私钥不进入子进程环境。
 2. 校验域名、30 天有效期、私钥格式和公私钥匹配。
 3. 将旧证书备份到 `backups/tls-<timestamp>/`。
 4. 安装新文件，执行 `nginx -t`、reload 和 HTTPS 检查。
-5. 任一步失败时恢复旧证书。
+5. 可捕获的脚本失败时恢复并核对旧证书；恢复或服务重启失败会以 `CRITICAL` 和独立错误码退出并保留备份。
 
-不得在 ACME 尚未验收时删除 `install-tls` 或 Base64 受保护变量；两条链路共用相同的证书覆盖、密钥匹配、Nginx 检查和失败恢复边界。
+不得在 ACME 尚未验收时删除 `install-tls`；两条链路共用相同的证书覆盖、密钥匹配、Nginx 检查和失败恢复边界。Gitee Go 不保存或接收 Base64 证书与私钥变量。
 
 ## 8. 数据与内容维护
 
@@ -227,13 +230,14 @@ bash ops/maintenance.sh storage-cleanup
 
 日常定时任务使用第二条统一入口：先分别报告普通上传数量/字节、私有题图工作量和过期 Review Ticket；三类都为 0 时直接结束且不制造备份，有候选时只创建一套 `storage-cleanup` 完整备份，再执行两类 guarded cleanup。单独运行任一 `--apply` 仍会自行创建完整备份，不能借统一入口绕过备份文件存在性校验。
 
-宿主日志治理由 `ops/install-host-log-governance.sh` 一次性安装：journald 上限 512 MiB、保留 7 天且至少给磁盘留 5 GiB；Gitee Agent stdout 不再重复进入 journal，stderr 仍保留。脚本输出精确 `ROLLBACK_DIR`，必须先运行一次真实流水线；异常时用 `ops/rollback-host-log-governance.sh <ROLLBACK_DIR>` 恢复原 drop-in。自动镜像清理只有在 `.deploy-history` 已有三个本地可解析的稳定版本后才启用，只删除 7 天前、无容器引用且不属于当前/最近两个稳定版本的 Web 镜像。
+宿主日志治理由 `ubuntu` 直接执行 `ops/install-host-log-governance.sh` 一次性安装，不要对整个脚本使用 `sudo`：journald 上限 512 MiB、保留 7 天且至少给磁盘留 5 GiB；Gitee Agent stdout 不再重复进入 journal，stderr 仍保留。脚本输出精确 `ROLLBACK_DIR`，必须先运行一次真实流水线；异常时仍由 `ubuntu` 直接执行 `ops/rollback-host-log-governance.sh <ROLLBACK_DIR>` 恢复原 drop-in。自动镜像清理只有在 `.deploy-history` 已有三个本地可解析的稳定版本后才启用，只删除 7 天前、无容器引用且不属于当前/最近两个稳定版本的 Web 镜像。
 
 禁止在生产执行 `prisma db push`。生产只使用已提交的 `prisma migrate deploy`。
 
 ## 9. 密钥、Agent 与应急权限
 
-- `.env`、备份、证书和私钥不进入 Git；文件权限为 `600`，目录为 `700`。
+- `.env`、备份和私钥不进入 Git；敏感文件权限为 `600`，目录为 `700`。
+- TLS 对外证书安装为 `root:root 644`，私钥和证书备份安装为 `root:root 600`；这能减少同机其他普通用户误读，但由于部署账户本身拥有 Docker 权限，文件 owner 不是隔离 Gitee Agent 的安全边界。ACME 与手动换证脚本只通过非交互 `sudo` 读取、备份和恢复现有文件，安装失败会恢复原证书，首次 ACME 配置失败会恢复或移除 `.acme-config`；Gitee Go 不接收证书或私钥变量。
 - TCR 密码只通过 Gitee Secret 和 `docker login --password-stdin` 使用，任务结束自动 logout。
 - Web 使用非 Root `node` 用户，Nginx 只读挂载 uploads。
 - Nginx 普通访问日志只记录不含查询串和 Referrer 的 `$uri`；精确 `/api/questions` 搜索入口额外关闭继承的 error log，避免 upstream 故障把可匹配标准答案的搜索串写入请求行日志。其他路由继续保留错误日志。
@@ -250,7 +254,7 @@ systemctl is-active gitee-go-agent.service
 sudo systemctl restart gitee-go-agent.service
 ```
 
-Agent 正常重启后服务端释放旧注册可能延迟。先等待 6 分钟，连续 10 分钟仍未恢复再在 Gitee 主机组重新绑定，不要提前删除 UUID。UUID 只保存在服务器 `/home/ubuntu/.gitee-agent/uuid`，不得复制到仓库或日志。
+Agent 正常重启后服务端释放旧注册可能延迟。先等待 6 分钟，连续 10 分钟仍未恢复再在 Gitee 主机组重新绑定，不要提前删除 UUID。第三方 Agent 会在进程参数和自身轮询日志中使用注册标识，因此工作目录固定为 `700`、日志固定为 `600`、启动包装器固定为 `root:<service-group> 750`，systemd 通过 `UMask=0077` 约束后续新文件；不得把这些标识复制到仓库、工单或对话。治理回滚快照固定保存在 root-only 的 `/var/lib/qzsite/host-log-governance/`；旧 `backups/host-log-governance-*` 属于不可信的历史快照，不再作为自动回滚输入。
 
 ## 10. 发布后核对
 
