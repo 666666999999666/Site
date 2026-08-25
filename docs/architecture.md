@@ -296,7 +296,7 @@ push Gitee main
 -> 运行提交、镜像 digest、源码指纹写入 .deploy-state 和 .deploy-history
 ```
 
-发布链路不再读取 `latest`。Gitee 构建产物、SHA tag、OCI revision、镜像内版本、健康接口和当前 `origin/main` 必须是同一完整提交；任一不一致都会在确认稳定版本前拒绝发布。部署失败只使用服务器本地的上一稳定 digest 恢复代码、环境和状态；过期 `.deploy-pending` 由 watchdog 收口，但数据库 migration 不会自动逆转。
+发布链路不再读取 `latest`。Gitee 构建产物、SHA tag、OCI revision、镜像内版本、健康接口和从固定 Gitee URL 获取的 `main` 必须是同一完整提交；任一不一致都会在确认稳定版本前拒绝发布。部署失败只使用服务器本地的上一稳定 digest 恢复代码、环境和状态；过期 `.deploy-pending` 由 watchdog 收口，但数据库 migration 不会自动逆转。
 
 数据库和上传恢复、证书、Agent 与维护操作以 [`operations.md`](operations.md) 为准；整机或磁盘故障恢复以 [`disaster-recovery.md`](disaster-recovery.md) 为准。
 

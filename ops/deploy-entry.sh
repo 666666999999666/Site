@@ -25,12 +25,14 @@ app_dir="$(pwd -P)"
   || fail "The deployment ops path must be a real directory"
 
 log "Fetching the target deployment entrypoint"
-git fetch --prune origin '+refs/heads/main:refs/remotes/origin/main'
+production_git_url="https://gitee.com/lqzzql/Site.git"
+production_ref="refs/remotes/gitee-production/main"
+git fetch --prune --no-tags "$production_git_url" "+refs/heads/main:$production_ref"
 target_commit="$(git rev-parse --verify "${revision}^{commit}")"
-origin_main="$(git rev-parse --verify "origin/main^{commit}")"
+production_main="$(git rev-parse --verify "${production_ref}^{commit}")"
 [[ "$target_commit" == "$revision" ]] \
   || fail "Requested revision did not resolve exactly"
-[[ "$target_commit" == "$origin_main" ]] \
+[[ "$target_commit" == "$production_main" ]] \
   || fail "Refusing to bootstrap a stale deployment"
 
 staged_deploy=""

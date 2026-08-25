@@ -88,8 +88,10 @@ stages:
       set +x
       printf '%s' "${TCR_PASSWORD}" | docker login ccr.ccs.tencentyun.com --username "${TCR_USERNAME}" --password-stdin >/dev/null
       set -x
-      git fetch --prune origin '+refs/heads/main:refs/remotes/origin/main'
-      target_commit="$(git rev-parse --verify 'origin/main^{commit}')"
+      production_git_url="https://gitee.com/lqzzql/Site.git"
+      production_ref="refs/remotes/gitee-production/main"
+      git fetch --prune --no-tags "$production_git_url" "+refs/heads/main:$production_ref"
+      target_commit="$(git rev-parse --verify "${production_ref}^{commit}")"
       [ "$target_commit" = "$pipeline_commit" ] || {
         echo "Refusing a stale pipeline deployment" >&2
         exit 1

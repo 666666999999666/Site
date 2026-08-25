@@ -26,6 +26,8 @@
 
 三条流水线不是三套部署方式。日常发布只走 `pipeline-deploy`；`pipeline-public-monitor` 只做真实公网巡检，`pipeline-maintenance` 是不接受任意 Shell 的受限应急入口。GitHub 只同步仓库，不运行生产 Action。
 
+Gitee 是唯一生产源。发布时必须先把精确 SHA 直接推到 Gitee `main` 以产生 `PushEvent`，随即把同一 SHA 推到 GitHub `main` 并分别核对远端值；不要依赖 GitHub 到 Gitee 的仓库镜像，因为镜像同步可以更新分支却不产生流水线触发事件。生产部署始终从固定 Gitee URL 获取并验证 `main`，不依赖服务器 Git `origin` 指向哪里。
+
 TCR 当前只需要：
 
 | 仓库 | 用途 | 结论 |
@@ -47,7 +49,7 @@ bash ops/maintenance.sh status
 
 `ops/deploy.sh` 的顺序是：
 
-1. 获取全局操作锁，检查至少 5 GiB 可用空间，并确认完整目标 SHA 等于 `origin/main` 且不是降级。
+1. 获取全局操作锁，检查至少 5 GiB 可用空间，并确认完整目标 SHA 等于 Gitee `main` 且不是降级。
 2. 使用目标提交的新版备份逻辑创建 PostgreSQL、公开 uploads、私有题图和 SHA-256 同组备份。
 3. 只拉取一次与目标提交同名的候选 tag，解析为不可变 `@sha256:` digest，并核对 OCI revision 与镜像版本环境变量。
 4. 将刚生成的 production dump 恢复到无端口、内部网络的一次性 PostgreSQL 16；使用最终候选镜像内的 Prisma 工具链迁移两次，要求无未完成/回滚 migration，且文章、草稿、项目、Todo、Idea、DailyQuote、Session、OAuth/MCP 等受保护行数不变。
@@ -59,7 +61,7 @@ bash ops/maintenance.sh status
 10. 通过真实公网 DNS/TLS/路由再次验证相同 release SHA。
 11. 原子写入 `.deploy-state`，追加 `.deploy-history`，再次核对运行容器、镜像、tracked 工作树与源码指纹后清除 pending。
 
-发布链路不读取 `latest`。流水线的 `GITEE_COMMIT`、`GITEE_DOCKER_IMAGE`、SHA tag、OCI revision、健康接口版本和生产 `origin/main` 必须完全一致；交错或陈旧流水线会在切换前失败。
+发布链路不读取 `latest`。流水线的 `GITEE_COMMIT`、`GITEE_DOCKER_IMAGE`、SHA tag、OCI revision、健康接口版本和生产 `gitee-production/main` 必须完全一致；交错或陈旧流水线会在切换前失败。
 
 部署失败会恢复上一代码提交、上一镜像和上一 `.deploy-state`。Prisma migration 不会自动逆转，因此 migration 必须向后兼容，优先新增 nullable 字段、兼容读写和后续清理。
 

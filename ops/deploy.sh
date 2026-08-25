@@ -17,10 +17,12 @@ flock -w "${QZSITE_DEPLOY_LOCK_WAIT_SECONDS:-30}" 9 \
 [[ -d "$APP_DIR/.git" ]] || fail "$APP_DIR is not a Git worktree"
 
 log "Fetching and validating the exact deployment revision"
-git fetch --prune origin '+refs/heads/main:refs/remotes/origin/main'
-origin_main="$(git rev-parse --verify "origin/main^{commit}")"
-[[ "$target_commit" == "$origin_main" ]] \
-  || fail "Refusing a stale deployment: target is not the current origin/main"
+production_git_url="https://gitee.com/lqzzql/Site.git"
+production_ref="refs/remotes/gitee-production/main"
+git fetch --prune --no-tags "$production_git_url" "+refs/heads/main:$production_ref"
+production_main="$(git rev-parse --verify "${production_ref}^{commit}")"
+[[ "$target_commit" == "$production_main" ]] \
+  || fail "Refusing a stale deployment: target is not the current Gitee main"
 git cat-file -e "${target_commit}^{commit}"
 
 minimum_free_kb="${QZSITE_DEPLOY_MIN_FREE_KB:-5242880}"
