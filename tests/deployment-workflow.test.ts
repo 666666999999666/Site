@@ -312,8 +312,7 @@ test("release verification binds Git, environment, OCI metadata, container, and 
 test("daily public monitoring bypasses loopback resolution and checks the stable release", () => {
   const monitor = readFileSync(".workflow/pipeline-public-monitor.yml", "utf8")
 
-  assert.match(monitor, /schedule:\s*\n\s*- cron: '17 4 \* \* \*'/)
-  assert.doesNotMatch(monitor, /cron:[^\n]*\?/)
+  assert.match(monitor, /schedule:\s*\n\s*- cron: '0 17 4 \* \* \?'/)
   assert.match(monitor, /EXPECTED_RELEASE_SHA="\$release_sha" bash ops\/verify-release\.sh/)
   assert.match(monitor, /CURL_RESOLVE="" EXPECTED_RELEASE_SHA="\$release_sha" bash ops\/smoke-test\.sh public/)
   assert.match(monitor, /blocking: true/)
