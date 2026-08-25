@@ -28,7 +28,7 @@ ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=prisma-cli /prisma/node_modules/ /prisma/node_modules/
 COPY . .
-RUN node scripts/source-fingerprint.mjs /app > /tmp/source-fingerprint
+RUN node scripts/source-fingerprint.mjs /app /app/source-manifest.json > /tmp/source-fingerprint
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build?schema=public"
 RUN npx prisma validate
 RUN npx prisma generate
@@ -55,6 +55,9 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 COPY --from=builder /tmp/source-fingerprint ./.source-fingerprint
+COPY --from=builder /app/source-manifest.json ./.source-manifest.json
+RUN node -e 'const manifest = JSON.parse(require("node:fs").readFileSync("/app/.source-manifest.json", "utf8")); if (manifest.release_sha !== process.env.APP_RELEASE_SHA) process.exit(1)' \
+    && chmod 0444 /app/.source-fingerprint /app/.source-manifest.json
 
 # Images bypass the Next optimizer, so the runtime omits libvips/sharp.
 RUN rm -rf /app/node_modules/sharp /app/node_modules/@img

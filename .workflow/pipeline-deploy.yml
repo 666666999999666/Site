@@ -13,11 +13,12 @@ stages:
     displayName: 固化发布提交到 Dockerfile
     nodeVersion: 14.16.0
     commands:
-    - node scripts/render-release-dockerfile.mjs "${GITEE_COMMIT}" Dockerfile.release
+    - node scripts/render-release-dockerfile.mjs "${GITEE_COMMIT}" Dockerfile.release source-manifest.json
     artifacts:
     - name: RELEASE_DOCKERFILE
       path:
       - ./Dockerfile.release
+      - ./source-manifest.json
     notify: []
     strategy:
       retry: "0"

@@ -17,6 +17,7 @@ next-env.d.ts
 /playwright-report/
 /test-results/
 /Dockerfile.release
+/source-manifest.json
 
 # env
 .env

@@ -235,7 +235,7 @@ rollback() {
   local original_exit=$?
   local rollback_failed=0
   local rollback_permissions_image
-  trap - ERR
+  trap - ERR EXIT
   [[ -z "$pending_tmp" ]] || rm -f -- "$pending_tmp"
   [[ -z "$state_tmp" ]] || rm -f -- "$state_tmp"
   log "Deployment failed; collecting diagnostics before local-only rollback"
@@ -287,7 +287,7 @@ printf '%s %s %s %s %s %s %s\n' \
 chmod 600 "$pending_tmp"
 mv -- "$pending_tmp" "$pending_file"
 pending_tmp=""
-trap rollback ERR
+trap rollback EXIT
 
 git checkout --force -B main "$target_commit" > /dev/null
 
@@ -296,7 +296,7 @@ source_fingerprint="$(
     --volume "$APP_DIR:/source:ro" \
     --entrypoint node \
     "$immutable_image" \
-    /prisma/tools/scripts/source-fingerprint.mjs /source
+    /prisma/tools/scripts/source-fingerprint.mjs /source /app/.source-manifest.json "$target_commit"
 )"
 [[ "$source_fingerprint" == "$image_fingerprint" ]] \
   || fail "Candidate image does not match the requested Git revision"
@@ -335,6 +335,6 @@ run_release_verify strict "$target_commit"
 append_stable_history "$target_commit" "$immutable_image" "$image_fingerprint"
 rm -f -- "$pending_file"
 
-trap - ERR
+trap - EXIT
 chmod 600 "$state_file" "$history_file"
 log "Deployment finalized: ${target_commit:0:12} $immutable_image $image_fingerprint"

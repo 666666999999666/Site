@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { execFileSync } from "node:child_process"
+import { execFileSync, spawnSync } from "node:child_process"
 import {
   existsSync,
   mkdirSync,
@@ -18,8 +18,9 @@ test("the Gitee pipeline builds and deploys one exact commit image", () => {
   const deploy = 'bash "$bootstrap" "$target_commit" "$expected_image"'
 
   assert.match(pipeline, /step: build@nodejs[\s\S]*?nodeVersion: 14\.16\.0/)
-  assert.match(pipeline, /node scripts\/render-release-dockerfile\.mjs "\$\{GITEE_COMMIT\}" Dockerfile\.release/)
+  assert.match(pipeline, /node scripts\/render-release-dockerfile\.mjs "\$\{GITEE_COMMIT\}" Dockerfile\.release source-manifest\.json/)
   assert.match(pipeline, /name: RELEASE_DOCKERFILE/)
+  assert.match(pipeline, /- \.\/source-manifest\.json/)
   assert.match(pipeline, /tag: lqzzql\/web:\$\{GITEE_COMMIT\}/)
   assert.match(pipeline, /dockerfile: \.\/Dockerfile\.release/)
   assert.match(pipeline, /- \$\{RELEASE_DOCKERFILE\}/)
@@ -134,6 +135,9 @@ test("deployment uses pending state, one migration, public confirmation, and sta
   assert.match(deploy, /target_commit" == "\$production_main/)
   assert.match(deploy, /production_git_url="https:\/\/gitee\.com\/lqzzql\/Site\.git"/)
   assert.doesNotMatch(deploy, /git fetch --prune origin/)
+  assert.match(deploy, /trap rollback EXIT/)
+  assert.doesNotMatch(deploy, /trap rollback ERR/)
+  assert.match(deploy, /source-fingerprint\.mjs \/source \/app\/\.source-manifest\.json "\$target_commit"/)
   assert.match(deploy, /git merge-base --is-ancestor "\$previous_commit" "\$target_commit"/)
   assert.match(deploy, /QZSITE_DEPLOY_MIN_FREE_KB:-5242880/)
   assert.match(deploy, /Pulling the single SHA-tagged candidate image after lock and disk preflight/)
@@ -156,12 +160,34 @@ test("deployment uses pending state, one migration, public confirmation, and sta
   assert.ok(publicCheck < stableState && stableState < history && history < pendingRemoval)
   assert.match(deploy, /Automatic rollback is incomplete; \.deploy-pending is retained/)
   const rollback = deploy.match(/rollback\(\) \{([\s\S]*?)\n\}/)?.[1] ?? ""
+  assert.match(rollback, /trap - ERR EXIT/)
   assert.match(rollback, /state_tmp="\$\(mktemp "\$APP_DIR\/\.deploy-state\.XXXXXX"\)"/)
   assert.match(rollback, /chmod 600 "\$state_tmp"[\s\S]*?mv -- "\$state_tmp" "\$state_file"/)
   assert.doesNotMatch(rollback, /> "\$state_file"/)
   assert.match(rollback, /run_release_smoke "\$previous_provenance_mode" "\$previous_commit" public/)
   assert.match(deploy, /QZSITE_ALLOW_LEGACY_RELEASE="\$legacy_release"/)
   assert.match(deploy, /previous_provenance_mode="legacy"/)
+})
+
+test("an EXIT rollback trap covers fail helpers that terminate with an explicit exit", () => {
+  const bash = process.platform === "win32"
+    ? path.join(process.env.ProgramFiles || "C:\\Program Files", "Git", "bin", "bash.exe")
+    : "bash"
+  const result = spawnSync(bash, ["-c", `
+set -Eeuo pipefail
+rollback() {
+  original_exit=$?
+  trap - ERR EXIT
+  printf 'rollback:%s\\n' "$original_exit"
+  exit "$original_exit"
+}
+fail() { exit 23; }
+trap rollback EXIT
+fail
+`], { encoding: "utf8" })
+
+  assert.equal(result.status, 23)
+  assert.equal(result.stdout, "rollback:23\n")
 })
 
 test("the watchdog is silent on no-op and recovers only from local stable artifacts", () => {
@@ -274,6 +300,11 @@ test("release verification binds Git, environment, OCI metadata, container, and 
   assert.match(verify, /git diff --cached --quiet --ignore-submodules/)
   assert.match(verify, /--pull never/)
   assert.match(verify, /QZSITE_ALLOW_LEGACY_RELEASE/)
+  assert.match(
+    verify,
+    /if \[\[ "\$allow_legacy_release" == "1" \]\]; then[\s\S]*?recorded stable state as its trust anchor[\s\S]*?else[\s\S]*?source-fingerprint\.mjs \/source \/app\/\.source-manifest\.json "\$state_commit"/
+  )
+  assert.doesNotMatch(verify, /manifest_args=/)
   assert.match(verify, /Legacy rollback provenance verified without an application releaseSha/)
   assert.match(verify, /An image with APP_RELEASE_SHA cannot use the legacy rollback contract/)
 })

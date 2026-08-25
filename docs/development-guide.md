@@ -183,7 +183,7 @@ npx prisma generate
 - 写操作应默认拒绝或先备份；手动维护入口只允许固定白名单动作。
 - TCR 凭据用平台 Secret 和 `docker login --password-stdin`，任务结束 logout。
 - 部署脚本修改后至少检查 Shell 语法、Compose 配置和失败回滚路径。
-- `.dockerignore` 与 `scripts/source-fingerprint.mjs` 必须保持相同排除语义；新增构建输入后要确认它会进入指纹。
+- `.dockerignore` 与 `scripts/source-fingerprint.mjs` 必须保持相同排除语义；新增受跟踪构建输入后要确认它会进入 release manifest 与指纹。
 - 不删除 `.source-fingerprint`，也不绕过 `ops/verify-release.sh` 或 `ops/smoke-test.sh`。
 - `ops/maintenance.sh` 继续只接受固定动作，不允许把任意 Shell 文本作为变量执行。
 

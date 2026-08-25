@@ -254,9 +254,9 @@ Next.js 使用 `output: "standalone"`。镜像构建阶段会导入动态页面�
 - 在云端构建阶段执行 Prisma 校验、Lint、测试和生产构建。
 - 以非 Root `node` 用户运行。
 - 不包含 Sharp/libvips；图片走原始上传路径，Nginx 拒绝 `/_next/image`。
-- 在 `/app/.source-fingerprint` 保存构建输入的 SHA-256 指纹，并携带同版本的指纹计算脚本。
+- 在 `/app/.source-manifest.json` 保存由目标 Git 提交生成的受跟踪源码清单，在 `/app/.source-fingerprint` 保存该清单内容的 SHA-256 聚合指纹，并携带同版本的校验脚本。
 
-源码指纹只覆盖会进入 Docker 构建上下文的代码和配置，排除 Git、依赖、构建产物、文档、数据库、备份、证书和真实上传文件。修改 `.dockerignore` 的排除规则时必须同步复核 `scripts/source-fingerprint.mjs`。
+源码指纹只覆盖目标提交中会影响 Docker 构建的受跟踪代码和配置；除构建门禁使用的 README 与两篇运维文档外，其他文档连同 Git、依赖、构建产物、数据库、备份、证书和真实上传文件均排除。只有显式生成的 `source-manifest.json` 不参与自身指纹；其他清单外源码，以及清单内文件缺失、类型变化或内容漂移都会失败。修改 `.dockerignore` 的排除规则时必须同步复核 `scripts/source-fingerprint.mjs`。
 
 ### 6.7 Nginx 统一拥有入口安全策略
 

@@ -81,15 +81,19 @@ image_fingerprint="$(docker exec "$web_container" cat /app/.source-fingerprint)"
 [[ "$image_fingerprint" == "$state_fingerprint" ]] \
   || fail "Running image fingerprint does not match deployment state"
 
-source_fingerprint="$(
-  docker run --rm --pull never --read-only --network none \
-    --volume "$APP_DIR:/source:ro" \
-    --entrypoint node \
-    "$state_image" \
-    /prisma/tools/scripts/source-fingerprint.mjs /source
-)"
-[[ "$source_fingerprint" == "$image_fingerprint" ]] \
-  || fail "Checked-out source does not match the running image"
+if [[ "$allow_legacy_release" == "1" ]]; then
+  log "Legacy rollback accepts the recorded stable state as its trust anchor after exact Git and image checks"
+else
+  source_fingerprint="$(
+    docker run --rm --pull never --read-only --network none \
+      --volume "$APP_DIR:/source:ro" \
+      --entrypoint node \
+      "$state_image" \
+      /prisma/tools/scripts/source-fingerprint.mjs /source /app/.source-manifest.json "$state_commit"
+  )"
+  [[ "$source_fingerprint" == "$image_fingerprint" ]] \
+    || fail "Checked-out source does not match the running image"
+fi
 
 health_release_identity="$(
   docker exec "$web_container" node -e '

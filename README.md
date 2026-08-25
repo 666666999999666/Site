@@ -121,7 +121,7 @@ bash ops/deploy-entry.sh <40位GitSHA> ccr.ccs.tencentyun.com/lqzzql/web:<同一
 
 发布顺序固定为：显式推送 Gitee `main` 产生流水线 `PushEvent`，立即推送同一 SHA 到 GitHub，再分别核对两个远端。GitHub→Gitee 镜像只负责代码同步，不能替代 Gitee 的直接 push 触发事件；生产脚本只把固定 Gitee `main` 视为发布来源。
 
-部署脚本会串行加锁、拒绝降级、检查磁盘、创建部署前备份，并把 SHA tag 解析为不可变 digest；OCI revision、容器版本、健康接口、源码指纹和目标提交必须一致。最终候选镜像先在隔离的 production dump 副本上执行两次 migration 验证兼容性与幂等性，通过后才写 `.deploy-pending`、切换代码并对 live database 显式执行一次 migration。真实公网 DNS/TLS/路由验证成功后才原子确认 `.deploy-state` 和 `.deploy-history`。失败时仅使用本地上一稳定 digest 回滚；确认中断则由每分钟 watchdog 恢复。数据库 migration 仍应向后兼容，因为应用回滚不会自动逆转数据库变更。
+部署脚本会串行加锁、拒绝降级、检查磁盘、创建部署前备份，并把 SHA tag 解析为不可变 digest；OCI revision、容器版本、健康接口、目标提交和由该提交生成的受跟踪源码清单必须一致。只有显式允许的 `source-manifest.json` 发布附件不参与自身指纹；任何其他清单外源码、清单内文件漂移或清单 SHA 不一致都会拒绝发布。最终候选镜像先在隔离的 production dump 副本上执行两次 migration 验证兼容性与幂等性，通过后才写 `.deploy-pending`、切换代码并对 live database 显式执行一次 migration。真实公网 DNS/TLS/路由验证成功后才原子确认 `.deploy-state` 和 `.deploy-history`。失败时仅使用本地上一稳定 digest 回滚；确认中断则由每分钟 watchdog 恢复。数据库 migration 仍应向后兼容，因为应用回滚不会自动逆转数据库变更。
 
 仓库中共有三份 Gitee Go 定义：`pipeline-deploy` 在 `main` 推送时构建并部署；`pipeline-public-monitor` 每日从公网核对 DNS、TLS、路由和稳定版本；`pipeline-maintenance` 只在故障、临时备份、恢复验证或证书轮换时手动执行固定动作。维护入口不接受任意 Shell，也不承担自动定时调度。GitHub 当前只作为代码镜像仓库，不运行部署或生产维护工作流。
 

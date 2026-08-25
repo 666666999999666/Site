@@ -1,8 +1,13 @@
+import { execFile } from "node:child_process"
 import { readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { promisify } from "node:util"
+
+const execFileAsync = promisify(execFile)
 
 const releaseSha = process.argv[2] || ""
 const outputPath = path.resolve(process.argv[3] || "Dockerfile.release")
+const manifestPath = path.resolve(process.argv[4] || "source-manifest.json")
 
 if (!/^[0-9a-f]{40}$/.test(releaseSha)) {
   throw new Error("release SHA must be a full 40-character lowercase Git commit")
@@ -19,3 +24,8 @@ if (occurrences !== 1) {
 
 const rendered = source.replace(marker, `ARG APP_RELEASE_SHA=${releaseSha}\n`)
 await writeFile(outputPath, rendered, { encoding: "utf8", mode: 0o600 })
+await execFileAsync(
+  process.execPath,
+  [path.resolve("scripts/source-fingerprint.mjs"), "--git-manifest", releaseSha, manifestPath],
+  { cwd: process.cwd() }
+)

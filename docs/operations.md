@@ -53,7 +53,7 @@ bash ops/maintenance.sh status
 2. 使用目标提交的新版备份逻辑创建 PostgreSQL、公开 uploads、私有题图和 SHA-256 同组备份。
 3. 只拉取一次与目标提交同名的候选 tag，解析为不可变 `@sha256:` digest，并核对 OCI revision 与镜像版本环境变量。
 4. 将刚生成的 production dump 恢复到无端口、内部网络的一次性 PostgreSQL 16；使用最终候选镜像内的 Prisma 工具链迁移两次，要求无未完成/回滚 migration，且文章、草稿、项目、Todo、Idea、DailyQuote、Session、OAuth/MCP 等受保护行数不变。
-5. 写入 `.deploy-pending`，切换到目标提交，并对比目标源码、Compose、Nginx conf 与候选镜像内的 SHA-256 源码指纹。
+5. 写入 `.deploy-pending`，切换到目标提交，并按镜像内的目标 Git 清单逐文件核对源码内容，再对比 Compose 与 Nginx conf。
 6. 以 digest 更新 Compose，并对 live database 通过一次性容器显式执行一次 migration。
 7. 启动候选并等待三个服务 Healthy。
 8. 验证 Nginx 配置并 reload。
@@ -63,7 +63,7 @@ bash ops/maintenance.sh status
 
 发布链路不读取 `latest`。流水线的 `GITEE_COMMIT`、`GITEE_DOCKER_IMAGE`、SHA tag、OCI revision、健康接口版本和生产 `gitee-production/main` 必须完全一致；交错或陈旧流水线会在切换前失败。
 
-部署失败会恢复上一代码提交、上一镜像和上一 `.deploy-state`。Prisma migration 不会自动逆转，因此 migration 必须向后兼容，优先新增 nullable 字段、兼容读写和后续清理。
+部署失败会恢复上一代码提交、上一镜像和上一 `.deploy-state`。新版稳定版本使用目标提交清单严格复算源码指纹；升级前的 legacy 镜像没有清单，其一次性回滚兼容路径把此前确认的稳定 `.deploy-state` 作为信任锚，再分别核对精确 Git HEAD、tracked clean、不可变本地 digest 和镜像内状态指纹，避免把 `.deploy-pending` 运行状态误判为源码。Prisma migration 不会自动逆转，因此 migration 必须向后兼容，优先新增 nullable 字段、兼容读写和后续清理。
 
 `.deploy-state` 固定为提交、不可变镜像 digest、源码指纹三列；`.deploy-history` 只记录完成内部与公网验证的稳定版本。部署确认中断时，Cron 每分钟运行的 `deploy-watchdog.sh` 会在过期后用本地上一稳定 digest 恢复，不访问镜像仓库。
 

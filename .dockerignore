@@ -34,4 +34,6 @@ public/uploads/*
 .deploy-state
 .deploy-pending
 .deploy-history
+.source-fingerprint
+ops/.deploy-bootstrap-*
 Dockerfile.release
