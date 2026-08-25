@@ -10,11 +10,13 @@ const ignoredDirectories = new Set([
   ".worktrees",
   ".tmp-pgtest",
   "backups",
+  "coverage",
   "data",
   "drafts",
   "docs",
-  "nginx",
   "node_modules",
+  "playwright-report",
+  "test-results",
 ])
 
 function isIgnored(relativePath, directory) {
@@ -22,14 +24,18 @@ function isIgnored(relativePath, directory) {
   const parts = normalized.split("/")
   const name = parts.at(-1) || ""
 
-  if (parts.some((part) => ignoredDirectories.has(part))) return true
+  if (parts.some((part) => ignoredDirectories.has(part) || part.startsWith(".next-"))) return true
+  if (parts[0] === "nginx" && parts.length > 1 && parts[1] !== "conf.d") return true
   if (normalized.startsWith("lib/generated/prisma/")) return true
   if (parts[0] === "ops" && name.startsWith(".deploy-bootstrap-")) return true
-  if (name.startsWith(".deploy-state") || name === ".source-fingerprint") return true
+  if (/^\.deploy-(state|pending|history)(?:\.|$)/.test(name) || name === ".source-fingerprint") {
+    return true
+  }
   if (name === "next-env.d.ts" || name.endsWith(".tsbuildinfo")) return true
+  if (parts.length === 1 && name === "Dockerfile.release") return true
   if (name.endsWith(".md")) return true
   if (name.startsWith(".env") && name !== ".env.example") return true
-  if (parts.length === 1 && /^docker-compose.*\.ya?ml$/.test(name)) return true
+  if (parts.length === 1 && /^docker-compose.+\.ya?ml$/.test(name)) return true
   if (
     parts[0] === "public"
     && parts[1] === "uploads"

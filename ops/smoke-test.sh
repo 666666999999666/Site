@@ -1,9 +1,32 @@
 #!/usr/bin/env bash
 
-source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+source "${QZSITE_OPS_COMMON:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh}"
+
+smoke_mode="${1:-full}"
+case "$smoke_mode" in
+  full|internal|public) ;;
+  *) fail "Smoke mode must be full, internal, or public" ;;
+esac
 
 site_url="${SITE_URL:-https://liaoqizai.site}"
-curl_resolve="${CURL_RESOLVE:-liaoqizai.site:443:127.0.0.1}"
+if [[ ${CURL_RESOLVE+x} ]]; then
+  curl_resolve="$CURL_RESOLVE"
+elif [[ "$smoke_mode" == "public" ]]; then
+  curl_resolve=""
+else
+  curl_resolve="liaoqizai.site:443:127.0.0.1"
+fi
+expected_release_sha="${EXPECTED_RELEASE_SHA:-}"
+allow_legacy_release="${QZSITE_ALLOW_LEGACY_RELEASE:-0}"
+[[ "$allow_legacy_release" == "0" || "$allow_legacy_release" == "1" ]] \
+  || fail "QZSITE_ALLOW_LEGACY_RELEASE must be 0 or 1"
+if [[ -n "$expected_release_sha" ]]; then
+  [[ "$expected_release_sha" =~ ^[0-9a-f]{40}$ ]] \
+    || fail "EXPECTED_RELEASE_SHA must be a full lowercase Git SHA"
+fi
+if [[ "$allow_legacy_release" == "1" && -z "$expected_release_sha" ]]; then
+  fail "Legacy release verification requires EXPECTED_RELEASE_SHA"
+fi
 curl_args=(
   --silent
   --show-error
@@ -27,6 +50,18 @@ trap 'rm -rf -- "$tmp_dir"' EXIT
 health="$(curl --fail "${curl_args[@]}" "$site_url/api/health")"
 [[ "$health" == *'"status":"ok"'* ]] \
   || fail "Public health endpoint returned an unexpected response"
+health_release_sha=""
+if [[ "$health" =~ \"releaseSha\":\"([0-9a-f]{40})\" ]]; then
+  health_release_sha="${BASH_REMATCH[1]}"
+  if [[ -n "$expected_release_sha" ]]; then
+    [[ "$health_release_sha" == "$expected_release_sha" ]] \
+      || fail "Public health endpoint returned the wrong release SHA"
+  fi
+elif [[ "$allow_legacy_release" == "1" && "$health" != *'"releaseSha"'* ]]; then
+  log "Legacy rollback health has no releaseSha; commit, digest, and fingerprint remain authoritative"
+else
+  fail "Public health endpoint did not return a valid release SHA"
+fi
 
 root_status="$(
   curl "${curl_args[@]}" \
@@ -197,9 +232,10 @@ upload_without_ticket_status="$(
 [[ "$upload_without_ticket_status" == "401" ]] \
   || fail "Remote import upload without a ticket returned HTTP $upload_without_ticket_status instead of 401"
 
-question_smoke_result=""
-if ! question_smoke_result="$(
-  compose exec --no-TTY web node -e '
+if [[ "$smoke_mode" != "public" ]]; then
+  question_smoke_result=""
+  if ! question_smoke_result="$(
+    compose exec --no-TTY web node -e '
     fetch("http://127.0.0.1:3000/api/internal/question-smoke", {
       method: "POST",
       redirect: "manual",
@@ -216,11 +252,17 @@ if ! question_smoke_result="$(
       console.error("Internal Question smoke request failed")
       process.exitCode = 1
     })
-  '
-)"; then
-  fail "Internal Question create/reveal/rating smoke test failed"
+    '
+  )"; then
+    fail "Internal Question create/reveal/rating smoke test failed"
+  fi
+  [[ "$question_smoke_result" == "ok" ]] \
+    || fail "Internal Question smoke test returned an unexpected success marker"
+  log "Public and loopback-only Question smoke tests passed"
 fi
-[[ "$question_smoke_result" == "ok" ]] \
-  || fail "Internal Question smoke test returned an unexpected success marker"
 
-log "Public and loopback-only Question smoke tests passed"
+if [[ -n "$health_release_sha" ]]; then
+  log "${smoke_mode^} smoke checks passed for release ${health_release_sha:0:12}"
+else
+  log "${smoke_mode^} smoke checks passed for explicitly verified legacy rollback ${expected_release_sha:0:12}"
+fi

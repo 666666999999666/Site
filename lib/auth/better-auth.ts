@@ -30,6 +30,7 @@ const DISABLED_ACCOUNT_PATHS = [
   "/send-verification-email",
   "/verify-email",
 ]
+const MCP_RESOURCE = mcpResourceUrl()
 
 export const auth = betterAuth({
   appName: "QZ Blog",
@@ -81,7 +82,7 @@ export const auth = betterAuth({
       disableSettingJwtHeader: true,
       jwt: {
         issuer: oauthIssuer(),
-        audience: mcpResourceUrl(),
+        audience: MCP_RESOURCE,
         expirationTime: OAUTH_ACCESS_TOKEN_SECONDS,
       },
       jwks: {
@@ -94,9 +95,18 @@ export const auth = betterAuth({
       loginPage: "/oauth/sign-in",
       consentPage: "/oauth/consent",
       scopes: [...OAUTH_SCOPES],
-      validAudiences: [mcpResourceUrl()],
+      validAudiences: [MCP_RESOURCE],
+      resources: [{
+        identifier: MCP_RESOURCE,
+        name: "QZ Site MCP",
+        allowedScopes: [...OAUTH_SCOPES],
+      }],
+      clientRegistrationDefaultResources: [MCP_RESOURCE],
+      clientRegistrationAllowedResources: [MCP_RESOURCE],
+      enforcePerClientResources: true,
       accessTokenExpiresIn: OAUTH_ACCESS_TOKEN_SECONDS,
       refreshTokenExpiresIn: OAUTH_REFRESH_TOKEN_SECONDS,
+      refreshTokenReuseInterval: 0,
       codeExpiresIn: OAUTH_CODE_SECONDS,
       grantTypes: ["authorization_code", "refresh_token"],
       allowDynamicClientRegistration: true,

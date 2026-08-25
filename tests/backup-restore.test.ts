@@ -25,6 +25,20 @@ test("public upload archives reject unsafe roots, paths, links, and special file
   assert.match(verifyBackup, /Public uploads extraction produced a symbolic link/)
 })
 
+test("new public backups omit transient MCP staging before strict verification", () => {
+  assert.match(backup, /--exclude='uploads\/\.mcp-staging'/)
+  assert.match(backup, /--exclude='uploads\/\.mcp-staging\/\*\*'/)
+  assert.match(verifyBackup, /uploads\/\.mcp-staging\//)
+  assert.match(verifyBackup, /Historical MCP staging entry is not a directory/)
+  assert.match(verifyBackup, /duplicate MCP staging directories/)
+  assert.match(verifyBackup, /unexpected non-regular file/)
+  assert.doesNotMatch(verifyBackup, /uploads\/\.mcp-staging\/\[A-Za-z/)
+})
+
+test("target backup verification can use the staged common implementation", () => {
+  assert.match(verifyBackup, /source "\$\{QZSITE_OPS_COMMON:-/)
+})
+
 test("runbooks treat private study uploads as part of the recoverable backup set", () => {
   for (const runbook of [operations, disasterRecovery]) {
     assert.match(runbook, /study-uploads/)
@@ -42,6 +56,7 @@ test("private backup and restore use the Web image identity without requiring a 
   assert.match(backup, /backup_web_image=.*docker inspect/)
   assert.match(backup, /docker image inspect "\$backup_web_image"/)
   assert.match(backup, /docker run --rm --read-only --network none/)
+  assert.match(verifyBackup, /docker run --detach --name "\$container"[\s\S]*?--network none/)
   assert.match(backup, /test "\$\(id -u\)" -ne 0/)
   assert.doesNotMatch(backup, /compose exec[^\n]*web/)
 

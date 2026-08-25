@@ -1,4 +1,4 @@
-import { z } from "zod"
+import { z } from "zod/v3"
 import { ValidationError } from "@/lib/errors"
 import { parseDateKey, parseMonthKey } from "@/lib/daily-date"
 

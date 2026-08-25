@@ -8,6 +8,19 @@ stages:
   trigger: auto
   executor: []
   steps:
+  - step: build@nodejs
+    name: prepare_release_dockerfile
+    displayName: 固化发布提交到 Dockerfile
+    nodeVersion: 14.16.0
+    commands:
+    - node scripts/render-release-dockerfile.mjs "${GITEE_COMMIT}" Dockerfile.release
+    artifacts:
+    - name: RELEASE_DOCKERFILE
+      path:
+      - ./Dockerfile.release
+    notify: []
+    strategy:
+      retry: "0"
   - step: build@docker
     name: build_docker
     displayName: 镜像构建
@@ -15,10 +28,11 @@ stages:
     repository: ccr.ccs.tencentyun.com
     username: "${TCR_USERNAME}"
     password: "${TCR_PASSWORD}"
-    tag: lqzzql/web:latest
-    dockerfile: ./Dockerfile
+    tag: lqzzql/web:${GITEE_COMMIT}
+    dockerfile: ./Dockerfile.release
     context: ""
-    artifacts: []
+    artifacts:
+    - ${RELEASE_DOCKERFILE}
     isCache: true
     processorType:
     - amd64
@@ -26,6 +40,7 @@ stages:
     notify: []
     strategy:
       retry: "0"
+    dependsOn: prepare_release_dockerfile
 - name: 部署到服务器
   displayName: 生产机仅拉取并部署
   strategy: naturally
@@ -38,18 +53,51 @@ stages:
     script: |-
       set -eu
       cd /home/ubuntu/个人网站
-      trap 'docker logout ccr.ccs.tencentyun.com >/dev/null 2>&1 || true' EXIT
+      pipeline_commit="${GITEE_COMMIT}"
+      [ "${#pipeline_commit}" -eq 40 ] || {
+        echo "GITEE_COMMIT is not a full lowercase Git SHA" >&2
+        exit 1
+      }
+      case "$pipeline_commit" in
+        *[!0-9a-f]*)
+          echo "GITEE_COMMIT is not a full lowercase Git SHA" >&2
+          exit 1
+          ;;
+      esac
+      expected_image="ccr.ccs.tencentyun.com/lqzzql/web:${pipeline_commit}"
+      [ "${GITEE_DOCKER_IMAGE}" = "$expected_image" ] || {
+        echo "Gitee image output does not match the pipeline commit" >&2
+        exit 1
+      }
+      docker_config="$(mktemp -d /dev/shm/qzsite-docker-config.XXXXXX)"
+      bootstrap=""
+      cleanup() {
+        set +e
+        [ -z "$bootstrap" ] || rm -f -- "$bootstrap"
+        DOCKER_CONFIG="$docker_config" docker logout ccr.ccs.tencentyun.com >/dev/null 2>&1 || true
+        case "$docker_config" in
+          /dev/shm/qzsite-docker-config.*) rm -rf -- "$docker_config" ;;
+          *) echo "Refusing to remove an unexpected Docker config path" >&2 ;;
+        esac
+      }
+      trap cleanup EXIT
+      trap 'exit 129' HUP
+      trap 'exit 130' INT
+      trap 'exit 143' TERM
+      export DOCKER_CONFIG="$docker_config"
       set +x
       printf '%s' "${TCR_PASSWORD}" | docker login ccr.ccs.tencentyun.com --username "${TCR_USERNAME}" --password-stdin >/dev/null
       set -x
       git fetch --prune origin '+refs/heads/main:refs/remotes/origin/main'
       target_commit="$(git rev-parse --verify 'origin/main^{commit}')"
+      [ "$target_commit" = "$pipeline_commit" ] || {
+        echo "Refusing a stale pipeline deployment" >&2
+        exit 1
+      }
       bootstrap="$(mktemp /tmp/qzsite-deploy-entry.XXXXXX)"
-      trap 'rm -f -- "$bootstrap"; docker logout ccr.ccs.tencentyun.com >/dev/null 2>&1 || true' EXIT
       git show "${target_commit}:ops/deploy-entry.sh" > "$bootstrap"
       chmod 700 "$bootstrap"
-      bash "$bootstrap" "$target_commit" ccr.ccs.tencentyun.com/lqzzql/web:latest
-      bash ops/maintenance.sh status
+      bash "$bootstrap" "$target_commit" "$expected_image"
     hostGroupID:
       ID: tencent-cloud
       hostID:
@@ -66,6 +114,9 @@ triggers:
       - main
       include: []
 notify: []
+strategy:
+  blocking: true
+  stepTimeout: 90
 variables:
   global:
   - TCR_USERNAME

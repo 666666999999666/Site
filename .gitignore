@@ -16,6 +16,7 @@ next-env.d.ts
 /coverage
 /playwright-report/
 /test-results/
+/Dockerfile.release
 
 # env
 .env
@@ -74,6 +75,8 @@ docs/superpowers/
 *.zip
 /backups/
 /.deploy-state
+/.deploy-pending
+/.deploy-history
 
 # temp/debug files
 giteecicd*.md

@@ -69,7 +69,7 @@ npx prisma migrate dev --name meaningful_name
 npx prisma validate
 ```
 
-生产容器启动时只执行 `prisma migrate deploy`。迁移失败会终止启动，不会自动将失败的 migration 标记为成功。旧数据库若需要 baseline，必须先核对实际 Schema、创建备份，再执行一次性人工 baseline。
+生产 Web 容器只启动应用。`ops/deploy.sh` 在候选服务启动前使用一次性容器显式执行一次 `prisma migrate deploy`；迁移失败会终止切换，不会自动将失败的 migration 标记为成功。旧数据库若需要 baseline，必须先核对实际 Schema、创建备份，再执行一次性人工 baseline。
 
 ### 旧正文转换
 
@@ -102,6 +102,7 @@ bash ops/cleanup-uploads.sh --dry-run
 服务器 `.env` 必须包含：
 
 - `WEB_IMAGE`：镜像仓库的不可变 digest
+- `APP_RELEASE_SHA`：与运行镜像一致的 40 位小写 Git SHA
 - `DB_NAME`、`DB_USER`、`DB_PASSWORD`
 - `DATABASE_URL`：密码需进行 URL 编码
 - `SESSION_SECRET`：至少 32 个随机字符
@@ -112,15 +113,15 @@ bash ops/cleanup-uploads.sh --dry-run
 
 缺少数据库密码、数据库 URL、Session Secret、站点 URL 或镜像引用时，Compose 会直接失败。
 
-Gitee `main` 推送由平台的 `build@docker` 步骤构建镜像，自有 Agent 只在生产机调用：
+Gitee `main` 推送先用平台提供的 `GITEE_COMMIT` 生成一次性 `Dockerfile.release`，再由 `build@docker` 构建同名 SHA 镜像。自有 Agent 只在生产机调用：
 
 ```bash
-bash ops/deploy.sh origin/main ccr.ccs.tencentyun.com/lqzzql/web:latest
+bash ops/deploy-entry.sh <40位GitSHA> ccr.ccs.tencentyun.com/lqzzql/web:<同一GitSHA>
 ```
 
-部署脚本会串行加锁、创建部署前备份、把候选镜像解析为不可变 digest，并校验镜像内源码指纹与目标 Git 提交一致。切换后等待数据库/Web/Nginx 全部 Healthy，执行中文页面、退役英文路径 `410`、未登录写保护和站点基础文件冒烟测试，再把提交、digest 和指纹写入 `.deploy-state`。失败时输出诊断并恢复上一版本代码、镜像和部署状态。数据库 migration 仍应设计为向后兼容，因为应用回滚不会自动逆转数据库变更。
+部署脚本会串行加锁、拒绝降级、检查磁盘、创建部署前备份，并把 SHA tag 解析为不可变 digest；OCI revision、容器版本、健康接口、源码指纹和目标提交必须一致。最终候选镜像先在隔离的 production dump 副本上执行两次 migration 验证兼容性与幂等性，通过后才写 `.deploy-pending`、切换代码并对 live database 显式执行一次 migration。真实公网 DNS/TLS/路由验证成功后才原子确认 `.deploy-state` 和 `.deploy-history`。失败时仅使用本地上一稳定 digest 回滚；确认中断则由每分钟 watchdog 恢复。数据库 migration 仍应向后兼容，因为应用回滚不会自动逆转数据库变更。
 
-仓库中共有两份 Gitee Go 定义：`pipeline-deploy` 在 `main` 推送时自动构建、部署并执行 `status`；`pipeline-maintenance` 只在故障、临时备份、恢复验证或证书轮换时手动执行固定动作。它不接受任意 Shell，也不承担自动定时调度。GitHub 当前只作为代码镜像仓库，不运行部署或生产维护工作流。
+仓库中共有三份 Gitee Go 定义：`pipeline-deploy` 在 `main` 推送时构建并部署；`pipeline-public-monitor` 每日从公网核对 DNS、TLS、路由和稳定版本；`pipeline-maintenance` 只在故障、临时备份、恢复验证或证书轮换时手动执行固定动作。维护入口不接受任意 Shell，也不承担自动定时调度。GitHub 当前只作为代码镜像仓库，不运行部署或生产维护工作流。
 
 生产机是 2 核 2G 规格，禁止在服务器执行 `docker build`、`npm ci`、`next build` 或全量测试。Compose 将数据库、Web 和 Nginx 分别限制为 512MB、768MB 和 128MB；主机保留 1GB、`swappiness=10` 的应急 Swap。镜像编译和完整质量检查只能在本地或托管 CI 完成。
 
@@ -140,15 +141,15 @@ bash ops/verify-backup.sh
 - `data/study-uploads` 私有题图压缩包
 - 同时覆盖上述三项的 SHA-256 校验清单
 
-恢复验证会安全解包备份集内的上传归档，并启动不映射端口的临时 PostgreSQL 容器真实执行 `pg_restore`。若恢复出的数据库存在 `"QuestionImage"` 表，则同组私有题图归档必须存在，并逐条核对 `storageKey`、`byteSize` 和 `sha256`；不存在 `"QuestionImage"` 表的上线前旧备份，允许仅含数据库 dump、公开 uploads 和覆盖两项的校验清单。验证结束后自动删除临时容器。备份默认保留 30 天。
+恢复验证会安全解包备份集内的上传归档，并启动不映射端口的临时 PostgreSQL 容器真实执行 `pg_restore`。若恢复出的数据库存在 `"QuestionImage"` 表，则同组私有题图归档必须存在，并逐条核对 `storageKey`、`byteSize` 和 `sha256`；不存在 `"QuestionImage"` 表的上线前旧备份，允许仅含数据库 dump、公开 uploads 和覆盖两项的校验清单。新备份排除临时 `.mcp-staging`。验证成功会保护该完整集合；scheduled 保留 30 天，predeploy 最近 5 套，cleanup/migration 各最近 3 套。
 
-生产维护由服务器 `ubuntu` 用户 Cron 直接调度：每日 03:00 完整备份、每日 03:20 清理满 24 小时且无引用的私有题图、每周日 03:30 隔离恢复验证、每周一 09:00 证书检查、每小时第 15 分钟清理 MCP/OAuth 过期数据。Cron 属于一次性主机配置，不由启用了 `NoNewPrivileges` 的 Gitee Agent 在每次发布时重装；新机器恢复或计划发生变化时，从受信任的服务器登录会话执行：
+生产维护由服务器 `ubuntu` 用户 Cron 直接调度：每日 03:00 完整备份、每日 03:20 条件式统一存储清理、每周日 03:30 隔离恢复验证、每日 02:10/14:10 ACME 到期检查、每小时第 15 分钟清理 MCP/OAuth 过期数据，并每分钟检查未完成发布。Cron 属于一次性主机配置，不由启用了 `NoNewPrivileges` 的 Gitee Agent 在每次发布时重装；新机器恢复或计划发生变化时，从受信任的服务器登录会话执行：
 
 ```bash
 bash ops/maintenance.sh install-cron
 ```
 
-Cron 安装会移除旧的数据库-only 备份和证书任务，统一日志写入 `backups/maintenance.log`。不要为自动安装 Cron 而关闭 Gitee Agent 的 `NoNewPrivileges` 安全限制。完整架构说明见 [`docs/architecture.md`](docs/architecture.md)，生产操作见 [`docs/operations.md`](docs/operations.md)，整机恢复见 [`docs/disaster-recovery.md`](docs/disaster-recovery.md)。
+Cron 安装会移除旧的数据库-only 备份和证书任务；统一日志写入 `backups/maintenance.log`，10 MiB 轮转、保留 5 份 gzip。不要为自动安装 Cron 而关闭 Gitee Agent 的 `NoNewPrivileges` 安全限制。完整架构说明见 [`docs/architecture.md`](docs/architecture.md)，生产操作见 [`docs/operations.md`](docs/operations.md)，整机恢复见 [`docs/disaster-recovery.md`](docs/disaster-recovery.md)。
 
 ## 安全边界
 

@@ -1,4 +1,4 @@
-import { z, ZodError } from "zod"
+import { z, ZodError } from "zod/v3"
 import { prisma } from "./db"
 import { createPost } from "./posts"
 import { ConflictError, NotFoundError, ValidationError } from "./errors"

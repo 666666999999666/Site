@@ -8,6 +8,8 @@ common_args=(
   /prisma/tools/scripts/cleanup-uploads.ts
 )
 
+require_safe_data_subdirectory uploads > /dev/null
+
 case "$mode" in
   --dry-run)
     compose exec -T \
@@ -15,7 +17,16 @@ case "$mode" in
       web "${common_args[@]}"
     ;;
   --apply)
-    bash "$APP_DIR/ops/backup.sh" upload-cleanup
+    if [[ -n "${QZSITE_STORAGE_BACKUP_READY:-}" ]]; then
+      [[ "$QZSITE_STORAGE_BACKUP_READY" =~ ^qzsite-[0-9]{8}T[0-9]{6}Z-storage-cleanup$ ]] \
+        || fail "Unified storage backup identifier is invalid"
+      require_file "$BACKUP_DIR/${QZSITE_STORAGE_BACKUP_READY}.dump"
+      require_file "$BACKUP_DIR/${QZSITE_STORAGE_BACKUP_READY}-uploads.tar.gz"
+      require_file "$BACKUP_DIR/${QZSITE_STORAGE_BACKUP_READY}-study-uploads.tar.gz"
+      require_file "$BACKUP_DIR/${QZSITE_STORAGE_BACKUP_READY}.sha256"
+    else
+      bash "$APP_DIR/ops/backup.sh" upload-cleanup
+    fi
     compose exec -T \
       --env UPLOAD_DIR=/app/public/uploads \
       --env UPLOAD_CLEANUP_CONFIRMED=1 \

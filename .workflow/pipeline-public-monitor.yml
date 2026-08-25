@@ -1,0 +1,41 @@
+version: "1.0"
+name: pipeline-public-monitor
+displayName: 生产公网巡检
+stages:
+- name: 公网版本巡检
+  displayName: 公网 DNS、TLS、路由与版本巡检
+  strategy: naturally
+  trigger: auto
+  executor: []
+  steps:
+  - step: shell@agent
+    name: public_release_check
+    displayName: 验证公网与运行版本
+    script: |-
+      set -eu
+      cd /home/ubuntu/个人网站
+      IFS=' ' read -r release_sha release_image release_fingerprint extra < .deploy-state
+      [ -z "${extra:-}" ] || {
+        echo "Invalid deployment state" >&2
+        exit 1
+      }
+      [ "${#release_sha}" -eq 40 ] || {
+        echo "Invalid release SHA" >&2
+        exit 1
+      }
+      EXPECTED_RELEASE_SHA="$release_sha" bash ops/verify-release.sh
+      CURL_RESOLVE="" EXPECTED_RELEASE_SHA="$release_sha" bash ops/smoke-test.sh public
+    hostGroupID:
+      ID: tencent-cloud
+      hostID:
+      - b57ee737-9ddd-4dba-bda2-0322378ea9f2
+    notify: []
+    strategy:
+      retry: "0"
+triggers:
+  schedule:
+  - cron: '17 4 * * ?'
+notify: []
+strategy:
+  blocking: true
+  stepTimeout: 30

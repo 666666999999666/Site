@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh"
+source "${QZSITE_OPS_COMMON:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh}"
 
 db_backup="${1:-}"
 if [[ -z "$db_backup" ]]; then
@@ -63,6 +63,7 @@ mapfile -t uploads_types < <(
 
 declare -A seen_uploads_entries=()
 uploads_root_entries=0
+uploads_staging_entries=0
 for index in "${!uploads_entries[@]}"; do
   entry="${uploads_entries[$index]}"
   entry_type="${uploads_types[$index]}"
@@ -73,6 +74,16 @@ for index in "${!uploads_entries[@]}"; do
   if [[ "$entry" == "uploads/" || "$entry" == "uploads" ]]; then
     [[ "$entry_type" == "d" ]] || fail "Public uploads root is not a directory"
     ((uploads_root_entries += 1))
+    continue
+  fi
+  # Historical backups may contain the empty MCP staging directory itself.
+  # Its payloads were never durable data: any descendant, link, or duplicate
+  # remains forbidden. New backups exclude the directory completely.
+  if [[ "$entry" == "uploads/.mcp-staging/" || "$entry" == "uploads/.mcp-staging" ]]; then
+    [[ "$entry_type" == "d" ]] || fail "Historical MCP staging entry is not a directory"
+    ((uploads_staging_entries += 1))
+    ((uploads_staging_entries == 1)) \
+      || fail "Public uploads archive contains duplicate MCP staging directories"
     continue
   fi
   [[ "$entry" =~ ^uploads/[A-Za-z0-9][A-Za-z0-9._-]*$ ]] \
@@ -145,8 +156,9 @@ while IFS= read -r -d '' extracted_path; do
   if [[ -f "$extracted_path" ]]; then
     ((verified_uploads += 1))
   else
-    [[ -d "$extracted_path" ]] \
-      || fail "Public uploads extraction produced a non-regular file: $extracted_path"
+    [[ -d "$extracted_path" \
+      && "$extracted_path" == "$restore_tmp/uploads/.mcp-staging" ]] \
+      || fail "Public uploads extraction produced an unexpected non-regular file: $extracted_path"
   fi
 done < <(find "$restore_tmp/uploads" -mindepth 1 -print0)
 
@@ -154,6 +166,7 @@ restore_image="${RESTORE_IMAGE:-postgres:16-alpine@sha256:57c72fd2a128e416c7fcc4
 
 log "Starting isolated PostgreSQL restore container"
 docker run --detach --name "$container" \
+  --network none \
   --memory 384m \
   --memory-swap 384m \
   --cpus 0.75 \
@@ -254,3 +267,12 @@ while IFS=$'\t' read -r storage_key expected_size expected_sha; do
 done < "$image_rows"
 
 log "Restore verified: $counts publicUploads=$verified_uploads privateStudyImages=$verified_images"
+
+verified_set="$(basename "$base")"
+[[ "$verified_set" =~ ^qzsite-[0-9]{8}T[0-9]{6}Z-[a-z0-9-]+$ ]] \
+  || fail "Verified backup set name is unsafe"
+verified_marker_tmp="$(mktemp "$BACKUP_DIR/.last-verified-backup.XXXXXX")"
+printf '%s\n' "$verified_set" > "$verified_marker_tmp"
+chmod 600 "$verified_marker_tmp"
+mv -- "$verified_marker_tmp" "$BACKUP_DIR/.last-verified-backup"
+log "Recorded latest verified backup set: $verified_set"

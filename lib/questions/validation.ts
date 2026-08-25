@@ -1,4 +1,4 @@
-import { z, ZodError } from "zod"
+import { z, ZodError } from "zod/v3"
 import { ValidationError } from "@/lib/errors"
 
 export const QUESTION_TEXT_MAX_LENGTH = 100_000

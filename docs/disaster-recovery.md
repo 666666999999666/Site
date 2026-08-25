@@ -22,10 +22,10 @@
 **已经自动化**
 
 - 每日 03:00 创建数据库、公开 uploads、私有题图和 SHA-256 完整备份集。
-- 每日 03:20 在先备份的前提下清理孤立私有题图和过期答案摘要。
+- 每日 03:20 先计算普通上传、私有题图和过期 Review Ticket；无候选不备份，有候选只创建一套完整备份后清理。
 - 每周日 03:30 在隔离 PostgreSQL 容器真实执行恢复验证。
 - 部署、正文转换和上传清理前自动创建备份。
-- 备份保留 30 天。
+- scheduled 备份保留 30 天，predeploy 最近 5 套，cleanup/migration 各最近 3 套；最近恢复验证成功的完整集合受保护。
 - Git 代码在 Gitee 和 GitHub 保留，运行镜像在 TCR 保留。
 
 **尚需站点所有者完成的外部保护**
@@ -166,9 +166,9 @@ docker compose --env-file .env up --detach --wait db
 ```
 
 6. 按第 5 节从同一 `BACKUP_SET` 恢复数据库、公开 uploads 和私有题图，并在启动 Web 前执行其中的 `bash ops/prepare-study-uploads.sh`；旧备份缺少私有题图归档时，必须先由验证脚本确认其数据库不含 Questions 表。
-7. 运行 `ops/deploy-entry.sh origin/main <web-image>`，让脚本完成完整备份、migration、Compose 切换、冒烟和 `.deploy-state` 重建。此时 Web 服务可以仍未启动：新版备份会使用 `.env` 中已拉取的本地 Web 镜像启动隔离的一次性非 Root 容器读取私有目录，不依赖 `compose exec web`。
+7. 运行 `ops/deploy-entry.sh <40位GitSHA> ccr.ccs.tencentyun.com/lqzzql/web:<同一GitSHA>`，让脚本完成完整备份、单次 migration、Compose 切换、内部与公网冒烟及 `.deploy-state` 重建。此时 Web 服务可以仍未启动：新版备份会使用 `.env` 中已拉取的本地 Web 镜像启动隔离的一次性非 Root 容器读取私有目录，不依赖 `compose exec web`。
 8. 安装或重新绑定 Gitee Agent，确认自动部署流水线可用；`pipeline-maintenance.yml` 只保留为手动应急入口。
-9. 从受信任的主机登录会话运行 `bash ops/maintenance.sh install-cron`，随后用 `crontab -l` 确认每日 03:20 的 `study-uploads` 条目，再执行 `mcp` 和 `status`，确认用户 Cron 与 `backups/maintenance.log` 正常。该安装是幂等操作，不由应用发布或 Gitee Agent 代办。
+9. 从受信任的主机登录会话运行 `bash ops/maintenance.sh install-cron`，随后用 `crontab -l` 确认每日 03:20 的 `storage-cleanup`、每日两次 `acme`、每小时 `mcp` 与每分钟 `deploy-watchdog` 条目，再执行 `mcp` 和只读 `status`。确认 `backups/maintenance.log` 及其 10 MiB/5 份 gzip 轮转正常。该安装是幂等操作，不由应用发布或 Gitee Agent 代办。
 
 不得从本地开发数据库、Seed 或空上传目录补生产数据。
 

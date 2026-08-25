@@ -1,4 +1,4 @@
-import { z } from "zod"
+import { z } from "zod/v3"
 import { createCategory } from "../categories"
 import { prisma } from "../db"
 import { ConflictError, NotFoundError, PermissionError, ValidationError } from "../errors"

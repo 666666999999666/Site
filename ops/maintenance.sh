@@ -16,8 +16,6 @@ case "$action" in
   status)
     compose ps
     bash "$APP_DIR/ops/verify-release.sh"
-    bash "$APP_DIR/ops/smoke-test.sh"
-    run_mcp_maintenance
     ;;
   backup)
     bash "$APP_DIR/ops/backup.sh" scheduled
@@ -46,10 +44,17 @@ case "$action" in
   study-uploads)
     bash "$APP_DIR/ops/cleanup-study-uploads.sh" --apply
     ;;
+  storage-cleanup)
+    bash "$APP_DIR/ops/storage-cleanup.sh"
+    bash "$APP_DIR/ops/prune-images.sh"
+    ;;
+  acme)
+    bash "$APP_DIR/ops/acme-renew.sh"
+    ;;
   mcp)
     run_mcp_maintenance
     ;;
   *)
-    fail "Allowed actions: status, backup, verify-backup, ssl, install-cron, install-tls, content-dry-run, uploads-dry-run, study-uploads-dry-run, study-uploads, mcp"
+    fail "Allowed actions: status, backup, verify-backup, ssl, install-cron, install-tls, content-dry-run, uploads-dry-run, study-uploads-dry-run, study-uploads, storage-cleanup, acme, mcp"
     ;;
 esac

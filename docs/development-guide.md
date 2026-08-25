@@ -216,14 +216,15 @@ bash -n ops/*.sh
 
 ## 6. Gitee Go 与仓库同步
 
-仓库当前有 **2 份 Gitee Go 定义**：
+仓库当前有 **3 份 Gitee Go 定义**：
 
 | 流水线 | 文件 | 触发方式 | 作用 | 当前验证状态 |
 |---|---|---|---|---|
-| `pipeline-deploy` | `.workflow/pipeline-deploy.yml` | 推送 `main` | 云端构建 Web 镜像并由 Agent 部署 | 已实际运行通过 |
+| `pipeline-deploy` | `.workflow/pipeline-deploy.yml` | 推送 `main` | 以完整 Git SHA 构建 Web 镜像并由 Agent 完成两阶段部署 | 静态门禁通过；每次发布仍须以真实流水线确认 |
+| `pipeline-public-monitor` | `.workflow/pipeline-public-monitor.yml` | 每日定时 | 从真实公网核对 DNS、TLS、路由和 release SHA | 定义与脚本有自动测试；平台定时状态须线上确认 |
 | `pipeline-maintenance` | `.workflow/pipeline-maintenance.yml` | 手动 | 故障或证书轮换时执行固定白名单动作 | 共用脚本路径由自动部署的 `status` 步骤持续验证 |
 
-这不是两条重复部署链路。自动流水线负责日常发布，并在发布后自动执行维护入口的 `status`；手动流水线只在故障处理、临时备份、恢复验证或证书轮换时使用，不要求每次发布人工点击。
+这不是三条重复部署链路。自动发布负责日常交付；公网巡检只验证已经确认的稳定版本；手动维护只在故障处理、临时备份、恢复验证或证书轮换时使用，不要求每次发布人工点击。
 
 GitHub 只作为仓库镜像，`.github/workflows/` 当前没有工作流。发布后应确认 Gitee 与 GitHub 的 `main` 指向同一提交，但生产部署只以 Gitee 链路为准。
 
@@ -267,4 +268,4 @@ GitHub 只作为仓库镜像，`.github/workflows/` 当前没有工作流。发�
 6. Gitee 与 GitHub 的目标提交一致。
 7. 需要发布时，Gitee 自动流水线成功且生产健康检查通过。
 8. 临时数据库、测试容器、调试文件和本地服务已清理。
-9. `.deploy-state` 的提交、镜像 digest 和源码指纹与运行容器一致。
+9. `.deploy-state` 的提交、镜像 digest 和源码指纹与运行容器、OCI revision、`APP_RELEASE_SHA` 及 `/api/health.releaseSha` 一致，且不存在遗留 `.deploy-pending`。

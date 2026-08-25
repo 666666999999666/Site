@@ -1,4 +1,4 @@
-import { z } from "zod"
+import { z } from "zod/v3"
 
 const markdownImportImageSchema = z.object({
   reference: z.string().min(1).max(2048)

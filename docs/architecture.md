@@ -240,7 +240,7 @@ Todo 转草稿会复制标题和描述，创建独立 `DRAFT` Post；当前不�
 
 - `prisma/schema.prisma` 描述目标结构。
 - `prisma/migrations/` 是生产可执行的变更历史，必须与 Schema 同时提交。
-- 生产容器启动时只执行 `prisma migrate deploy`。
+- 生产 Web 容器只启动应用；`ops/deploy.sh` 先让最终候选镜像在隔离备份副本上执行两次 `prisma migrate deploy`，再在切换候选前对 live database 显式执行一次。
 - 禁止对生产数据库使用 `prisma db push`。
 - 生产 migration 优先使用新增 nullable 字段、兼容读写、后续清理，确保应用回滚后旧代码仍可运行。
 
@@ -282,19 +282,21 @@ HTML 的 CSP 由 `proxy.ts` 按请求生成：脚本只允许同一 nonce 与受
 
 ```text
 push Gitee main
+-> 用 GITEE_COMMIT 生成一次性 Dockerfile.release
 -> Gitee 云端 build@docker
--> 推送 TCR web:latest
--> 生产机 Agent 调用 ops/deploy.sh
+-> 推送 TCR web:<完整 Git SHA>
+-> 生产机 Agent 调用 ops/deploy-entry.sh
 -> 部署前完整备份
--> 将 tag 解析为不可变 digest
--> 校验目标 Git 源码与镜像源码指纹
--> Compose 更新与 migration
+-> 将 SHA tag 解析为不可变 digest
+-> 校验 OCI revision、目标 Git 源码与镜像源码指纹
+-> 显式执行一次 migration，再进行 Compose 切换
 -> db/web/nginx 健康检查
--> 中文页面、退役英文路径 410、未登录写保护、OAuth discovery、MCP 401 Challenge、非法 Origin 与旧 Gateway 410 冒烟测试
--> 运行提交、镜像 digest、源码指纹写入 .deploy-state
+-> 内部冒烟后记录 .deploy-pending
+-> 真实公网 DNS/TLS/路由/版本验证
+-> 运行提交、镜像 digest、源码指纹写入 .deploy-state 和 .deploy-history
 ```
 
-`web:latest` 只用于从仓库取得候选镜像，运行状态始终使用不可变 digest。若两次推送交错导致候选镜像与 `origin/main` 不一致，源码指纹校验会在切换容器前拒绝发布。部署失败会恢复上一代码提交、镜像和 `.deploy-state`，但不会自动逆转数据库 migration。
+发布链路不再读取 `latest`。Gitee 构建产物、SHA tag、OCI revision、镜像内版本、健康接口和当前 `origin/main` 必须是同一完整提交；任一不一致都会在确认稳定版本前拒绝发布。部署失败只使用服务器本地的上一稳定 digest 恢复代码、环境和状态；过期 `.deploy-pending` 由 watchdog 收口，但数据库 migration 不会自动逆转。
 
 数据库和上传恢复、证书、Agent 与维护操作以 [`operations.md`](operations.md) 为准；整机或磁盘故障恢复以 [`disaster-recovery.md`](disaster-recovery.md) 为准。
 

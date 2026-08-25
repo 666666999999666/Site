@@ -61,3 +61,11 @@ Next.js 上游仍有公开问题跟踪 Sharp 告警：
 - 远程 Markdown 图片上传不调用 Sharp，只用文件签名和 SHA-256 校验。无票据请求在读取 Body 前即返回 401，票据只绑定一个 bundle 中声明的图片。
 
 以上为明确接受的残余风险，不允许运行 `npm audit fix --force`。Next.js 升级应单独提交并完整回归编辑器、OAuth、MCP、公开图片和生产镜像内容。
+
+## 2026-08-25 发布闭环复核
+
+本轮将 Next.js 与 `eslint-config-next` 固定到 `16.3.2`，将 Better Auth 与 OAuth Provider 固定到 `1.7.1`。升级后保留 Next 图片优化禁用、Nginx 拒绝 `/_next/image` 以及最终镜像移除 Sharp 的纵深防御；`npm audit --omit=dev --registry=https://registry.npmjs.org` 已不再报告 Sharp 或 OAuth Resource Indicator 公告。Better Auth migration 会撤销升级前 Access/Refresh Token、删除未完成授权码并轮换 JWK；集成测试覆盖 Resource 绑定、PKCE、refresh rotation、旧 token 重放拒绝与 token family 清理。
+
+当前 `npm audit` 摘要为 **3 项 High**，分别对应 `deepmerge-ts`、`@prisma/config` 与 `prisma` 三个受影响节点，根因收敛到 Prisma `7.9.1` 的配置加载器 `@prisma/config` 精确依赖 `deepmerge-ts@7.1.5` 这一条公告链。[`GHSA-ggr8-5vv4-36mx`](https://github.com/advisories/GHSA-ggr8-5vv4-36mx) 的修复版本是 `deepmerge-ts@8.0.0`，但当前 Prisma 7 最新稳定版仍为 `7.9.1`，且上游精确固定旧 major；`npm audit fix --force` 会建议破坏性降级 Prisma，直接 override 到未声明兼容的 major 也会绕过 Prisma 的依赖合同，因此两者均未采用。
+
+**可达性判断**：该问题需要把包含循环引用的对象图传给 merge API。本站只在镜像构建、Prisma migration 和受信任的本地配置加载阶段使用 `@prisma/config`；公网请求、文章 JSON、MCP 参数和数据库内容都不会成为 Prisma 配置对象，生产 Web 也没有执行任意 Prisma CLI/config 的工具入口。因此它不是当前远程请求路径，但仍是明确记录的构建/维护期残余风险，不能表述为“审计清零”。Prisma 发布声明兼容 `deepmerge-ts>=8` 的稳定补丁后，应常规升级并重新执行空库、生产备份副本 migration、全部数据库集成测试和 Docker 构建。

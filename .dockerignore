@@ -32,3 +32,6 @@ coverage
 public/uploads/*
 !public/uploads/.gitkeep
 .deploy-state
+.deploy-pending
+.deploy-history
+Dockerfile.release

@@ -1,4 +1,4 @@
-import { verifyAccessToken } from "better-auth/oauth2"
+import { verifyBearerToken } from "better-auth/oauth2"
 import { AuthError } from "../errors"
 import { prisma } from "../db"
 import {
@@ -42,9 +42,9 @@ function tokenScopes(value: unknown): McpScope[] {
 
 export async function authenticateOAuthMcpRequest(request: Request): Promise<McpAuthenticatedContext> {
   const token = bearerToken(request)
-  let payload: Awaited<ReturnType<typeof verifyAccessToken>>
+  let payload: Awaited<ReturnType<typeof verifyBearerToken>>
   try {
-    payload = await verifyAccessToken(token, {
+    payload = await verifyBearerToken(token, {
       jwksUrl: oauthJwksUrl(),
       verifyOptions: {
         issuer: oauthIssuer(),

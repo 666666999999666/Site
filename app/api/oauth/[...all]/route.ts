@@ -1,5 +1,5 @@
 import { toNextJsHandler } from "better-auth/next-js"
-import { z } from "zod"
+import { z } from "zod/v3"
 import { auth } from "@/lib/auth/better-auth"
 import { validateOAuthMcpResource } from "@/lib/auth/oauth-resource-validation"
 
@@ -21,6 +21,7 @@ const dcrGuardSchema = z.object({
     .max(2)
     .optional(),
   response_types: z.array(z.literal("code")).min(1).max(1).optional(),
+  application_type: z.literal("native"),
   subject_type: z.literal("public").optional(),
   require_pkce: z.literal(true).optional(),
   type: z.enum(["native", "user-agent-based"]).optional(),

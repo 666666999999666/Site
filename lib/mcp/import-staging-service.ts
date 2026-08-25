@@ -1,7 +1,7 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from "crypto"
 import { mkdir, readFile, rm, stat, writeFile } from "fs/promises"
 import path from "path"
-import { z } from "zod"
+import { z } from "zod/v3"
 import { resolveBlogCategory } from "../categories"
 import { prisma } from "../db"
 import { ConflictError, NotFoundError, PermissionError, ValidationError } from "../errors"

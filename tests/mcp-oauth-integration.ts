@@ -8,6 +8,7 @@ import { Client as PgClient } from "pg"
 
 const OAUTH_MIGRATION = "20260809030000_better_auth_oauth_mcp"
 const FINAL_MIGRATION = "20260810090000_remote_oauth_markdown_import"
+const BETTER_AUTH_1_7_MIGRATION = "20260825010000_better_auth_1_7"
 const OLD_PASSWORD = "Old9Pass!"
 const NEW_PASSWORD = "oauth-test-password-2026-updated!"
 const ADMIN_ID = "oauth-admin"
@@ -26,6 +27,7 @@ interface RegisteredClient {
   client_name?: string
   redirect_uris: string[]
   token_endpoint_auth_method: string
+  application_type: string
 }
 
 interface TokenResponse {
@@ -61,6 +63,7 @@ async function resetDatabase(client: PgClient): Promise<string> {
     .map((entry) => entry.name)
     .sort()
   assert.ok(directories.includes(FINAL_MIGRATION))
+  assert.ok(directories.includes(BETTER_AUTH_1_7_MIGRATION))
 
   for (const directory of directories.filter((name) => name < OAUTH_MIGRATION)) {
     const sql = await readFile(path.join(migrationsRoot, directory, "migration.sql"), "utf8")
@@ -105,6 +108,19 @@ async function resetDatabase(client: PgClient): Promise<string> {
     [legacyClientId]
   )).rows[0].count, 0)
   await client.query('DELETE FROM "McpCredential" WHERE "id" = $1', [legacyCredentialId])
+
+  for (const directory of directories.filter(
+    (name) => name > FINAL_MIGRATION && name < BETTER_AUTH_1_7_MIGRATION
+  )) {
+    const sql = await readFile(path.join(migrationsRoot, directory, "migration.sql"), "utf8")
+    await client.query(sql)
+  }
+
+  const betterAuthUpgradeSql = await readFile(
+    path.join(migrationsRoot, BETTER_AUTH_1_7_MIGRATION, "migration.sql"),
+    "utf8"
+  )
+  await client.query(betterAuthUpgradeSql)
 
   const migrated = await client.query<{
     passwordVersion: number
@@ -378,6 +394,7 @@ async function main() {
         token_endpoint_auth_method: "none",
         grant_types: ["authorization_code", "refresh_token"],
         response_types: ["code"],
+        application_type: "native",
         subject_type: "public",
         scope: ALL_SCOPES,
       }),
@@ -385,6 +402,7 @@ async function main() {
     assert.ok([200, 201].includes(response.status), await response.clone().text())
     const client = await response.json() as RegisteredClient
     assert.equal(client.token_endpoint_auth_method, "none")
+    assert.equal(client.application_type, "native")
     assert.deepEqual(client.redirect_uris, [redirectUri])
     return client
   }
@@ -403,7 +421,10 @@ async function main() {
   )
   progress("administrator login and legacy cookie rejection verified")
 
-  const authorize = async (client: RegisteredClient): Promise<TokenResponse> => {
+  const authorize = async (
+    client: RegisteredClient,
+    verifyAuthorizationCodeReplay = false
+  ): Promise<TokenResponse> => {
     const verifier = randomBytes(48).toString("base64url")
     const authorizationUrl = new URL(`${origin}/api/oauth/oauth2/authorize`)
     authorizationUrl.search = new URLSearchParams({
@@ -487,19 +508,21 @@ async function main() {
     assert.equal(tokenBody.expires_in, 15 * 60)
     assert.ok(tokenBody.refresh_token.startsWith("qzoauth_rt_"))
 
-    const replay = await oauthFetch("/oauth2/token", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded", origin },
-      body: formBody({
-        grant_type: "authorization_code",
-        client_id: client.client_id,
-        code,
-        code_verifier: verifier,
-        redirect_uri: client.redirect_uris[0],
-        resource: `${origin}/api/mcp`,
-      }),
-    })
-    assert.ok(replay.status >= 400)
+    if (verifyAuthorizationCodeReplay) {
+      const replay = await oauthFetch("/oauth2/token", {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded", origin },
+        body: formBody({
+          grant_type: "authorization_code",
+          client_id: client.client_id,
+          code,
+          code_verifier: verifier,
+          redirect_uri: client.redirect_uris[0],
+          resource: `${origin}/api/mcp`,
+        }),
+      })
+      assert.ok(replay.status >= 400)
+    }
     return tokenBody
   }
 
@@ -543,9 +566,31 @@ async function main() {
     const missingPkceLocation = await redirectTarget(missingPkceResponse)
     assert.match(missingPkceLocation, /error=invalid_request/)
 
+    const replayProbeToken = await authorize(abandonedClient, true)
+    const replayProbeRefresh = await oauthFetch("/oauth2/token", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded", origin },
+      body: formBody({
+        grant_type: "refresh_token",
+        client_id: abandonedClient.client_id,
+        refresh_token: replayProbeToken.refresh_token,
+        resource: `${origin}/api/mcp`,
+      }),
+    })
+    assert.ok(replayProbeRefresh.status >= 400)
+
     const tokenA = await authorize(clientA)
     const tokenB = await authorize(clientB)
     progress("PKCE, consent, authorization code and access tokens verified")
+    const [storedRefreshTokens, storedSessions] = await Promise.all([
+      prisma.oauthRefreshToken.findMany({ select: { sessionId: true } }),
+      prisma.session.findMany({ select: { id: true } }),
+    ])
+    const sessionIds = new Set(storedSessions.map((session) => session.id))
+    assert.ok(storedRefreshTokens.length >= 2)
+    assert.ok(storedRefreshTokens.every(
+      (refreshToken) => refreshToken.sessionId && sessionIds.has(refreshToken.sessionId)
+    ), "every refresh token must reference an active database session")
     const refreshAResponse = await oauthFetch("/oauth2/token", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded", origin },
@@ -557,7 +602,24 @@ async function main() {
       }),
     })
     const refreshedA = await jsonResponse<TokenResponse>(refreshAResponse, 200)
+    assert.equal(typeof refreshedA.refresh_token, "string")
+    assert.ok(refreshedA.refresh_token.startsWith("qzoauth_rt_"))
     assert.notEqual(refreshedA.refresh_token, tokenA.refresh_token)
+    const rotatedRefreshTokens = await prisma.oauthRefreshToken.findMany({
+      where: { clientId: clientA.client_id },
+      select: {
+        revoked: true,
+        rotatedAt: true,
+        rotationReplayExpiresAt: true,
+        rotationReplayResponse: true,
+      },
+    })
+    assert.equal(rotatedRefreshTokens.length, 2)
+    assert.equal(rotatedRefreshTokens.filter((token) => token.revoked === null).length, 1)
+    const consumedRefreshToken = rotatedRefreshTokens.find((token) => token.revoked !== null)
+    assert.ok(consumedRefreshToken?.rotatedAt)
+    assert.equal(consumedRefreshToken.rotationReplayExpiresAt, null)
+    assert.equal(consumedRefreshToken.rotationReplayResponse, null)
     const refreshReplay = await oauthFetch("/oauth2/token", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded", origin },
@@ -568,7 +630,15 @@ async function main() {
         resource: `${origin}/api/mcp`,
       }),
     })
-    assert.ok(refreshReplay.status >= 400)
+    assert.ok(
+      refreshReplay.status >= 400,
+      `consumed refresh token was accepted with status ${refreshReplay.status}`
+    )
+    assert.equal(
+      await prisma.oauthRefreshToken.count({ where: { clientId: clientA.client_id } }),
+      0,
+      "refresh token replay must invalidate the client token family"
+    )
 
     const oauthRequest = (token: string) => new Request(`${origin}/api/mcp`, {
       headers: { authorization: `Bearer ${token}` },

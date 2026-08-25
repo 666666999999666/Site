@@ -1,5 +1,5 @@
 import { NextRequest } from "next/server"
-import { z } from "zod"
+import { z } from "zod/v3"
 import { ensureAuthenticated } from "@/lib/api/auth"
 import { handleApiError } from "@/lib/api/handler"
 import { validateOrigin } from "@/lib/csrf"
