@@ -45,6 +45,16 @@ test("the Gitee pipeline builds and deploys one exact commit image", () => {
   assert.doesNotMatch(pipeline, /maintenance\.sh status/)
 })
 
+test("the release keeps one cached TypeScript gate before the Next build", () => {
+  const dockerfile = readFileSync("Dockerfile", "utf8")
+  const nextConfig = readFileSync("next.config.ts", "utf8")
+
+  assert.match(dockerfile, /--mount=type=cache,target=\/app\/\.cache\/typescript/)
+  assert.match(dockerfile, /npx tsc --noEmit --tsBuildInfoFile/)
+  assert.ok(dockerfile.indexOf("npx tsc --noEmit") < dockerfile.indexOf("npm run build"))
+  assert.match(nextConfig, /ignoreBuildErrors:\s*process\.env\.QZSITE_SKIP_NEXT_TYPECHECK === "1"/)
+})
+
 test("the deployment bootstrap stages every pre-checkout operation from one target commit", () => {
   const entry = readFileSync("ops/deploy-entry.sh", "utf8")
 

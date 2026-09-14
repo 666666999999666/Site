@@ -65,16 +65,18 @@ for (const theme of ["light", "dark"] as const) {
       await expect(rating).toContainText("全部最近评分")
 
       await status.click()
-      await expect(page.getByRole("option")).toHaveCount(7)
-      for (const option of await page.getByRole("option").all()) {
+      const statusOptions = page.getByRole("listbox").getByRole("option")
+      await expect(statusOptions).toHaveCount(7)
+      for (const option of await statusOptions.all()) {
         await expect(option).toBeVisible()
         await expectReadable(option)
       }
       await expectWithinViewport(page)
-      await page.getByRole("option", { name: "待补答案", exact: true }).hover()
-      await expectReadable(page.getByRole("option", { name: "待补答案", exact: true }))
+      const pendingOption = statusOptions.filter({ hasText: "待补答案" })
+      await pendingOption.hover()
+      await expectReadable(pendingOption)
       await page.screenshot({ path: testInfo.outputPath(`status-${theme}-${viewport.width}.png`), fullPage: true })
-      await page.getByRole("option", { name: "待补答案", exact: true }).click()
+      await pendingOption.click()
       await expect(status).toContainText("待补答案")
       await expect.poll(() => queries.at(-1)?.get("status")).toBe("PENDING")
 
@@ -89,25 +91,47 @@ for (const theme of ["light", "dark"] as const) {
       await expect(status).toBeFocused()
 
       await rating.click()
-      await expect(page.getByRole("option")).toHaveCount(6)
-      for (const option of await page.getByRole("option").all()) {
+      const ratingOptions = page.getByRole("listbox").getByRole("option")
+      await expect(ratingOptions).toHaveCount(6)
+      for (const option of await ratingOptions.all()) {
         await expect(option).toBeVisible()
         await expectReadable(option)
       }
       await expectWithinViewport(page)
-      await page.getByRole("option", { name: "良好", exact: true }).hover()
-      await expectReadable(page.getByRole("option", { name: "良好", exact: true }))
+      const goodOption = ratingOptions.filter({ hasText: "良好" })
+      await goodOption.hover()
+      await expectReadable(goodOption)
       await page.screenshot({ path: testInfo.outputPath(`rating-${theme}-${viewport.width}.png`), fullPage: true })
-      await page.getByRole("option", { name: "良好", exact: true }).click()
+      await goodOption.click()
       await expect.poll(() => queries.at(-1)?.get("rating")).toBe("GOOD")
       expect(queries.at(-1)?.get("status")).toBe("DISABLED")
 
       await status.click()
-      await page.getByRole("option", { name: "可复习（默认）", exact: true }).click()
+      await page.getByRole("listbox").getByRole("option", { name: "可复习（默认）", exact: true }).click()
       await expect.poll(() => queries.at(-1)?.has("status")).toBe(false)
       await rating.click()
-      await page.getByRole("option", { name: "全部最近评分", exact: true }).click()
+      await page.getByRole("listbox").getByRole("option", { name: "全部最近评分", exact: true }).click()
       await expect.poll(() => queries.at(-1)?.has("rating")).toBe(false)
     })
   }
+}
+
+for (const theme of ["light", "dark"] as const) {
+  test(`native selects expose readable ${theme} popup colors`, async ({ page }) => {
+    await page.route("**/api/questions?*", (route) => route.fulfill({
+      json: { items: [], total: 0, page: 1, pageSize: 20, pendingCount: 2 },
+    }))
+    await page.goto("/question-library")
+    await page.evaluate((selectedTheme) => {
+      document.documentElement.classList.toggle("dark", selectedTheme === "dark")
+      document.documentElement.style.colorScheme = selectedTheme
+    }, theme)
+
+    const select = page.getByRole("combobox", { name: "原生下拉框主题验收" })
+    await expect(select).toBeVisible()
+    await expect(select).toHaveCSS("color-scheme", theme)
+    for (const option of await select.locator("option").all()) {
+      await expectReadable(option)
+    }
+  })
 }

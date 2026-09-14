@@ -137,6 +137,17 @@
     font-size: 1rem;
     line-height: 1.75;
   }
+  select,
+  select option {
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+  select {
+    color-scheme: light;
+  }
+  .dark select {
+    color-scheme: dark;
+  }
   h1 {
     @apply font-sans;
     font-weight: 700;

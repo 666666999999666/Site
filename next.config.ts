@@ -5,6 +5,12 @@ const withNextIntl = createNextIntlPlugin()
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // The release Dockerfile runs `tsc --noEmit` as a dedicated gate before
+  // `next build`, with a persistent BuildKit cache. Avoid checking the same
+  // project a second time inside Next's production build.
+  typescript: {
+    ignoreBuildErrors: process.env.QZSITE_SKIP_NEXT_TYPECHECK === "1",
+  },
   skipTrailingSlashRedirect: true,
   outputFileTracingRoot: process.cwd(),
   distDir: process.env.NEXT_DIST_DIR || ".next",

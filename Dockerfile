@@ -32,13 +32,15 @@ RUN node scripts/source-fingerprint.mjs /app /app/source-manifest.json > /tmp/so
 ENV DATABASE_URL="postgresql://build:build@localhost:5432/build?schema=public"
 RUN npx prisma validate
 RUN npx prisma generate
-RUN npm run lint
-RUN npx tsc --noEmit
+RUN --mount=type=cache,target=/app/.cache/eslint \
+    npm run lint -- --cache --cache-location /app/.cache/eslint/.eslintcache --cache-strategy content
+RUN --mount=type=cache,target=/app/.cache/typescript \
+    npx tsc --noEmit --tsBuildInfoFile /app/.cache/typescript/tsconfig.tsbuildinfo
 RUN npm test
 RUN npm run test:mcp
 RUN bash scripts/run-build-db-gate.sh
 RUN --mount=type=cache,target=/app/.next/cache \
-    NEXT_PHASE=phase-production-build npm run build
+    QZSITE_SKIP_NEXT_TYPECHECK=1 NEXT_PHASE=phase-production-build npm run build
 
 FROM ${NODE_IMAGE} AS runner
 WORKDIR /app
