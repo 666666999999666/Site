@@ -16,7 +16,27 @@ import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+
+const statusOptions = [
+  { value: "", label: "可复习（默认）" },
+  { value: "READY", label: "全部就绪" },
+  { value: "DUE", label: "已到期" },
+  { value: "FUTURE", label: "稍后到期" },
+  { value: "NEW", label: "新题" },
+  { value: "PENDING", label: "待补答案" },
+  { value: "DISABLED", label: "已停用" },
+]
+
+const ratingOptions = [
+  { value: "", label: "全部最近评分" },
+  { value: "NONE", label: "尚未评分" },
+  { value: "AGAIN", label: "重来" },
+  { value: "HARD", label: "困难" },
+  { value: "GOOD", label: "良好" },
+  { value: "EASY", label: "简单" },
+]
 
 const emptyResponse: QuestionListResponse = {
   items: [],
@@ -124,33 +144,38 @@ export function QuestionLibrary() {
                 aria-label="搜索题库"
               />
             </div>
-            <select
+            <Select
+              items={statusOptions}
               value={status}
-              onChange={(event) => updateFilter(() => setStatus(event.target.value))}
-              className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50 dark:bg-input/30"
-              aria-label="按题目状态筛选"
+              onValueChange={(value) => updateFilter(() => setStatus(value ?? ""))}
             >
-              <option value="">可复习（默认）</option>
-              <option value="READY">全部就绪</option>
-              <option value="DUE">已到期</option>
-              <option value="FUTURE">稍后到期</option>
-              <option value="NEW">新题</option>
-              <option value="PENDING">待补答案</option>
-              <option value="DISABLED">已停用</option>
-            </select>
-            <select
+              <SelectTrigger className="w-full bg-background px-3 text-foreground data-[size=default]:h-10" aria-label="按题目状态筛选">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                {statusOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value} className="min-h-9 px-3 pr-8">
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              items={ratingOptions}
               value={rating}
-              onChange={(event) => updateFilter(() => setRating(event.target.value))}
-              className="h-10 rounded-lg border border-input bg-background px-3 text-sm outline-none focus:border-ring focus:ring-3 focus:ring-ring/50 dark:bg-input/30"
-              aria-label="按最近评分筛选"
+              onValueChange={(value) => updateFilter(() => setRating(value ?? ""))}
             >
-              <option value="">全部最近评分</option>
-              <option value="NONE">尚未评分</option>
-              <option value="AGAIN">重来</option>
-              <option value="HARD">困难</option>
-              <option value="GOOD">良好</option>
-              <option value="EASY">简单</option>
-            </select>
+              <SelectTrigger className="w-full bg-background px-3 text-foreground data-[size=default]:h-10" aria-label="按最近评分筛选">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent alignItemWithTrigger={false}>
+                {ratingOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value} className="min-h-9 px-3 pr-8">
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <Button type="submit" className="h-10 px-4">
               <Search /> 搜索
             </Button>
