@@ -158,7 +158,7 @@ export function QuestionMarkdownEditor({
             aria-invalid={Boolean(currentError)}
             aria-describedby={`${id}-help ${id}-error`}
             placeholder={placeholder}
-            className={cn("resize-y font-mono text-base leading-7 md:text-base", minRowsClassName)}
+            className={cn("resize-y p-4 font-sans text-base leading-7 md:text-base", minRowsClassName)}
             onChange={(event) => {
               setUploadError("")
               onChange(event.target.value)

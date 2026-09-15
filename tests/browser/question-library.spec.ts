@@ -131,9 +131,10 @@ for (const theme of ["light", "dark"] as const) {
     const styles = await Promise.all([source, previewParagraph, revealedParagraph, historyParagraph].map(
       (locator) => locator.evaluate((element) => {
         const style = getComputedStyle(element)
-        return { fontSize: style.fontSize, lineHeight: style.lineHeight }
+        return { fontFamily: style.fontFamily, fontSize: style.fontSize, lineHeight: style.lineHeight }
       })
     ))
+    expect(new Set(styles.map(({ fontFamily }) => fontFamily)).size).toBe(1)
     expect(new Set(styles.map(({ fontSize }) => fontSize)).size).toBe(1)
     expect(new Set(styles.map(({ lineHeight }) => lineHeight)).size).toBe(1)
     await page.screenshot({

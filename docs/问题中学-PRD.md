@@ -287,7 +287,7 @@ V1 不显示评分对应的下一间隔，避免为了想要某个日期而误�
 
 ### 6.1 编辑和渲染
 
-- 新增后台安全的 `QuestionMarkdownEditor`：桌面端为明确标注的 Markdown 源码 textarea 与实时预览并排；移动端为上下排列、预览在输入框之后；包含粘贴/上传钩子。源码与渲染结果可以使用不同字体，但正文的字号和行距应与揭晓、历史答案一致。
+- 新增后台安全的 `QuestionMarkdownEditor`：桌面端为明确标注的 Markdown 源码 textarea 与实时预览并排；移动端为上下排列、预览在输入框之后；包含粘贴/上传钩子。源码与渲染结果使用同一正文的字体、字号、行距和内边距；Markdown 标记与渲染后的强调、代码样式可以不同。
 - 不直接复用当前 `PostEditor`，避免把 Milkdown 富文本交互、数学公式、表格菜单和固定高度带入题目页。
 - 新增 `QuestionMarkdown` 渲染器，使用现有 `react-markdown + remark-gfm + rehype-highlight` 依赖；不启用 `rehypeRaw`、`remark-math`、KaTeX 或 Mermaid。
 - 外部链接可以按现有安全协议打开；图片必须通过题目私有图片校验。
