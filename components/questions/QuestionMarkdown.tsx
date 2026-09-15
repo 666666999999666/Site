@@ -5,6 +5,35 @@ import { cn } from "@/lib/utils"
 
 const PRIVATE_IMAGE_PATTERN = /^\/api\/questions\/images\/[A-Za-z0-9_-]{1,128}$/
 
+type MarkdownNode = {
+  type: string
+  value?: string
+  children?: MarkdownNode[]
+}
+
+function remarkPreserveSoftBreaks() {
+  return (tree: MarkdownNode) => {
+    const visit = (node: MarkdownNode) => {
+      if (!node.children) return
+      const children: MarkdownNode[] = []
+      for (const child of node.children) {
+        visit(child)
+        if (child.type !== "text" || !child.value?.includes("\n")) {
+          children.push(child)
+          continue
+        }
+        const parts = child.value.split("\n")
+        parts.forEach((part, index) => {
+          if (part) children.push({ ...child, value: part })
+          if (index < parts.length - 1) children.push({ type: "break" })
+        })
+      }
+      node.children = children
+    }
+    visit(tree)
+  }
+}
+
 const markdownComponents: Components = {
   a({ href, children, title }) {
     return (
@@ -57,7 +86,7 @@ export function QuestionMarkdown({
       )}
     >
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkPreserveSoftBreaks]}
         rehypePlugins={[[rehypeHighlight, { detect: true, ignoreMissing: true }]]}
         components={markdownComponents}
       >

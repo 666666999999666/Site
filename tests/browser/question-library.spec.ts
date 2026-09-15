@@ -125,9 +125,12 @@ for (const theme of ["light", "dark"] as const) {
     }, theme)
 
     const source = page.getByRole("textbox", { name: "标准答案" })
-    const previewParagraph = page.getByRole("region", { name: "标准答案预览" }).locator(".prose p").first()
-    const revealedParagraph = page.getByRole("region", { name: "正式揭晓" }).locator(".prose p").first()
-    const historyParagraph = page.getByRole("region", { name: "历史答案" }).locator(".prose p").first()
+    const previewRegion = page.getByRole("region", { name: "标准答案预览" })
+    const revealedRegion = page.getByRole("region", { name: "正式揭晓" })
+    const historyRegion = page.getByRole("region", { name: "历史答案" })
+    const previewParagraph = previewRegion.locator(".prose p").first()
+    const revealedParagraph = revealedRegion.locator(".prose p").first()
+    const historyParagraph = historyRegion.locator(".prose p").first()
     const styles = await Promise.all([source, previewParagraph, revealedParagraph, historyParagraph].map(
       (locator) => locator.evaluate((element) => {
         const style = getComputedStyle(element)
@@ -137,6 +140,22 @@ for (const theme of ["light", "dark"] as const) {
     expect(new Set(styles.map(({ fontFamily }) => fontFamily)).size).toBe(1)
     expect(new Set(styles.map(({ fontSize }) => fontSize)).size).toBe(1)
     expect(new Set(styles.map(({ lineHeight }) => lineHeight)).size).toBe(1)
+    for (const paragraph of [previewParagraph, revealedParagraph, historyParagraph]) {
+      await expect(paragraph.locator("br")).toHaveCount(3)
+      const renderedLines = await paragraph.evaluate((element) => (element as HTMLElement).innerText.split("\n"))
+      expect(renderedLines).toHaveLength(4)
+      expect(renderedLines[0]).toBe("【面试口述答案】")
+      expect(renderedLines[1]).toContain("这两个命令的响应时机完全不同")
+      expect(renderedLines[2]).toContain("session.send_message 是多轮对话入口")
+      expect(renderedLines[3]).toContain("【理解与记忆】")
+    }
+    for (const region of [previewRegion, revealedRegion, historyRegion]) {
+      const paragraphs = region.locator(".prose p")
+      await expect(paragraphs).toHaveCount(2)
+      await expect(paragraphs.nth(1).locator("br")).toHaveCount(1)
+      expect(await paragraphs.nth(1).evaluate((element) => (element as HTMLElement).innerText.split("\n")))
+        .toEqual(["【典型追问】", "显式 Markdown 换行不能变成两个空行。"])
+    }
     await page.screenshot({
       path: testInfo.outputPath(`question-display-${theme}.png`),
       fullPage: true,

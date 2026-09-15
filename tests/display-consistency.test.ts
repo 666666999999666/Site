@@ -4,7 +4,10 @@ import test from "node:test"
 
 test("rendered question answers use one typography scale", () => {
   const attempts = readFileSync("components/questions/QuestionAttemptList.tsx", "utf8")
+  const markdown = readFileSync("components/questions/QuestionMarkdown.tsx", "utf8")
   assert.doesNotMatch(attempts, /QuestionMarkdown[^\n]*prose-sm/)
+  assert.match(markdown, /remarkPreserveSoftBreaks/)
+  assert.match(markdown, /children\.push\(\{ type: "break" \}\)/)
 })
 
 test("multiline text fields preserve line breaks in their full displays", () => {
