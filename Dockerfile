@@ -17,10 +17,24 @@ RUN --mount=type=cache,target=/root/.npm \
     npm init -y && npm install --registry=https://registry.npmmirror.com --no-fund --no-audit \
     prisma@7.9.1 dotenv@17.4.2 tsx@4.23.1 pg@8.22.0 mdast-util-from-markdown@2.0.3
 
-FROM ${NODE_IMAGE} AS builder
+FROM ${NODE_IMAGE} AS system-deps
+RUN set -eu; \
+    alpine_branch="v$(cut -d. -f1,2 /etc/alpine-release)"; \
+    for mirror in mirrors.cloud.tencent.com mirrors.aliyun.com dl-cdn.alpinelinux.org; do \
+      printf '%s\n' \
+        "https://${mirror}/alpine/${alpine_branch}/main" \
+        "https://${mirror}/alpine/${alpine_branch}/community" \
+        > /etc/apk/repositories; \
+      if apk add --no-cache bash coreutils git postgresql16 postgresql16-client su-exec; then \
+        exit 0; \
+      fi; \
+      sleep 2; \
+    done; \
+    exit 1
+
+FROM system-deps AS builder
 WORKDIR /app
 ENV PRISMA_ENGINES_MIRROR=https://registry.npmmirror.com/-/binary/prisma
-RUN apk add --no-cache bash coreutils git postgresql16 postgresql16-client su-exec
 # Task 23: 构建时注入站点域名（NEXT_PUBLIC_* 会被内联进产物，运行时设置无效）。
 # 默认值为生产域名，确保即使 CI 不传 buildArgs 也不会泄露 localhost。
 ARG NEXT_PUBLIC_SITE_URL=https://liaoqizai.site

@@ -28,6 +28,7 @@ test("Compose is explicit, release-aware, and rotates every service log", () => 
   assert.equal((compose.match(/max-size: 10m/g) ?? []).length, 3)
   assert.equal((compose.match(/max-file: "3"/g) ?? []).length, 3)
   assert.match(dockerfile, /apk add --no-cache bash coreutils git/)
+  assert.match(dockerfile, /mirrors\.cloud\.tencent\.com mirrors\.aliyun\.com dl-cdn\.alpinelinux\.org/)
 })
 
 test("operation lock is bound to the application owner and shared by all mutating entrypoints", () => {

@@ -228,6 +228,8 @@ bash -n ops/*.sh
 
 发布镜像在 `next build` 前执行独立的 `tsc --noEmit` 类型门禁。Next 构建关闭其内置的重复类型检查；ESLint 与 TypeScript 的中间结果使用 BuildKit 缓存，并且缓存缺失时仍执行完整检查。Gitee 的 `isCache: true` 只表示允许使用缓存，不能据此断言某次构建实际命中；长时间没有发布后应把冷缓存或平台回收作为一种待日志验证的原因。
 
+Alpine 构建工具从腾讯云镜像源获取，失败时依次回退到阿里云和 Alpine 官方源。三者都使用基础镜像当前版本对应的 `main`、`community` 仓库；任何来源都必须通过 Alpine 包签名校验，不能用跳过证书或信任检查来掩盖网络故障。
+
 GitHub 只作为仓库镜像，`.github/workflows/` 当前没有工作流。发布后应确认 Gitee 与 GitHub 的 `main` 指向同一提交，但生产部署只以 Gitee 链路为准。
 
 ## 7. 生产数据规则
