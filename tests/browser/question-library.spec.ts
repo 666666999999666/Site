@@ -117,6 +117,33 @@ for (const theme of ["light", "dark"] as const) {
 }
 
 for (const theme of ["light", "dark"] as const) {
+  test(`question preview, reveal and history share readable ${theme} typography`, async ({ page }, testInfo) => {
+    await page.goto("/question-display")
+    await page.evaluate((selectedTheme) => {
+      document.documentElement.classList.toggle("dark", selectedTheme === "dark")
+      document.documentElement.style.colorScheme = selectedTheme
+    }, theme)
+
+    const source = page.getByRole("textbox", { name: "标准答案" })
+    const previewParagraph = page.getByRole("region", { name: "标准答案预览" }).locator(".prose p").first()
+    const revealedParagraph = page.getByRole("region", { name: "正式揭晓" }).locator(".prose p").first()
+    const historyParagraph = page.getByRole("region", { name: "历史答案" }).locator(".prose p").first()
+    const styles = await Promise.all([source, previewParagraph, revealedParagraph, historyParagraph].map(
+      (locator) => locator.evaluate((element) => {
+        const style = getComputedStyle(element)
+        return { fontSize: style.fontSize, lineHeight: style.lineHeight }
+      })
+    ))
+    expect(new Set(styles.map(({ fontSize }) => fontSize)).size).toBe(1)
+    expect(new Set(styles.map(({ lineHeight }) => lineHeight)).size).toBe(1)
+    await page.screenshot({
+      path: testInfo.outputPath(`question-display-${theme}.png`),
+      fullPage: true,
+    })
+  })
+}
+
+for (const theme of ["light", "dark"] as const) {
   test(`native selects expose readable ${theme} popup colors`, async ({ page }) => {
     await page.route("**/api/questions?*", (route) => route.fulfill({
       json: { items: [], total: 0, page: 1, pageSize: 20, pendingCount: 2 },

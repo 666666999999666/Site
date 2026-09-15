@@ -89,6 +89,16 @@ test("extracts Markdown and legacy headings with stable duplicate ids", () => {
   )
 })
 
+test("heading extraction exposes stable source lines for hydration-safe ids", () => {
+  assert.deepEqual(
+    extractHeadings("前言\n\n## 重复\n\n## 重复").map(({ id, line }) => ({ id, line })),
+    [
+      { id: "重复", line: 3 },
+      { id: "重复-1", line: 5 },
+    ]
+  )
+})
+
 test("preserves readable text and finds referenced uploads", () => {
   assert.match(extractPlainText(legacyDocument), /重复标题/)
   assert.deepEqual(extractUploadUrls(legacyDocument), ["/uploads/example.webp"])

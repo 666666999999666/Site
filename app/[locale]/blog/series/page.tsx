@@ -48,7 +48,7 @@ export default async function SeriesIndexPage() {
             {visible.map((item) => (
               <Link key={item.id} href={`/blog/series/${item.slug}`} className="rounded-lg border border-border/60 p-5 transition-colors hover:border-border hover:bg-muted/40">
                 <h2 className="font-semibold text-foreground">{item.title}</h2>
-                {item.description && <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">{item.description}</p>}
+                {item.description && <p className="mt-2 line-clamp-3 whitespace-pre-line text-sm text-muted-foreground">{item.description}</p>}
                 <p className="mt-3 text-xs text-muted-foreground">{t("postsCount", { count: item._count.posts })}</p>
               </Link>
             ))}

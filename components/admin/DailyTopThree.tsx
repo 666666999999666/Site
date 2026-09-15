@@ -232,7 +232,7 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
         </div>
 
         <blockquote className="mt-8 max-w-3xl border-l-2 border-primary/70 pl-5">
-          <p className="text-lg leading-8 text-foreground sm:text-xl">{day.quote.quote}</p>
+          <p className="whitespace-pre-line text-lg leading-8 text-foreground sm:text-xl">{day.quote.quote}</p>
           <footer className="mt-2 text-sm text-muted-foreground">
             {day.quote.category}
             {day.quote.author ? ` · ${day.quote.author}` : ""}

@@ -302,7 +302,7 @@ export function DailyQuoteManager({ initialData }: { initialData: QuotePageData 
           <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
             <div className="min-w-0">
               <h2 id="delete-quote-title" className="font-semibold text-destructive">删除提醒语 #{deleteTarget.id}</h2>
-              <p className="mt-2 break-words text-sm text-muted-foreground">{deleteTarget.quote}</p>
+              <p className="mt-2 whitespace-pre-line break-words text-sm text-muted-foreground">{deleteTarget.quote}</p>
             </div>
             {deleteTarget.assignedDate && (
               <div className="w-full max-w-lg space-y-2">
@@ -367,7 +367,7 @@ export function DailyQuoteManager({ initialData }: { initialData: QuotePageData 
               <p className="mt-0 md:mt-1 text-sm font-medium tabular-nums">{item.assignedDate ?? "未分配"}</p>
             </div>
             <div className="min-w-0">
-              <p className="break-words leading-6">{item.quote}</p>
+              <p className="whitespace-pre-line break-words leading-6">{item.quote}</p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {item.category}{item.author ? ` · ${item.author}` : ""}{item.source ? ` · ${item.source}` : ""}
               </p>

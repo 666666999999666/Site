@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation"
 import type { Category, Post, Series } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
 import { normalizeContent } from "@/lib/content"
+import { ArticlePublicationPreview } from "@/components/admin/ArticlePublicationPreview"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -358,6 +359,8 @@ export function PostForm({
           onUpload={(url) => uploadedUrlsRef.current.add(url)}
         />
       </div>
+
+      <ArticlePublicationPreview content={content} />
 
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
 

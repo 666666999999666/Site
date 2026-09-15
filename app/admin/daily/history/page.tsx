@@ -160,7 +160,7 @@ export default async function DailyHistoryPage({
                 ))}
               </ol>
 
-              <p className="mt-5 border-t border-border/60 pt-4 text-sm leading-6 text-muted-foreground">
+              <p className="mt-5 whitespace-pre-line border-t border-border/60 pt-4 text-sm leading-6 text-muted-foreground">
                 {day.quote.quote}
               </p>
             </article>

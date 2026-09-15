@@ -19,7 +19,7 @@ export async function HomeAboutContact({
     <section className="border-t border-border/40 py-12 sm:py-16" aria-labelledby="home-about-heading">
       <Container size="narrow">
         <h2 id="home-about-heading" className="text-2xl font-bold">{t("aboutContact")}</h2>
-        <p className="mt-3 leading-7 text-muted-foreground">{description || t("aboutContactDescription")}</p>
+        <p className="mt-3 whitespace-pre-line leading-7 text-muted-foreground">{description || t("aboutContactDescription")}</p>
         <div className="mt-6 flex flex-wrap gap-3">
           <Link href="/about" className="inline-flex h-9 items-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90">
             {t("moreAbout")}

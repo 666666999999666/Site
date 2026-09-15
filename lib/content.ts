@@ -4,6 +4,7 @@ export interface ContentHeading {
   id: string
   text: string
   level: number
+  line?: number
 }
 
 interface TiptapMark {
@@ -25,6 +26,7 @@ interface MarkdownNode {
   value?: string
   alt?: string
   children?: MarkdownNode[]
+  position?: { start?: { line?: number } }
 }
 
 // #1: 递归遍历节点树的最大深度，防止恶意构造的超深嵌套触发 RangeError DoS。
@@ -309,7 +311,14 @@ export function extractHeadings(raw: string, levels = [2, 3, 4]): ContentHeading
       if (depth > MAX_CONTENT_DEPTH) return
       if (node.type === "heading" && typeof node.depth === "number" && levels.includes(node.depth)) {
         const text = markdownNodeText(node).trim()
-        if (text) headings.push({ id: slug(text), text, level: node.depth })
+        if (text) {
+          headings.push({
+            id: slug(text),
+            text,
+            level: node.depth,
+            line: node.position?.start?.line,
+          })
+        }
       }
       for (const child of node.children ?? []) visit(child, depth + 1)
     }

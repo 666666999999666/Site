@@ -61,7 +61,7 @@ export default async function SeriesPage({ params }: { params: Promise<{ locale:
       <Container>
         <p className="mb-2 text-sm text-muted-foreground">{t("series")}</p>
         <h1 className="mb-3 text-3xl font-bold">{series.title}</h1>
-        {series.description && <p className="mb-8 max-w-3xl text-muted-foreground">{series.description}</p>}
+        {series.description && <p className="mb-8 max-w-3xl whitespace-pre-line text-muted-foreground">{series.description}</p>}
         <BlogBrowseNav />
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
           {series.posts.map((post) => <BlogCard key={post.id} post={post} />)}

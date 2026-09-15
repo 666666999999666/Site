@@ -17,7 +17,7 @@ import rehypeHighlight from "rehype-highlight"
 import rehypeKatex from "rehype-katex"
 import remarkGfm from "remark-gfm"
 import remarkMath from "remark-math"
-import { createHeadingSlugger, normalizeContentForDisplay } from "@/lib/content"
+import { extractHeadings, normalizeContentForDisplay, slugifyHeading } from "@/lib/content"
 import { useTheme } from "@/components/theme/ThemeProvider"
 import { Lightbox } from "./Lightbox"
 
@@ -162,17 +162,24 @@ const baseComponents: Components = {
 
 export const PostContent = memo(function PostContent({ content }: { content: string }) {
   const normalized = normalizeContentForDisplay(content)
-  const slug = createHeadingSlugger()
+  const headingIds = new Map(
+    extractHeadings(normalized).flatMap((heading) => (
+      heading.line ? [[`${heading.level}:${heading.line}`, heading.id] as const] : []
+    ))
+  )
+  const headingId = (level: number, line: number | undefined, children: ReactNode) => (
+    (line ? headingIds.get(`${level}:${line}`) : undefined) ?? slugifyHeading(nodeText(children))
+  )
   const components: Components = {
     ...baseComponents,
-    h2({ children }) {
-      return <h2 id={slug(nodeText(children))}>{children}</h2>
+    h2({ children, node }) {
+      return <h2 id={headingId(2, node?.position?.start.line, children)}>{children}</h2>
     },
-    h3({ children }) {
-      return <h3 id={slug(nodeText(children))}>{children}</h3>
+    h3({ children, node }) {
+      return <h3 id={headingId(3, node?.position?.start.line, children)}>{children}</h3>
     },
-    h4({ children }) {
-      return <h4 id={slug(nodeText(children))}>{children}</h4>
+    h4({ children, node }) {
+      return <h4 id={headingId(4, node?.position?.start.line, children)}>{children}</h4>
     },
   }
 

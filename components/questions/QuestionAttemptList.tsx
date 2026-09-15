@@ -36,7 +36,7 @@ export function QuestionAttemptList({ attempts }: { attempts: QuestionAttempt[] 
             <time dateTime={attempt.createdAt}>{formatQuestionDateTime(attempt.createdAt)}</time>
           </div>
           {attempt.answerMarkdown ? (
-            <QuestionMarkdown markdown={attempt.answerMarkdown} className="prose-sm" />
+            <QuestionMarkdown markdown={attempt.answerMarkdown} />
           ) : (
             <p className="text-sm text-muted-foreground">
               {attempt.mode === "DIRECT_REVEAL" ? "直接揭晓不保存答案正文。" : "这条答案正文已按保留规则淘汰。"}
@@ -100,7 +100,7 @@ export function QuestionTimeline({ items }: { items: QuestionTimelineItem[] }) {
             )}
             {item.answerMarkdown && (
               <div className="mt-3 rounded-lg border border-border/60 bg-muted/20 p-3">
-                <QuestionMarkdown markdown={item.answerMarkdown} className="prose-sm" />
+                <QuestionMarkdown markdown={item.answerMarkdown} />
               </div>
             )}
           </li>

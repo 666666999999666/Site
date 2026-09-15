@@ -30,7 +30,7 @@ export async function FeaturedSeries({ items }: { items: FeaturedSeriesItem[] })
               <h3 className="font-semibold">
                 <Link href={`/blog/series/${item.slug}`} className="hover:underline">{item.title}</Link>
               </h3>
-              <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{item.description}</p>
+              <p className="mt-2 line-clamp-2 whitespace-pre-line text-sm text-muted-foreground">{item.description}</p>
               <p className="mt-3 text-xs text-muted-foreground">{t("seriesPosts", { count: item.postCount })}</p>
               {item.firstPost && (
                 <Link href={`/blog/${item.firstPost.slug}`} className="mt-3 block truncate text-sm text-primary hover:underline">

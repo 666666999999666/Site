@@ -207,7 +207,7 @@ Todo 转草稿会复制标题和描述，创建独立 `DRAFT` Post；当前不�
 
 ### 6.1 Markdown 是正文唯一标准格式
 
-- 后台用 **Milkdown Crepe** 编辑，但数据库保存 Markdown 字符串。
+- 后台用 **Milkdown Crepe** 编辑，但数据库保存 Markdown 字符串；编辑页另用公开端同一个 `PostContent` 显示“发布效果预览”，避免把编辑器自身样式误认为最终文章样式。
 - `lib/content.ts` 统一负责正文标准化、目录标题、纯文本、阅读时长和上传引用提取。
 - 旧 Tiptap JSON 只作为迁移兼容输入，通过 `scripts/migrate-tiptap-content.ts` 转为 Markdown。
 - 新功能不得重新写入 Tiptap JSON，也不要让渲染、目录和迁移各自实现一套解析逻辑。

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Eye, ImagePlus, LoaderCircle } from "lucide-react"
+import { Code2, Eye, ImagePlus, LoaderCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -146,6 +146,10 @@ export function QuestionMarkdownEditor({
 
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-2">
+          <div className="flex items-center gap-2 border-b border-border/60 pb-3 text-sm font-medium text-muted-foreground">
+            <Code2 className="size-4" />
+            Markdown 源码
+          </div>
           <Textarea
             ref={textareaRef}
             id={id}
@@ -154,7 +158,7 @@ export function QuestionMarkdownEditor({
             aria-invalid={Boolean(currentError)}
             aria-describedby={`${id}-help ${id}-error`}
             placeholder={placeholder}
-            className={cn("resize-y font-mono leading-6", minRowsClassName)}
+            className={cn("resize-y font-mono text-base leading-7 md:text-base", minRowsClassName)}
             onChange={(event) => {
               setUploadError("")
               onChange(event.target.value)

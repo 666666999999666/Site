@@ -314,6 +314,33 @@ test("mobile article contents moves focus to the chosen heading and restores it 
   await expect(trigger).toBeFocused()
 })
 
+test("article publication preview uses the public renderer in both themes", async ({ page }, testInfo) => {
+  const hydrationErrors: string[] = []
+  page.on("console", (message) => {
+    if (message.type() === "error" && /hydrat/i.test(message.text())) hydrationErrors.push(message.text())
+  })
+  await page.goto("/article-preview")
+  const preview = page.getByRole("region", { name: "发布效果预览" })
+  await expect(preview.getByRole("heading", { name: "发布标题" })).toHaveCount(2)
+  await expect(preview.getByRole("heading", { name: "发布标题" }).first()).toHaveAttribute("id", "发布标题")
+  await expect(preview.getByRole("heading", { name: "发布标题" }).last()).toHaveAttribute("id", "发布标题-1")
+  await expect(preview.getByRole("table")).toBeVisible()
+  await expect(preview.locator(".katex")).toBeVisible()
+  await expect(preview.locator(".katex-mathml")).toHaveCSS("position", "absolute")
+
+  for (const dark of [false, true]) {
+    await page.evaluate((enabled) => {
+      document.documentElement.classList.toggle("dark", enabled)
+      document.documentElement.style.colorScheme = enabled ? "dark" : "light"
+    }, dark)
+    await page.screenshot({
+      path: testInfo.outputPath(`article-publication-preview-${dark ? "dark" : "light"}.png`),
+      fullPage: true,
+    })
+  }
+  expect(hydrationErrors).toEqual([])
+})
+
 test("top toolbar remains visible while scrolling through a long article", async ({ page }) => {
   await openEditor(page)
   const toolbar = page.locator(".milkdown-top-bar")
