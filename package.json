@@ -11,6 +11,7 @@
     "lint": "eslint",
     "test": "tsx --test tests/*.test.ts",
     "test:editor": "playwright test --config=playwright.config.ts",
+    "test:documents": "tsx tests/prepare-document-workflow.ts && playwright test --config=playwright.documents.config.ts",
     "test:blog-series:integration": "tsx tests/blog-series-integration.ts",
     "test:mcp": "tsx --test tests/mcp-streamable-http.test.ts",
     "test:mcp:gateway": "tsx tests/mcp-gateway-smoke.ts",

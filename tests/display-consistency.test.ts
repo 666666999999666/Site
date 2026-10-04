@@ -1,13 +1,17 @@
 import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
+import { createElement } from "react"
+import { renderToStaticMarkup } from "react-dom/server"
+import { QuestionMarkdown } from "../components/questions/QuestionMarkdown"
 
 test("rendered question answers use one typography scale", () => {
   const attempts = readFileSync("components/questions/QuestionAttemptList.tsx", "utf8")
   const markdown = readFileSync("components/questions/QuestionMarkdown.tsx", "utf8")
   assert.doesNotMatch(attempts, /QuestionMarkdown[^\n]*prose-sm/)
   assert.match(markdown, /remarkPreserveSoftBreaks/)
-  assert.match(markdown, /children\.push\(\{ type: "break" \}\)/)
+  const rendered = renderToStaticMarkup(createElement(QuestionMarkdown, { markdown: "首行\n第二行" }))
+  assert.match(rendered, /首行<br\/>\n?第二行/)
 })
 
 test("multiline text fields preserve line breaks in their full displays", () => {
@@ -24,7 +28,7 @@ test("multiline text fields preserve line breaks in their full displays", () => 
 test("the article form includes the public renderer preview", () => {
   const form = readFileSync("components/admin/PostForm.tsx", "utf8")
   const preview = readFileSync("components/admin/ArticlePublicationPreview.tsx", "utf8")
-  assert.match(form, /<ArticlePublicationPreview content=\{content\}/)
+  assert.match(form, /<ArticlePublicationPreview content=/)
   assert.match(preview, /<PostContent content=\{content\}/)
 })
 

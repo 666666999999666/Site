@@ -2,20 +2,22 @@
 
 import {
   useEffect,
+  useImperativeHandle,
   useLayoutEffect,
   useRef,
   useState,
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
+  type Ref,
 } from "react"
 import { Crepe } from "@milkdown/crepe"
 import { listener, listenerCtx } from "@milkdown/kit/plugin/listener"
 import { commandsCtx, editorViewCtx, parserCtx } from "@milkdown/kit/core"
-import { Slice } from "@milkdown/kit/prose/model"
-import { Selection } from "@milkdown/kit/prose/state"
+import { Slice, type Node as ProseNode } from "@milkdown/kit/prose/model"
+import { Plugin, Selection } from "@milkdown/kit/prose/state"
 import { clearTextInCurrentBlockCommand } from "@milkdown/kit/preset/commonmark"
 import { insertTableCommand } from "@milkdown/kit/preset/gfm"
-import { callCommand } from "@milkdown/kit/utils"
+import { $prose, callCommand, getMarkdown } from "@milkdown/kit/utils"
 import "@milkdown/crepe/theme/common/style.css"
 import "@milkdown/crepe/theme/frame.css"
 import { normalizeContent } from "@/lib/content"
@@ -175,19 +177,32 @@ function TableInsertDialog({
  *   value: string          // Markdown 文本
  *   onChange: (v: string)  // 回调 Markdown 文本
  */
+export interface PostEditorHandle {
+  getMarkdown: () => string
+  focus: () => void
+}
+
 export function PostEditor({
   value,
   onChange,
   onUpload,
+  controlRef,
+  onDocumentChange,
 }: {
   value: string
   onChange: (value: string) => void
   onUpload?: (url: string) => void
+  controlRef?: Ref<PostEditorHandle>
+  onDocumentChange?: (value: string) => void
 }) {
   const divRef = useRef<HTMLDivElement>(null)
   const crepeRef = useRef<Crepe | null>(null)
   const onChangeRef = useRef(onChange)
   const onUploadRef = useRef(onUpload)
+  const onDocumentChangeRef = useRef(onDocumentChange)
+  const rawBaselineRef = useRef(value)
+  const baselineDocRef = useRef<ProseNode | null>(null)
+  const synchronizingRef = useRef(false)
   const loadingRef = useRef(false)
   const tableDialogTimerRef = useRef<number | null>(null)
   const [tableDialogOpen, setTableDialogOpen] = useState(false)
@@ -204,13 +219,28 @@ export function PostEditor({
   const normalizedValue = normalizeContent(value || "")
 
   // 当前编辑器内容，避免外部 value 变化时回环更新
-  const currentValueRef = useRef<string>(normalizedValue)
+  const currentValueRef = useRef<string>(value)
+
+  function snapshot() {
+    const crepe = crepeRef.current
+    if (!crepe) return currentValueRef.current
+    return crepe.editor.action((ctx) => {
+      const doc = ctx.get(editorViewCtx).state.doc
+      return baselineDocRef.current?.eq(doc) ? rawBaselineRef.current : getMarkdown()(ctx)
+    })
+  }
+
+  useImperativeHandle(controlRef, () => ({
+    getMarkdown: snapshot,
+    focus: () => crepeRef.current?.editor.action((ctx) => ctx.get(editorViewCtx).focus()),
+  }))
 
   // 每次 render 同步 onChange 回调到 ref，避免渲染阶段直接写 ref
   useEffect(() => {
     onChangeRef.current = onChange
     onUploadRef.current = onUpload
-  }, [onChange, onUpload])
+    onDocumentChangeRef.current = onDocumentChange
+  }, [onChange, onDocumentChange, onUpload])
 
   // 初始化 Crepe 编辑器（仅运行一次）
   useLayoutEffect(() => {
@@ -284,12 +314,23 @@ export function PostEditor({
 
     crepe.editor
       .config((ctx) => {
-        ctx.get(listenerCtx).markdownUpdated((_, markdown) => {
+        ctx.get(listenerCtx).markdownUpdated(() => {
+          const markdown = snapshot()
           currentValueRef.current = markdown
           onChangeRef.current(markdown)
         })
       })
       .use(listener)
+      .use($prose(() => new Plugin({
+        view: () => ({
+          update(view, previous) {
+            if (synchronizingRef.current || view.state.doc.eq(previous.doc) || !onDocumentChangeRef.current) return
+            const markdown = snapshot()
+            currentValueRef.current = markdown
+            onDocumentChangeRef.current(markdown)
+          },
+        }),
+      })))
 
     crepe.create().then(() => {
       if (cancelled) {
@@ -297,6 +338,7 @@ export function PostEditor({
         return
       }
       crepeRef.current = crepe
+      baselineDocRef.current = crepe.editor.action((ctx) => ctx.get(editorViewCtx).state.doc)
       if (divRef.current) enhanceEditorControls(divRef.current)
       loadingRef.current = false
     }).catch((error) => {
@@ -322,13 +364,15 @@ export function PostEditor({
 
   // 外部 value 变化时同步到编辑器（避免回环）
   useLayoutEffect(() => {
-    if (crepeRef.current && normalizedValue !== currentValueRef.current) {
-      currentValueRef.current = normalizedValue
+    if (crepeRef.current && normalizedValue !== normalizeContent(currentValueRef.current)) {
+      currentValueRef.current = value
+      rawBaselineRef.current = value
       crepeRef.current.editor.action((ctx) => {
         const view = ctx.get(editorViewCtx)
         const parser = ctx.get(parserCtx)
         const doc = parser(normalizedValue || "")
         if (!doc) return
+        baselineDocRef.current = doc
         const state = view.state
         const selection = state.selection
         const { from } = selection
@@ -337,10 +381,11 @@ export function PostEditor({
         const docSize = doc.content.size
         const safeFrom = Math.min(from, docSize - 2)
         tr = tr.setSelection(Selection.near(tr.doc.resolve(safeFrom)))
-        view.dispatch(tr)
+        synchronizingRef.current = true
+        try { view.dispatch(tr) } finally { synchronizingRef.current = false }
       })
     }
-  }, [normalizedValue])
+  }, [normalizedValue, value])
 
   function interceptTableKeyboard(event: ReactKeyboardEvent<HTMLDivElement>) {
     if (event.key !== "Enter" && event.key !== " ") return

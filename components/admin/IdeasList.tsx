@@ -144,7 +144,7 @@ export function IdeasList({
                   )}
                 </div>
                 <Link
-                  href={`/admin/ideas/${idea.id}`}
+                  href={`/admin/ideas/${idea.id}?edit=1`}
                   className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "shrink-0")}
                   aria-label={`编辑 Idea ${idea.title}`}
                 >

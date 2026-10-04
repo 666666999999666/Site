@@ -211,7 +211,7 @@ export function PostsList({
                   </div>
                 </div>
                 <Link
-                  href={`/admin/posts/${post.id}`}
+                  href={`/admin/posts/${post.id}?edit=1`}
                   aria-label={`编辑文章 ${post.title}`}
                   className="inline-flex size-9 shrink-0 items-center justify-center rounded-md hover:bg-muted"
                 >
@@ -242,7 +242,7 @@ export function PostsList({
                 <th className="w-36 p-3 text-left font-normal text-muted-foreground">系列</th>
                 <th className="w-24 p-3 text-left font-normal text-muted-foreground">状态</th>
                 <th className="w-28 p-3 text-left font-normal text-muted-foreground">最后更新</th>
-                <th className="w-16 p-3"><span className="sr-only">操作</span></th>
+                <th className="w-24 p-3"><span className="sr-only">操作</span></th>
               </tr>
             </thead>
             <tbody>
@@ -272,6 +272,12 @@ export function PostsList({
                   </td>
                   <td className="p-3 text-muted-foreground">{formatDate(post.updatedAt)}</td>
                   <td className="p-3">
+                    <div className="flex items-center gap-1">
+                    <Link href={`/admin/posts/${post.id}?edit=1`}
+                      aria-label={`编辑文章 ${post.title}`}
+                      className="inline-flex size-9 shrink-0 items-center justify-center rounded-md hover:bg-muted">
+                      <Pencil className="size-4" />
+                    </Link>
                     <Button
                       type="button"
                       variant="ghost"
@@ -283,6 +289,7 @@ export function PostsList({
                     >
                       <Trash2 className="size-4" />
                     </Button>
+                    </div>
                   </td>
                 </tr>
               ))}

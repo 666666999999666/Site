@@ -407,3 +407,43 @@
 .prose :is(h2, h3, h4) {
   scroll-margin-top: 5rem;
 }
+
+/* 后台阅读与编辑：代码独立滚动，长链接不扩大正文宽度。 */
+.admin-reading {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.admin-reading :is(pre, table) {
+  max-width: 100%;
+}
+.admin-reading pre,
+.admin-reading pre code {
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+.admin-reading pre {
+  overflow-x: auto;
+  color-scheme: dark;
+}
+.admin-reading :is(ul, ol) > li::marker {
+  color: var(--muted-foreground);
+}
+.admin-reading img {
+  max-width: 100%;
+  height: auto;
+}
+.admin-document .milkdown-editor-wrapper .milkdown .milkdown-top-bar {
+  top: var(--document-toolbar-height, 0px);
+}
+.admin-document .milkdown-editor-wrapper .milkdown .ProseMirror {
+  padding: 24px 20px;
+}
+@media (min-width: 768px) {
+  .admin-document .milkdown-editor-wrapper .milkdown .ProseMirror {
+    padding: 32px 48px;
+  }
+}
+.admin-document .admin-reading :is(h1, h2, h3, h4) {
+  scroll-margin-top: calc(var(--document-toolbar-height, 0px) + 1rem);
+}

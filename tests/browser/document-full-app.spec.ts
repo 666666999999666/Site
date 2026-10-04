@@ -1,0 +1,167 @@
+import { expect, test, type Page } from "@playwright/test"
+import { requireDocumentTestDatabaseUrl } from "../document-test-database"
+
+requireDocumentTestDatabaseUrl(process.env.DATABASE_URL)
+const origin = "http://127.0.0.1:3255"
+async function login(page: Page) {
+  const response = await page.request.post("/api/auth/login", {
+    headers: { Origin: origin }, data: { password: "Document-Test-Only-2026!" },
+  })
+  expect(response.status(), await response.text()).toBe(200)
+}
+
+async function integritySnapshot(page: Page) {
+  const list = await page.request.get("/api/ideas")
+  expect(list.status()).toBe(200)
+  const ideas = await list.json()
+  const posts = await page.request.get("/api/posts")
+  expect(posts.status()).toBe(200)
+  const todos = await page.request.get("/api/todos")
+  expect(todos.status()).toBe(200)
+  return { ideas, posts: await posts.json(), todos: await todos.json() }
+}
+
+test("anonymous users cannot read Idea or admin article data", async ({ page }) => {
+  for (const path of ["/api/ideas", "/api/ideas/document-test-idea-0", "/api/posts/document-test-post-draft"]) {
+    const response = await page.request.get(path)
+    expect(response.status()).toBe(401)
+    expect(response.headers()["cache-control"]).toMatch(/private.*no-store/)
+    expect(await response.text()).not.toContain("首行保留")
+  }
+  await page.goto("/admin/ideas/document-test-idea-0")
+  await expect(page).toHaveURL(/\/zh/)
+  await expect(page.getByRole("article", { name: "Idea 阅读" })).toHaveCount(0)
+})
+
+test("owner isolation and no-write reading preserve all 12 notes and existing posts", async ({ page }) => {
+  await login(page)
+  const foreign = await page.request.get("/api/ideas/document-test-other-idea")
+  expect(foreign.status()).toBe(404)
+  expect(await foreign.text()).not.toContain("other-owner-private-sentinel")
+  const before = await integritySnapshot(page)
+  expect(before.ideas).toHaveLength(12)
+  const writes: string[] = []
+  page.on("request", (request) => {
+    if (/\/api\/(ideas|posts)/.test(request.url()) && !["GET", "HEAD"].includes(request.method())) writes.push(request.method())
+  })
+  await page.goto("/admin/ideas/document-test-idea-0")
+  await expect(page.getByRole("article", { name: "Idea 阅读" })).toBeVisible()
+  await page.getByRole("button", { name: "编辑", exact: true }).click()
+  await page.getByRole("tab", { name: "预览", exact: true }).click()
+  await page.getByRole("tab", { name: "编辑", exact: true }).click()
+  await page.getByRole("button", { name: "取消编辑" }).click()
+  for (const status of ["draft", "published"]) {
+    await page.goto("/admin/posts/document-test-post-" + status)
+    await expect(page.getByRole("article", { name: "文章阅读" })).toBeVisible()
+    await page.getByRole("button", { name: "编辑", exact: true }).click()
+    await expect(page.locator(".ProseMirror")).toBeVisible()
+    await page.getByRole("tab", { name: "预览", exact: true }).click()
+    await page.getByRole("button", { name: "取消编辑" }).click()
+  }
+  expect(writes).toEqual([])
+  expect(await integritySnapshot(page)).toEqual(before)
+})
+
+test("Idea real save survives refresh; cancel preserves content, owner, tags, projects and source", async ({ page }) => {
+  await login(page)
+  const url = "/api/ideas/document-test-idea-0"
+  const initial = await (await page.request.get(url)).json()
+  await page.goto("/admin/ideas/document-test-idea-0?edit=1")
+  const text = "测试保存的正文。\n第二行保持换行。\n\n" + initial.content
+  await page.getByRole("textbox", { name: "正文", exact: true }).fill(text)
+  await expect(page.getByRole("textbox", { name: "正文", exact: true })).toHaveValue(text)
+  await page.getByRole("button", { name: "保存 Idea" }).click()
+  await expect(page.getByRole("article", { name: "Idea 阅读" })).toContainText("测试保存的正文")
+  await expect(page).toHaveURL(/document-test-idea-0$/)
+  await page.reload()
+  await expect(page.getByRole("article", { name: "Idea 阅读" })).toContainText("测试保存的正文")
+  const saved = await (await page.request.get(url)).json()
+  expect(saved.content).toBe(text)
+  for (const key of ["id", "ownerId", "tags", "projects", "sourceInboxItem"]) expect(saved[key]).toEqual(initial[key])
+  await page.getByRole("button", { name: "编辑", exact: true }).click()
+  await page.getByRole("textbox", { name: "正文", exact: true }).fill("这个内容应取消")
+  page.once("dialog", (dialog) => dialog.accept())
+  await page.getByRole("button", { name: "取消编辑" }).click()
+  await page.reload()
+  expect((await (await page.request.get(url)).json()).content).toBe(text)
+  // 恢复本测试自己修改的虚构记录，其他 11 条从未写入。
+  expect((await page.request.patch(url, { headers: { Origin: origin }, data: { content: initial.content } })).status()).toBe(200)
+})
+
+test("post saves the last input, refreshes into reading and keeps publishing explicit", async ({ page }) => {
+  await login(page)
+  const url = "/api/posts/document-test-post-published"
+  const initial = await (await page.request.get(url)).json()
+  await page.goto("/admin/posts/document-test-post-published?edit=1")
+  const editor = page.locator(".ProseMirror")
+  await expect(editor).toBeVisible()
+  await editor.locator("p").first().click()
+  await page.keyboard.press("Home")
+  await page.keyboard.insertText("立即保存最后输入")
+  await page.getByRole("button", { name: "更新发布", exact: true }).click()
+  await expect(page.getByRole("article", { name: "文章阅读" })).toContainText("立即保存最后输入")
+  await expect(page).toHaveURL(/document-test-post-published$/)
+  await page.reload()
+  await expect(page.getByRole("article", { name: "文章阅读" })).toContainText("立即保存最后输入")
+  const saved = await (await page.request.get(url)).json()
+  expect(saved.status).toBe("PUBLISHED")
+  for (const key of ["publishedAt", "seriesId", "seriesOrder", "tags", "categoryId"]) expect(saved[key]).toEqual(initial[key])
+  await page.getByRole("button", { name: "编辑", exact: true }).click()
+  await expect(editor).toBeVisible()
+  await page.getByRole("tab", { name: "预览", exact: true }).click()
+  expect((await (await page.request.get(url)).json()).status).toBe("PUBLISHED")
+  await page.getByRole("button", { name: "撤回为草稿", exact: true }).click()
+  await expect(page.getByRole("status")).toHaveText("草稿")
+  expect((await (await page.request.get(url)).json()).status).toBe("DRAFT")
+  expect((await page.request.put(url, { headers: { Origin: origin }, data: {
+    content: initial.content, status: initial.status, publishedAt: initial.publishedAt,
+  } })).status()).toBe(200)
+})
+
+test("legacy article preview and metadata save never migrate its original body", async ({ page }) => {
+  await login(page)
+  const url = "/api/posts/document-test-post-legacy"
+  const initial = await (await page.request.get(url)).json()
+  await page.goto("/admin/posts/document-test-post-legacy")
+  await expect(page.getByRole("article", { name: "文章阅读" })).toContainText("旧格式原文")
+  await page.getByRole("button", { name: "编辑", exact: true }).click()
+  await expect(page.locator(".ProseMirror")).toContainText("旧格式原文")
+  await page.getByRole("tab", { name: "预览", exact: true }).click()
+  await page.getByRole("tab", { name: "编辑", exact: true }).click()
+  await page.getByRole("textbox", { name: "标题", exact: true }).fill("只改旧格式文章标题")
+  await page.getByRole("button", { name: "存为草稿", exact: true }).click()
+  const saved = await (await page.request.get(url)).json()
+  expect(saved.content).toBe(initial.content)
+  expect(saved.status).toBe(initial.status)
+  expect((await page.request.put(url, { headers: { Origin: origin }, data: { title: initial.title } })).status()).toBe(200)
+})
+
+test("new Idea and article create only after explicit save, then read after refresh", async ({ page }) => {
+  await login(page)
+  await page.goto("/admin/ideas/new")
+  await page.getByRole("textbox", { name: "标题", exact: true }).fill("测试创建的 Idea")
+  await page.getByRole("textbox", { name: "正文", exact: true }).fill("新建内容。\n换行保留。")
+  await page.getByRole("tab", { name: "预览", exact: true }).click()
+  await page.getByRole("button", { name: "保存 Idea" }).click()
+  await expect(page.getByRole("article", { name: "Idea 阅读" })).toContainText("新建内容")
+  await expect(page).toHaveURL(/\/admin\/ideas\/[^/]+$/)
+  await expect(page).not.toHaveURL(/\/new$/)
+  const id = page.url().split("/").pop()!
+  await page.reload()
+  await expect(page.getByRole("article", { name: "Idea 阅读" })).toContainText("新建内容")
+  expect((await page.request.delete("/api/ideas/" + id, { headers: { Origin: origin }, data: {} })).status()).toBe(200)
+  await page.goto("/admin/posts/new")
+  await page.getByRole("textbox", { name: "标题", exact: true }).fill("测试创建的文章")
+  const editor = page.locator(".ProseMirror")
+  await expect(editor).toBeVisible()
+  await editor.click()
+  await page.keyboard.insertText("新文章正文")
+  await page.getByRole("button", { name: "存为草稿", exact: true }).click()
+  await expect(page.getByRole("article", { name: "文章阅读" })).toContainText("新文章正文")
+  await expect(page).toHaveURL(/\/admin\/posts\/[^/]+$/)
+  await expect(page).not.toHaveURL(/\/new$/)
+  const postId = page.url().split("/").pop()!
+  await page.reload()
+  await expect(page.getByRole("status")).toHaveText("草稿")
+  expect((await page.request.delete("/api/posts/" + postId, { headers: { Origin: origin }, data: {} })).status()).toBe(200)
+})

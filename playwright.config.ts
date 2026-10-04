@@ -2,9 +2,10 @@ import { defineConfig, devices } from "@playwright/test"
 
 export default defineConfig({
   testDir: "./tests/browser",
-  testMatch: ["editor.spec.ts", "question-library.spec.ts"],
+  testMatch: ["editor.spec.ts", "question-library.spec.ts", "document-workflow.spec.ts"],
   fullyParallel: false,
   workers: 1,
+  outputDir: "./test-results/editor",
   timeout: 30_000,
   expect: {
     timeout: 5_000,

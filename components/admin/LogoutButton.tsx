@@ -5,6 +5,7 @@ import { House, LogOut } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { apiRequest } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
+import { confirmDocumentNavigation } from "./useDocumentDraft"
 
 interface CollapsibleButtonProps {
   collapsed?: boolean
@@ -15,7 +16,7 @@ export function LogoutButton({ collapsed = false }: CollapsibleButtonProps = {})
   return (
     <button
       type="button"
-      onClick={() => router.push("/zh")}
+      onClick={() => { if (confirmDocumentNavigation()) router.push("/zh") }}
       title={collapsed ? "返回网站" : undefined}
       className={cn(
         "flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground",
@@ -42,6 +43,7 @@ export function SignOutButton({
   const [error, setError] = useState("")
 
   async function signOut() {
+    if (!confirmDocumentNavigation()) return
     setPending(true)
     setError("")
     try {

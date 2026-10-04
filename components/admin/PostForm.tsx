@@ -1,16 +1,20 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import type { Category, Post, Series } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
-import { normalizeContent } from "@/lib/content"
 import { ArticlePublicationPreview } from "@/components/admin/ArticlePublicationPreview"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import type { PostEditorHandle } from "./PostEditor"
+import { DocumentActionBar } from "./DocumentActionBar"
+import { DraftRecoveryNotice } from "./DraftRecoveryNotice"
+import { useDocumentDraft } from "./useDocumentDraft"
+import { clearDocumentEditQuery, useDocumentPosition } from "./useDocumentPosition"
 
 const PostEditor = dynamic(
   () => import("./PostEditor").then((mod) => mod.PostEditor),
@@ -18,22 +22,17 @@ const PostEditor = dynamic(
 )
 
 type PostWithRelations = Post & { category: Category | null; series: Series | null }
-
-interface DraftData {
+type DraftData = {
   title: string
   content: string
   excerpt: string
   categoryId: string
-  seriesId?: string
-  seriesOrder?: string
+  seriesId: string
+  seriesOrder: string
   tags: string
   publishedAt: string
 }
-
-interface LocalDraft {
-  savedAt: number
-  data: DraftData
-}
+const LEGACY_DRAFT_DEFAULTS = { seriesId: "", seriesOrder: "" }
 
 function toLocalDatetimeInput(date: string | Date): string {
   const value = new Date(date)
@@ -41,203 +40,141 @@ function toLocalDatetimeInput(date: string | Date): string {
   return new Date(value.getTime() - offset).toISOString().slice(0, 16)
 }
 
-function validLocalDraft(value: unknown): value is LocalDraft {
-  if (!value || typeof value !== "object") return false
-  const draft = value as Partial<LocalDraft>
-  if (typeof draft.savedAt !== "number" || !draft.data || typeof draft.data !== "object") {
-    return false
+function draftFromPost(post?: PostWithRelations): DraftData {
+  return {
+    title: post?.title ?? "",
+    content: post?.content ?? "",
+    excerpt: post?.excerpt ?? "",
+    categoryId: post?.categoryId ?? "",
+    seriesId: post?.seriesId ?? "",
+    seriesOrder: post?.seriesOrder == null ? "" : String(post.seriesOrder),
+    tags: (post?.tags ?? []).join(", "),
+    publishedAt: post?.publishedAt ? toLocalDatetimeInput(post.publishedAt) : "",
   }
-  const requiredFieldsValid = ["title", "content", "excerpt", "categoryId", "tags", "publishedAt"].every(
-    (key) => typeof draft.data?.[key as keyof DraftData] === "string"
-  )
-  return requiredFieldsValid &&
-    (draft.data.seriesId === undefined || typeof draft.data.seriesId === "string") &&
-    (draft.data.seriesOrder === undefined || typeof draft.data.seriesOrder === "string")
 }
 
 export function PostForm({
-  post,
-  categories,
-  series,
+  post, categories, series, ownerId, initiallyEditing = false,
 }: {
   post?: PostWithRelations
   categories: Category[]
   series: Series[]
+  ownerId?: string
+  initiallyEditing?: boolean
 }) {
   const router = useRouter()
-  const storageKey = `qz-post-draft:${post?.id || "new"}`
-  const initialData = useMemo<DraftData>(() => ({
-    title: post?.title || "",
-    content: normalizeContent(post?.content || ""),
-    excerpt: post?.excerpt || "",
-    categoryId: post?.categoryId || "",
-    seriesId: post?.seriesId || "",
-    seriesOrder: post?.seriesOrder === null || post?.seriesOrder === undefined
-      ? ""
-      : String(post.seriesOrder),
-    tags: (post?.tags || []).join(", "),
-    publishedAt: post?.publishedAt ? toLocalDatetimeInput(post.publishedAt) : "",
-  }), [post])
-
-  const [title, setTitle] = useState(initialData.title)
-  const [content, setContent] = useState(initialData.content)
-  const [excerpt, setExcerpt] = useState(initialData.excerpt)
-  const [categoryId, setCategoryId] = useState(initialData.categoryId)
-  const [seriesId, setSeriesId] = useState(initialData.seriesId ?? "")
-  const [seriesOrder, setSeriesOrder] = useState(initialData.seriesOrder ?? "")
-  const [tags, setTags] = useState(initialData.tags)
-  const [publishedAt, setPublishedAt] = useState(initialData.publishedAt)
-  const [recovery, setRecovery] = useState<LocalDraft | null>(null)
+  const [savedPost, setSavedPost] = useState(post)
+  const [editorCreated, setEditorCreated] = useState(!post || initiallyEditing)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
+  const editorRef = useRef<PostEditorHandle>(null)
   const uploadedUrlsRef = useRef(new Set<string>())
-  const savedRef = useRef(false)
+  const focusEditor = useCallback(() => editorRef.current?.focus(), [])
+  const { mode, switchMode } = useDocumentPosition(!post || initiallyEditing ? "edit" : "read", focusEditor)
+  const initialData = useMemo(() => draftFromPost(post), [post])
+  const oldStorageKey = "qz-post-draft:" + (post?.id ?? "new")
+  const draft = useDocumentDraft({
+    initialData,
+    storageKey: ownerId ? "qz-post-draft:" + ownerId + ":" + (post?.id ?? "new") : oldStorageKey,
+    legacyStorageKey: ownerId ? oldStorageKey : undefined,
+    legacyDefaults: LEGACY_DRAFT_DEFAULTS,
+    label: "文章",
+  })
+  const { title, content, excerpt, categoryId, seriesId, seriesOrder, tags, publishedAt } = draft.data
+  const locked = pending || !draft.ready || !!draft.recovery
 
-  const currentData = useMemo<DraftData>(() => ({
-    title,
-    content,
-    excerpt,
-    categoryId,
-    seriesId,
-    seriesOrder,
-    tags,
-    publishedAt,
-  }), [categoryId, content, excerpt, publishedAt, seriesId, seriesOrder, tags, title])
-  // #21: 按字段比较 dirty 状态，避免大内容每次按键都 JSON.stringify 两次
-  const dirty =
-    currentData.title !== initialData.title ||
-    currentData.content !== initialData.content ||
-    currentData.excerpt !== initialData.excerpt ||
-    currentData.categoryId !== initialData.categoryId ||
-    currentData.seriesId !== initialData.seriesId ||
-    currentData.seriesOrder !== initialData.seriesOrder ||
-    currentData.tags !== initialData.tags ||
-    currentData.publishedAt !== initialData.publishedAt
+  function setField(key: keyof DraftData, value: string) {
+    draft.update({ ...draft.current(), [key]: value })
+  }
+  const setTitle = (value: string) => setField("title", value)
+  const setContent = (value: string) => setField("content", value)
+  const setExcerpt = (value: string) => setField("excerpt", value)
+  const setCategoryId = (value: string) => setField("categoryId", value)
+  const setSeriesId = (value: string) => setField("seriesId", value)
+  const setSeriesOrder = (value: string) => setField("seriesOrder", value)
+  const setTags = (value: string) => setField("tags", value)
+  const setPublishedAt = (value: string) => setField("publishedAt", value)
 
-  useEffect(() => {
-    let cancelled = false
-    queueMicrotask(() => {
-      try {
-        const raw = localStorage.getItem(storageKey)
-        if (!raw) return
-        const parsed: unknown = JSON.parse(raw)
-        if (
-          !cancelled &&
-          validLocalDraft(parsed) &&
-          (!post || parsed.savedAt > new Date(post.updatedAt).getTime()) &&
-          JSON.stringify(parsed.data) !== JSON.stringify(initialData)
-        ) {
-          setRecovery(parsed)
-        }
-      } catch {
-        localStorage.removeItem(storageKey)
-      }
-    })
-    return () => {
-      cancelled = true
+  function beginEditing() {
+    if (draft.recovery) {
+      setError("请先恢复或丢弃已有本地草稿，再开始新的编辑。")
+      return
     }
-  }, [initialData, post, storageKey])
-
-  useEffect(() => {
-    if (!dirty) return
-    const timeout = window.setTimeout(() => {
-      const draft: LocalDraft = { savedAt: Date.now(), data: currentData }
-      localStorage.setItem(storageKey, JSON.stringify(draft))
-    }, 1000)
-    return () => window.clearTimeout(timeout)
-  }, [currentData, dirty, storageKey])
-
-  useEffect(() => {
-    if (!dirty || savedRef.current) return
-    const beforeUnload = (event: BeforeUnloadEvent) => {
-      event.preventDefault()
-      event.returnValue = ""
-    }
-    const interceptNavigation = (event: MouseEvent) => {
-      const target = event.target
-      if (!(target instanceof Element)) return
-      const anchor = target.closest("a")
-      if (!anchor || anchor.target === "_blank" || !anchor.href.startsWith(location.origin)) return
-      if (!window.confirm("有未保存的文章修改，确认离开？")) {
-        event.preventDefault()
-        event.stopPropagation()
-      }
-    }
-    window.addEventListener("beforeunload", beforeUnload)
-    document.addEventListener("click", interceptNavigation, true)
-    return () => {
-      window.removeEventListener("beforeunload", beforeUnload)
-      document.removeEventListener("click", interceptNavigation, true)
-    }
-  }, [dirty])
-
-  function restoreDraft() {
-    if (!recovery) return
-    setTitle(recovery.data.title)
-    setContent(recovery.data.content)
-    setExcerpt(recovery.data.excerpt)
-    setCategoryId(recovery.data.categoryId)
-    setSeriesId(recovery.data.seriesId ?? "")
-    setSeriesOrder(recovery.data.seriesOrder ?? "")
-    setTags(recovery.data.tags)
-    setPublishedAt(recovery.data.publishedAt)
-    setRecovery(null)
+    setError("")
+    setEditorCreated(true)
+    switchMode("edit")
   }
 
-  function discardRecovery() {
-    localStorage.removeItem(storageKey)
-    setRecovery(null)
+  function changeSurface(next: "edit" | "preview") {
+    const snapshot = editorRef.current?.getMarkdown()
+    if (snapshot !== undefined) setContent(snapshot)
+    switchMode(next)
   }
 
   async function cleanupNewUploads() {
     const urls = [...uploadedUrlsRef.current]
     uploadedUrlsRef.current.clear()
-    await Promise.allSettled(
-      urls.map((url) => apiRequest("/api/upload", jsonRequest("DELETE", { url })))
-    )
+    await Promise.allSettled(urls.map((url) => apiRequest("/api/upload", jsonRequest("DELETE", { url }))))
   }
 
   async function cancel() {
-    if (dirty && !window.confirm("放弃当前未保存的修改？")) return
+    const snapshot = editorRef.current?.getMarkdown()
+    if (snapshot !== undefined) setContent(snapshot)
+    if ((snapshot !== undefined && snapshot !== draft.baseline.content || draft.dirty) &&
+      !window.confirm("放弃当前未保存的修改？")) return
+    setPending(true)
     await cleanupNewUploads()
-    localStorage.removeItem(storageKey)
-    savedRef.current = true
-    router.push("/admin/posts")
+    draft.discard()
+    setEditorCreated(false)
+    setError("")
+    setPending(false)
+    if (savedPost) { switchMode("read"); clearDocumentEditQuery() }
+    else router.push("/admin/posts")
   }
 
   async function save(status: "DRAFT" | "PUBLISHED") {
-    if (!title.trim()) {
-      setError("请输入标题")
-      return
-    }
+    if (pending) return
+    const current = { ...draft.current(), content: editorRef.current?.getMarkdown() ?? draft.current().content }
+    draft.update(current)
+    if (!current.title.trim()) { setError("请输入标题"); return }
     setPending(true)
     setError("")
     try {
       let publishIso: string | null = null
-      if (publishedAt) {
-        const date = new Date(publishedAt)
+      if (current.publishedAt) {
+        const date = new Date(current.publishedAt)
         if (Number.isNaN(date.getTime())) throw new Error("发布时间无效")
         publishIso = date.toISOString()
       }
-      const body = {
-        title,
-        content,
-        excerpt,
-        categoryId: categoryId || null,
-        seriesId: seriesId || null,
-        seriesOrder: seriesId
-          ? (seriesOrder.trim() ? Number(seriesOrder) : null)
-          : null,
-        tags: tags.split(",").map((tag) => tag.trim()).filter(Boolean),
-        status,
+      const fields = {
+        title: current.title,
+        // 未改正文时不发送 content，避免保存 metadata 顺带规范化旧格式。
+        ...(!savedPost || current.content !== draft.baseline.content ? { content: current.content } : {}),
+        excerpt: current.excerpt,
+        categoryId: current.categoryId || null,
+        seriesId: current.seriesId || null,
+        seriesOrder: current.seriesId ? (current.seriesOrder.trim() ? Number(current.seriesOrder) : null) : null,
+        tags: current.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
         publishedAt: publishIso,
       }
-      const url = post ? `/api/posts/${post.id}` : "/api/posts"
-      await apiRequest(url, jsonRequest(post ? "PUT" : "POST", body))
-      savedRef.current = true
+      const body = savedPost ? {
+        status,
+        ...Object.fromEntries(Object.entries(fields).filter(([key]) => (
+          current[key as keyof DraftData] !== draft.baseline[key as keyof DraftData] ||
+          key === "seriesOrder" && current.seriesId !== draft.baseline.seriesId
+        ))),
+      } : { ...fields, status }
+      const saved = await apiRequest<PostWithRelations>(
+        savedPost ? "/api/posts/" + savedPost.id : "/api/posts",
+        jsonRequest(savedPost ? "PUT" : "POST", body)
+      )
+      setSavedPost(saved)
+      draft.commit(draftFromPost(saved))
       uploadedUrlsRef.current.clear()
-      localStorage.removeItem(storageKey)
-      router.push("/admin/posts")
+      setEditorCreated(false)
+      switchMode("read")
+      if (!post) router.replace("/admin/posts/" + saved.id)
+      else clearDocumentEditQuery()
       router.refresh()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存失败")
@@ -246,18 +183,53 @@ export function PostForm({
     }
   }
 
+  const displayTitle = mode === "read" ? savedPost?.title : title
+  const displayTags = mode === "read" ? savedPost?.tags ?? [] : tags.split(",").map((tag) => tag.trim()).filter(Boolean)
+  const displayCategoryId = mode === "read" ? savedPost?.categoryId : categoryId
+  const displayCategory = categories.find((category) => category.id === displayCategoryId)
+  const displaySeriesId = mode === "read" ? savedPost?.seriesId : seriesId
+  const displaySeries = series.find((item) => item.id === displaySeriesId)
+
   return (
-    <div className="space-y-6">
-      {recovery && (
-        <div className="flex flex-col gap-3 rounded-lg border border-primary/30 bg-primary/5 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm">发现比服务器内容更新的本地草稿。</p>
-          <div className="flex gap-2">
-            <Button type="button" size="sm" onClick={restoreDraft}>恢复</Button>
-            <Button type="button" size="sm" variant="outline" onClick={discardRecovery}>忽略</Button>
+    <div className="admin-document min-w-0">
+      <DocumentActionBar mode={mode} dirty={draft.dirty} pending={pending} ready={draft.ready}
+        status={savedPost?.status === "PUBLISHED" ? "已发布" : "草稿"}
+        onBack={() => { if (draft.confirmLeave()) router.push("/admin/posts") }}
+        onEdit={beginEditing} onModeChange={changeSurface} onCancel={() => { void cancel() }}>
+        <Button type="button" size="sm" variant="outline" onClick={() => save("DRAFT")} disabled={locked}>
+          {savedPost?.status === "PUBLISHED" ? "撤回为草稿" : "存为草稿"}
+        </Button>
+        <Button type="button" size="sm" onClick={() => save("PUBLISHED")} disabled={locked}>
+          {savedPost?.status === "PUBLISHED" ? "更新发布" : "发布"}
+        </Button>
+      </DocumentActionBar>
+
+      {draft.recovery && <DraftRecoveryNotice
+        onRestore={() => { draft.restore(); setEditorCreated(true); setError(""); switchMode("edit") }}
+        onDiscard={() => { draft.discardRecovery(); setError("") }} />}
+      {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
+      {draft.storageError && <p role="alert" className="mb-4 text-sm text-destructive">{draft.storageError}</p>}
+
+      {mode !== "edit" && (
+        <article className="mx-auto min-w-0 max-w-3xl" id={mode === "preview" ? "document-preview" : undefined}
+          aria-label={mode === "read" ? "文章阅读" : "文章预览"}>
+          <header className="mb-8 space-y-4">
+            <p className="text-xs text-muted-foreground">{savedPost?.status === "PUBLISHED" ? "已发布文章" : "未发布草稿"}</p>
+            <h1 className="break-words text-2xl font-semibold leading-tight sm:text-3xl">{displayTitle || "未命名文章"}</h1>
+            <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
+              {displayCategory && <span className="rounded-md border border-border px-2 py-1">{displayCategory.name}</span>}
+              {displaySeries && <span className="rounded-md border border-border px-2 py-1">{displaySeries.title}</span>}
+              {displayTags.map((tag) => <span key={tag} className="rounded-md bg-muted px-2 py-1">{"#" + tag}</span>)}
+            </div>
+          </header>
+          <div className="admin-reading">
+            <ArticlePublicationPreview content={mode === "read" ? savedPost?.content ?? "" : content}
+              label={mode === "read" ? "文章正文" : "发布效果预览"} />
           </div>
-        </div>
+        </article>
       )}
 
+      <div id="document-edit" hidden={mode !== "edit"} inert={locked} className="space-y-6">
       <div className="space-y-2">
         <Label htmlFor="title">标题</Label>
         <Input
@@ -267,6 +239,7 @@ export function PostForm({
           placeholder="文章标题"
           className="text-lg"
           maxLength={200}
+          disabled={locked}
         />
       </div>
 
@@ -276,6 +249,7 @@ export function PostForm({
           <select
             id="category"
             value={categoryId}
+            disabled={locked}
             onChange={(event) => setCategoryId(event.target.value)}
             className="h-10 w-full rounded-md border border-border/50 bg-background px-3 text-sm"
           >
@@ -292,6 +266,7 @@ export function PostForm({
             value={tags}
             onChange={(event) => setTags(event.target.value)}
             placeholder="技术, 学习"
+            disabled={locked}
           />
         </div>
       </div>
@@ -302,6 +277,7 @@ export function PostForm({
           <select
             id="series"
             value={seriesId}
+            disabled={locked}
             onChange={(event) => {
               setSeriesId(event.target.value)
               if (!event.target.value) setSeriesOrder("")
@@ -324,7 +300,7 @@ export function PostForm({
             value={seriesOrder}
             onChange={(event) => setSeriesOrder(event.target.value)}
             placeholder="自动取下一位"
-            disabled={!seriesId}
+            disabled={locked || !seriesId}
           />
           <p className="text-xs text-muted-foreground">留空时自动排到末尾</p>
         </div>
@@ -335,6 +311,7 @@ export function PostForm({
         <Input
           id="publishedAt"
           type="datetime-local"
+          disabled={locked}
           value={publishedAt}
           onChange={(event) => setPublishedAt(event.target.value)}
         />
@@ -348,30 +325,20 @@ export function PostForm({
           onChange={(event) => setExcerpt(event.target.value)}
           rows={2}
           maxLength={1000}
+          disabled={locked}
         />
       </div>
 
-      <div className="space-y-2">
-        <Label>正文</Label>
-        <PostEditor
-          value={content}
-          onChange={setContent}
-          onUpload={(url) => uploadedUrlsRef.current.add(url)}
-        />
-      </div>
 
-      <ArticlePublicationPreview content={content} />
-
-      {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-
-      <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-        <Button type="button" variant="ghost" onClick={cancel} disabled={pending}>取消</Button>
-        <Button type="button" variant="outline" onClick={() => save("DRAFT")} disabled={pending}>
-          {pending ? "保存中..." : "存为草稿"}
-        </Button>
-        <Button type="button" onClick={() => save("PUBLISHED")} disabled={pending}>
-          {pending ? "保存中..." : post?.status === "PUBLISHED" ? "更新发布" : "发布"}
-        </Button>
+        <div className="space-y-2">
+          <Label>正文</Label>
+          {editorCreated && <PostEditor value={content} onChange={setContent}
+            onDocumentChange={setContent} controlRef={editorRef}
+            onUpload={(url) => uploadedUrlsRef.current.add(url)} />}
+        </div>
+        {savedPost?.status === "PUBLISHED" && (
+          <p className="text-sm text-muted-foreground">“撤回为草稿”会取消公开发布；“更新发布”保留发布状态。预览不会执行这些操作。</p>
+        )}
       </div>
     </div>
   )

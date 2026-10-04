@@ -118,6 +118,10 @@ export async function POST(request: NextRequest) {
 - 发布时间规则只改 `lib/post-policy.ts`，并同步测试首次发布、更新、退回草稿和指定时间。
 - Todo 转文章必须创建 `DRAFT`，不能直接公开发布。
 
+文章和 Idea 共用阅读、编辑、预览切换及草稿保护方式，但保留各自的正文格式和编辑器。模式切换不得写服务器或改变发布状态；文章“撤回为草稿”与“更新发布”是两个显式操作。使用 Markdown 阅读组件时禁止开启原始 HTML 执行或绕过默认安全 URL 处理。
+
+相关改动还需执行 `npm run test:editor`。真实 API 保存、刷新和私密权限验收使用 `npm run test:documents`，运行前显式设置 `DOCUMENT_TEST_DATABASE_URL`，必须指向回环地址上的可丢弃测试库及 `document_test_*` schema。此命令会迁移、创建或重置虚构测试记录，不能使用开发原库或生产库；本地测试页面使用 `127.0.0.1:3255`。截图仅使用合成内容，输出到 Git 忽略的 `backups/document-reading-qa/`，真实私人正文不得成为测试样例。
+
 涉及旧正文转换时，先执行 dry-run：
 
 ```bash
