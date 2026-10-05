@@ -8,6 +8,7 @@ import { apiRequest, jsonRequest } from "@/lib/api-client"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
+import { ideaSummary } from "@/lib/idea-summary"
 
 export interface IdeaListItem {
   id: string
@@ -23,9 +24,13 @@ function formatDate(date: Date | string) {
   return new Date(date).toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })
 }
 
-function preview(content: string) {
-  const compact = content.replace(/\s+/g, " ").trim()
-  return [...compact].slice(0, 100).join("") + ([...compact].length > 100 ? "…" : "")
+function IdeaPreview({ content }: { content: string }) {
+  const summary = ideaSummary(content)
+  return (
+    <p className="mt-2 line-clamp-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">
+      {summary || "暂无文字摘要"}
+    </p>
+  )
 }
 
 export function IdeasList({
@@ -137,11 +142,7 @@ export function IdeasList({
                   <Link href={`/admin/ideas/${idea.id}`} className="font-medium hover:underline">
                     {idea.title}
                   </Link>
-                  {preview(idea.content) && (
-                    <p className="mt-2 line-clamp-3 whitespace-pre-wrap break-words text-sm text-muted-foreground">
-                      {preview(idea.content)}
-                    </p>
-                  )}
+                  <IdeaPreview content={idea.content} />
                 </div>
                 <Link
                   href={`/admin/ideas/${idea.id}?edit=1`}

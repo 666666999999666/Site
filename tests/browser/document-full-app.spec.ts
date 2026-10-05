@@ -88,6 +88,65 @@ test("Idea real save survives refresh; cancel preserves content, owner, tags, pr
   expect((await page.request.patch(url, { headers: { Origin: origin }, data: { content: initial.content } })).status()).toBe(200)
 })
 
+test("Idea list extracts clean summaries before truncating and retains Markdown details", async ({ page }, testInfo) => {
+  await login(page)
+  const before = await integritySnapshot(page)
+  const fence = String.fromCharCode(96).repeat(3)
+  // Only synthetic records in the explicitly guarded, disposable database.
+  const markdown = [
+    "## 二级标题", "", "首段**重点**，参考[说明](https://example.test/" + "path/".repeat(100) + ")和 `file_name`。", "",
+    "### 三级标题", "", "- 列表甲", "- 列表乙", "",
+    fence + "bash", "echo " + "code_".repeat(100), fence, "",
+    "![图片描述](/og-default.png)", "", "末段 C#，a_b_c，2 < 3。",
+  ].join("\n")
+  const expected = "二级标题 首段重点，参考说明和 file_name。 三级标题 列表甲 列表乙 末段 C#，a_b_c，2 < 3。"
+  const originals = before.ideas.filter((idea: { id: string }) => ["document-test-idea-0", "document-test-idea-1", "document-test-idea-2"].includes(idea.id))
+  const update = async (id: string, content: string) => {
+    expect((await page.request.patch("/api/ideas/" + id, { headers: { Origin: origin }, data: { content } })).status()).toBe(200)
+  }
+  try {
+    await update("document-test-idea-0", markdown)
+    await update("document-test-idea-1", fence + "python\nprint(42)\n" + fence)
+    await update("document-test-idea-2", "![图片](/og-default.png)")
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 })
+      await page.goto("/admin/ideas")
+      const card = page.locator("main li").filter({ has: page.getByRole("link", { name: "长笔记演示", exact: true }) })
+      await expect(card.locator("p").first()).toHaveText(expected)
+      for (const title of ["短笔记演示 1", "短笔记演示 2"]) {
+        await expect(page.locator("main li").filter({ has: page.getByRole("link", { name: title, exact: true }) }).locator("p").first()).toHaveText("暂无文字摘要")
+      }
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+      await page.screenshot({ path: testInfo.outputPath("idea-list-" + width + ".png") })
+      await page.getByRole("link", { name: "长笔记演示", exact: true }).click()
+      const reader = page.getByRole("article", { name: "Idea 阅读" })
+      await expect(reader.getByRole("heading", { name: "二级标题" })).toBeVisible()
+      await expect(reader.getByRole("heading", { name: "三级标题" })).toBeVisible()
+      await expect(reader.locator("pre")).toContainText("code_".repeat(100))
+      await expect(reader.getByRole("img", { name: "图片描述" })).toBeVisible()
+      expect(await reader.getByRole("link", { name: "说明" }).getAttribute("href")).toContain("path/".repeat(100))
+      await page.getByRole("button", { name: "编辑", exact: true }).click()
+      await expect(page.getByRole("textbox", { name: "正文", exact: true })).toHaveValue(markdown)
+      await page.getByRole("tab", { name: "预览", exact: true }).click()
+      await expect(page.getByRole("article", { name: "Idea 预览" }).getByRole("heading", { name: "二级标题" })).toBeVisible()
+      await page.getByRole("button", { name: "取消编辑" }).click()
+      expect((await (await page.request.get("/api/ideas/document-test-idea-0")).json()).content).toBe(markdown)
+    }
+    // Search responses use the same card conversion as the initial server data.
+    await page.goto("/admin/ideas")
+    await page.getByPlaceholder("搜索标题或正文").fill("二级标题")
+    await page.getByRole("button", { name: "搜索", exact: true }).click()
+    await expect(page.locator("main li")).toHaveCount(1)
+    await expect(page.locator("main li p").first()).toHaveText(expected)
+    const after = await integritySnapshot(page)
+    expect(after.ideas).toHaveLength(12)
+    expect(after.posts).toEqual(before.posts)
+    expect(after.todos).toEqual(before.todos)
+  } finally {
+    for (const idea of originals) await update(idea.id, idea.content)
+  }
+})
+
 test("post saves the last input, refreshes into reading and keeps publishing explicit", async ({ page }) => {
   await login(page)
   const url = "/api/posts/document-test-post-published"
