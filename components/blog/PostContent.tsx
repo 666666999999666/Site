@@ -20,6 +20,7 @@ import remarkMath from "remark-math"
 import { extractHeadings, normalizeContentForDisplay, slugifyHeading } from "@/lib/content"
 import { useTheme } from "@/components/theme/ThemeProvider"
 import { Lightbox } from "./Lightbox"
+import { MarkdownTable } from "./MarkdownTable"
 
 function MermaidBlock({ code }: { code: string }) {
   const [svg, setSvg] = useState("")
@@ -132,11 +133,7 @@ const baseComponents: Components = {
     )
   },
   table({ children }) {
-    return (
-      <div className="my-6 overflow-x-auto">
-        <table className="w-full border-collapse text-sm">{children}</table>
-      </div>
-    )
+    return <MarkdownTable>{children}</MarkdownTable>
   },
   th({ children }) {
     return (
@@ -153,7 +150,7 @@ const baseComponents: Components = {
   },
   blockquote({ children }) {
     return (
-      <blockquote className="my-4 border-l-4 border-border/40 pl-4 italic text-muted-foreground">
+      <blockquote className="my-4 border-l-4 border-border/40 pl-4 text-muted-foreground">
         {children}
       </blockquote>
     )
@@ -186,7 +183,7 @@ export const PostContent = memo(function PostContent({ content }: { content: str
   return (
     <>
       <div
-        className="prose prose-neutral max-w-none dark:prose-invert
+        className="markdown-reading prose prose-neutral min-w-0 max-w-none dark:prose-invert
           prose-headings:font-sans prose-headings:text-foreground
           prose-h1:mt-8 prose-h1:mb-4 prose-h1:text-3xl
           prose-h2:mt-8 prose-h2:mb-4 prose-h2:border-b prose-h2:border-border/40 prose-h2:pb-2 prose-h2:text-2xl

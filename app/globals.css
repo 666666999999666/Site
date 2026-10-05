@@ -413,7 +413,7 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.admin-reading :is(pre, table) {
+.admin-reading pre {
   max-width: 100%;
 }
 .admin-reading pre,
@@ -446,4 +446,49 @@
 }
 .admin-document .admin-reading :is(h1, h2, h3, h4) {
   scroll-margin-top: calc(var(--document-toolbar-height, 0px) + 1rem);
+}
+
+/* Shared Markdown reading styles; editor content and source Markdown stay untouched. */
+.markdown-reading {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.markdown-reading code::before,
+.markdown-reading code::after,
+.markdown-reading blockquote p::before,
+.markdown-reading blockquote p::after {
+  content: none;
+}
+.markdown-reading blockquote {
+  font-style: normal;
+  font-weight: inherit;
+  quotes: none;
+}
+.markdown-table {
+  container-type: inline-size;
+}
+.markdown-table table {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  margin: 0;
+}
+.markdown-table :is(th, td) {
+  max-width: min(24rem, 100cqw);
+  overflow-wrap: normal;
+  word-break: normal;
+  white-space: normal;
+}
+.markdown-table :is(th, td):has(code) {
+  max-width: none;
+}
+.markdown-table code {
+  white-space: nowrap;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+@media (max-width: 1023px) {
+  .article-page .markdown-reading :is(h2, h3, h4) {
+    scroll-margin-top: 7rem;
+  }
 }

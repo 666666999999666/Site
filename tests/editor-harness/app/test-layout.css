@@ -2,3 +2,8 @@ main {
   width: min(1000px, calc(100% - 48px));
   margin: 32px auto;
 }
+/* Public-reader harness uses the actual full-width page layout. */
+.reader-layout-main {
+  width: 100%;
+  margin: 0;
+}

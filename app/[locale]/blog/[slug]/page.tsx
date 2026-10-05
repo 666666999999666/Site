@@ -139,7 +139,7 @@ export default async function PostPage({
   }
 
   return (
-    <section className="py-12">
+    <section className="article-page py-12">
       <JsonLd data={[
         articleJsonLd,
         breadcrumbJsonLd([

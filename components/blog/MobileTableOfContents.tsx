@@ -68,19 +68,22 @@ export function MobileTableOfContents({ headings }: { headings: ContentHeading[]
 
   return (
     <>
-      <button
-        ref={triggerRef}
-        type="button"
-        aria-label={t("openContents")}
-        aria-expanded={open}
-        aria-controls="mobile-article-contents"
-        onClick={() => setOpen(true)}
-        className="fixed bottom-[calc(max(1.5rem,env(safe-area-inset-bottom))+4rem)] right-[max(1.5rem,env(safe-area-inset-right))] z-40 inline-flex size-12 items-center justify-center rounded-full border border-border/70 bg-background/90 text-muted-foreground shadow-lg backdrop-blur-md transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring lg:hidden"
-      >
-        <List className="size-5" />
-      </button>
+      <div className="sticky top-14 z-40 mb-6 flex h-11 items-center border-y border-border/50 bg-background px-6 lg:hidden" data-article-tools>
+        <button
+          ref={triggerRef}
+          type="button"
+          aria-label={t("openContents")}
+          aria-expanded={open}
+          aria-controls="mobile-article-contents"
+          onClick={() => setOpen(true)}
+          className="inline-flex items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <List className="size-4" />
+          {t("contents")}
+        </button>
+      </div>
       {open && (
-        <div className="fixed inset-0 z-50 lg:hidden">
+        <div className="fixed inset-0 z-[60] lg:hidden">
           <button
             type="button"
             aria-label={t("closeContents")}

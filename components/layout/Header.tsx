@@ -5,6 +5,7 @@ import { GitHubIcon } from "@/components/icons/GitHubIcon"
 import { Link, usePathname } from "@/i18n/navigation"
 import { MobileMenu } from "./MobileMenu"
 import { ThemeToggle } from "./ThemeToggle"
+import { CatButton } from "@/components/auth/CatButton"
 
 export function Header({
   siteName,
@@ -55,6 +56,7 @@ export function Header({
         </nav>
 
         <div className="flex items-center gap-1">
+          <CatButton />
           {githubUrl && (
             <a
               href={githubUrl}
