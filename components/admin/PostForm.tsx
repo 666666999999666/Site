@@ -5,6 +5,7 @@ import { useCallback, useMemo, useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import type { Category, Post, Series } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
+import { uploadEmbeddedPostImages } from "@/lib/post-images"
 import { ArticlePublicationPreview } from "@/components/admin/ArticlePublicationPreview"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -69,6 +70,7 @@ export function PostForm({
   const [error, setError] = useState("")
   const editorRef = useRef<PostEditorHandle>(null)
   const uploadedUrlsRef = useRef(new Set<string>())
+  const embeddedUploadsRef = useRef(new Map<string, string>())
   const focusEditor = useCallback(() => editorRef.current?.focus(), [])
   const { mode, switchMode } = useDocumentPosition(!post || initiallyEditing ? "edit" : "read", focusEditor)
   const initialData = useMemo(() => draftFromPost(post), [post])
@@ -114,6 +116,7 @@ export function PostForm({
   async function cleanupNewUploads() {
     const urls = [...uploadedUrlsRef.current]
     uploadedUrlsRef.current.clear()
+    embeddedUploadsRef.current.clear()
     await Promise.allSettled(urls.map((url) => apiRequest("/api/upload", jsonRequest("DELETE", { url }))))
   }
 
@@ -134,12 +137,24 @@ export function PostForm({
 
   async function save(status: "DRAFT" | "PUBLISHED") {
     if (pending) return
-    const current = { ...draft.current(), content: editorRef.current?.getMarkdown() ?? draft.current().content }
+    let current = { ...draft.current(), content: editorRef.current?.getMarkdown() ?? draft.current().content }
     draft.update(current)
     if (!current.title.trim()) { setError("请输入标题"); return }
     setPending(true)
     setError("")
     try {
+      const content = await uploadEmbeddedPostImages(current.content, async (file) => {
+        const form = new FormData()
+        form.append("file", file)
+        const uploaded = await apiRequest<{ url: string }>("/api/upload", { method: "POST", body: form })
+        if (!uploaded?.url) throw new Error("图片上传失败")
+        uploadedUrlsRef.current.add(uploaded.url)
+        return uploaded.url
+      }, embeddedUploadsRef.current)
+      if (content !== current.content) {
+        current = { ...current, content }
+        draft.update(current)
+      }
       let publishIso: string | null = null
       if (current.publishedAt) {
         const date = new Date(current.publishedAt)
@@ -171,6 +186,7 @@ export function PostForm({
       setSavedPost(saved)
       draft.commit(draftFromPost(saved))
       uploadedUrlsRef.current.clear()
+      embeddedUploadsRef.current.clear()
       setEditorCreated(false)
       switchMode("read")
       if (!post) router.replace("/admin/posts/" + saved.id)

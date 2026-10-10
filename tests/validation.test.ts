@@ -33,18 +33,17 @@ test("post validation trims fields and requires timezone-aware dates", () => {
   }), /必须包含时区/)
 })
 
-test("post create and update preserve long Markdown within the content limit", () => {
-  const content = "用好 AI：做成事，学到东西，避免空转。\n".repeat(110_000)
-  assert.ok(content.length > 2_000_000)
+test("post create and update preserve Markdown within the content limit", () => {
+  const content = "用好 AI：做成事，学到东西，避免空转。\n".repeat(1000)
   assert.equal(validatePostCreate({ title: "长文", content }).content, content)
   assert.equal(validatePostUpdate({ content }).content, content)
 
-  const boundary = "字".repeat(10_000_000)
+  const boundary = "字".repeat(2_000_000)
   assert.equal(validatePostCreate({ title: "边界", content: boundary }).content, boundary)
   assert.equal(validatePostUpdate({ content: boundary }).content, boundary)
   for (const validate of [validatePostCreate, validatePostUpdate]) {
     assert.throws(() => validate({ title: "超限", content: boundary + "字" }),
-      /Markdown 源码最多 10000000 个字符，当前 10000001 个字符/)
+      /Markdown 源码最多 2000000 个字符，当前 2000001 个字符/)
     assert.throws(() => validate({ title: "错误类型", content: 123 }), /正文必须是字符串/)
   }
 })

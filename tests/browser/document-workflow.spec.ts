@@ -178,6 +178,41 @@ test("post saves its current snapshot and keeps publication actions explicit", a
   expect(writes[1]).not.toHaveProperty("content")
 })
 
+test("post saves pasted embedded images as uploaded URLs instead of base64", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("theme", "light"))
+  const writes = await mockSave(page, "post")
+  const uploads: string[] = []
+  await page.route("**/api/upload", async (route) => {
+    uploads.push(route.request().method())
+    await route.fulfill({ status: 200, contentType: "application/json",
+      body: JSON.stringify({ url: "/uploads/pasted-image.png" }) })
+  })
+  await page.route("**/uploads/pasted-image.png", (route) => route.fulfill({
+    contentType: "image/png",
+    body: Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64"),
+  }))
+  await page.goto("/document-workflow?kind=post&edit=1")
+  const editor = page.locator(".ProseMirror")
+  await expect(editor).toBeVisible()
+  await editor.locator("p").first().click()
+  await editor.evaluate((element) => {
+    const clipboard = new DataTransfer()
+    const image = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="
+    clipboard.setData("text/html", `<p>粘贴图片前<img src="${image}">粘贴图片后</p>`)
+    element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: clipboard, bubbles: true, cancelable: true }))
+  })
+  await page.getByRole("button", { name: "更新发布", exact: true }).click()
+  await expect(page.getByRole("article", { name: "文章阅读" })).toBeVisible()
+  expect(uploads).toEqual(["POST"])
+  expect(writes[0].content).toContain("/uploads/pasted-image.png")
+  expect(writes[0].content).not.toContain("data:image/")
+  expect(writes[0].content).toContain("粘贴图片前")
+  expect(writes[0].content).toContain("粘贴图片后")
+  await page.screenshot({ path: path.resolve("backups/document-reading-qa/embedded-image-saved-light.png") })
+  await page.evaluate(() => document.documentElement.classList.add("dark"))
+  await page.screenshot({ path: path.resolve("backups/document-reading-qa/embedded-image-saved-dark.png") })
+})
+
 test("opening the editor and preview without changes preserves the original Markdown", async ({ page }) => {
   const writes = await mockSave(page, "post")
   await page.goto("/document-workflow?kind=post&edit=1")

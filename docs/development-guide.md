@@ -113,7 +113,7 @@ export async function POST(request: NextRequest) {
 ### 4.3 修改文章或编辑器
 
 - 数据库中的 `Post.content` 始终是 Markdown。
-- 文章创建和更新允许最多 1000 万个 Markdown 源码字符（按 JavaScript 字符串长度计），超限时返回实际长度。Nginx 仅对 `/api/posts` 和 `/api/posts/:id` 放宽至 64 MiB，以容纳中文及 JSON 转义；其他接口仍为 6 MiB，单张图片仍限 5 MiB，MCP Markdown 导入仍限 2 MB。
+- 文章保存前会将 Markdown 图片引用中的 Base64 内嵌图片经 `/api/upload` 上传，并替换为站内地址；重复图片和保存重试会复用已上传地址，代码示例及普通链接保持原文。单张图片仍限 5 MiB，正文仍限 200 万个 Markdown 源码字符（按 JavaScript 字符串长度计），超限时返回实际长度。
 - 正文渲染、目录、阅读时长和上传引用继续复用 `lib/content.ts`。
 - 不在组件中增加另一套标题 slug 或 Tiptap 转换函数。
 - 发布时间规则只改 `lib/post-policy.ts`，并同步测试首次发布、更新、退回草稿和指定时间。
