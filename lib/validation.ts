@@ -231,7 +231,9 @@ function parsePost(value: JsonObject, partial: boolean): PostInput {
   }
   if (value.content !== undefined) {
     if (typeof value.content !== "string") throw new ValidationError("正文必须是字符串")
-    if (value.content.length > 2_000_000) throw new ValidationError("正文过长")
+    if (value.content.length > 10_000_000) {
+      throw new ValidationError(`正文过长：Markdown 源码最多 10000000 个字符，当前 ${value.content.length} 个字符`)
+    }
     result.content = value.content
   } else if (!partial) {
     result.content = ""
