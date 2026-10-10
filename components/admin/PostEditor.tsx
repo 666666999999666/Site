@@ -231,7 +231,7 @@ export function PostEditor({
         let embeddedImage = false
         doc.descendants((node) => {
           if ((node.type.name === "image" || node.type.name === "image-block") &&
-            typeof node.attrs.src === "string" && /^data:image\//i.test(node.attrs.src)) {
+            typeof node.attrs.src === "string" && /^data:/i.test(node.attrs.src)) {
             embeddedImage = true
           }
         })

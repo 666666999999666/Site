@@ -1,4 +1,5 @@
 import { fromMarkdown } from "mdast-util-from-markdown"
+import { detectImageExtension } from "./image-signature"
 
 interface MarkdownNode {
   type?: string
@@ -11,7 +12,7 @@ interface MarkdownNode {
 const MAX_IMAGE_BYTES = 5 * 1024 * 1024
 
 function embeddedImageFile(source: string): File {
-  const match = /^data:(image\/(?:png|jpe?g|gif|webp));base64,([a-z\d+/=]+)$/i.exec(source)
+  const match = /^data:([^,]*;base64),([a-z\d+/=]+)$/i.exec(source)
   if (!match) throw new Error("内嵌图片格式无效，请使用 JPG、PNG、GIF 或 WebP 图片")
   const padding = match[2].endsWith("==") ? 2 : match[2].endsWith("=") ? 1 : 0
   if (Math.floor(match[2].length * 3 / 4) - padding > MAX_IMAGE_BYTES) {
@@ -21,8 +22,10 @@ function embeddedImageFile(source: string): File {
   try { decoded = atob(match[2]) } catch { throw new Error("内嵌图片编码无效，请重新插入图片") }
   if (!decoded.length) throw new Error("图片为空")
   const bytes = Uint8Array.from(decoded, (character) => character.charCodeAt(0))
-  const extension = match[1].split("/")[1].replace("jpeg", "jpg")
-  return new File([bytes], `embedded-image.${extension}`, { type: match[1] })
+  const extension = detectImageExtension(bytes)
+  if (!extension) throw new Error("内嵌图片格式无效，请使用 JPG、PNG、GIF 或 WebP 图片")
+  const type = extension === "jpg" ? "image/jpeg" : `image/${extension}`
+  return new File([bytes], `embedded-image.${extension}`, { type })
 }
 
 // HTML paste can preserve an image's entire data URL in Markdown. Upload only
@@ -32,7 +35,7 @@ export async function uploadEmbeddedPostImages(
   upload: (file: File) => Promise<string>,
   uploaded = new Map<string, string>()
 ): Promise<string> {
-  if (!/data:image\//i.test(markdown)) return markdown
+  if (!/data:/i.test(markdown)) return markdown
   const direct: MarkdownNode[] = []
   const definitions = new Map<string, MarkdownNode>()
   const referenced = new Set<string>()
@@ -44,7 +47,7 @@ export async function uploadEmbeddedPostImages(
   }
   visit(fromMarkdown(markdown) as MarkdownNode)
   const images = [...direct, ...[...referenced].flatMap((key) => definitions.get(key) ?? [])]
-    .filter((node) => node.url && /^data:image\//i.test(node.url))
+    .filter((node) => node.url && /^data:/i.test(node.url))
   const edits = images.map((node) => {
     const start = node.position?.start.offset
     const end = node.position?.end.offset

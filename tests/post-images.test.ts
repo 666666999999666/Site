@@ -6,6 +6,25 @@ import { validatePostCreate } from "../lib/validation"
 const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII="
 const gif = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="
 
+test("six PNG images labeled as generic binary files are uploaded before body validation", async () => {
+  const header = Buffer.from(png.split(",")[1], "base64")
+  const content = Array.from({ length: 6 }, (_, index) => {
+    const data = Buffer.concat([header, Buffer.alloc(250_000, index)]).toString("base64")
+    return `![图片${index + 1}](data:application/octet-stream;base64,${data})`
+  }).join("\n\n")
+  assert.ok(content.length > 2_000_000)
+  let uploads = 0
+  const result = await uploadEmbeddedPostImages(content, async (file) => {
+    assert.equal(file.type, "image/png")
+    assert.equal(file.name, "embedded-image.png")
+    assert.equal(Buffer.from(await file.arrayBuffer()).subarray(0, header.length).toString("base64"), png.split(",")[1])
+    return `/uploads/generic-${++uploads}.png`
+  })
+  assert.equal(uploads, 6)
+  assert.ok(result.length < 1000)
+  assert.equal(validatePostCreate({ title: "六张图", content: result }).content, result)
+})
+
 test("embedded image upload preserves prose and code, deduplicates images and supports references", async () => {
   const uploads: File[] = []
   const markdown = `正文\n\n![一](${png} "标题")\n\n![二](${png})\n\n![三][pic]\n\n[pic]: ${gif}\n\n\`![示例](${png})\`\n\n[普通链接](${png})\n\n![站内](/uploads/existing.png)`
@@ -49,7 +68,20 @@ test("invalid and oversized embedded images fail before any uploads", async () =
   let uploads = 0
   const upload = async () => { uploads++; return "/uploads/image.png" }
   await assert.rejects(uploadEmbeddedPostImages(`![一](${png})\n\n![二](data:image/svg+xml;base64,PHN2Zz4=)`, upload), /格式无效/)
+  await assert.rejects(uploadEmbeddedPostImages("![伪装图片](data:image/png;base64,PGh0bWw+PC9odG1sPg==)", upload), /格式无效/)
+  await assert.rejects(uploadEmbeddedPostImages("![通用文件](data:application/octet-stream;base64,PGh0bWw+PC9odG1sPg==)", upload), /格式无效/)
   const oversized = "data:image/png;base64," + Buffer.alloc(5 * 1024 * 1024 + 1).toString("base64")
   await assert.rejects(uploadEmbeddedPostImages(`![大图](${oversized})`, upload), /图片过大/)
   assert.equal(uploads, 0)
+})
+
+test("image bytes determine format even when the MIME type is missing or incorrect", async () => {
+  const content = `![无类型](data:;base64,${gif.split(",")[1]})\n\n![错误类型](${png.replace("image/png", "image/jpeg")})`
+  const types: string[] = []
+  const result = await uploadEmbeddedPostImages(content, async (file) => {
+    types.push(file.type)
+    return `/uploads/image-${types.length}.${file.name.split(".").pop()}`
+  })
+  assert.deepEqual(types, ["image/gif", "image/png"])
+  assert.equal(result, "![无类型](/uploads/image-1.gif)\n\n![错误类型](/uploads/image-2.png)")
 })
