@@ -114,6 +114,7 @@ export async function POST(request: NextRequest) {
 
 - 数据库中的 `Post.content` 始终是 Markdown。
 - 文章保存前会将 Markdown 图片引用中的 Base64 内嵌图片经 `/api/upload` 上传，并替换为站内地址；重复图片和保存重试会复用已上传地址，代码示例及普通链接保持原文。单张图片仍限 5 MiB，正文仍限 200 万个 Markdown 源码字符（按 JavaScript 字符串长度计），超限时返回实际长度。
+- 保存快照发现真实图片节点含有内嵌图片时，先将编辑器当前内容序列化为 Markdown，再执行图片上传，避免恢复旧格式草稿时直接提交原始 JSON 或富文本。普通阅读、预览和无内嵌图片的 metadata 保存仍保留原始正文格式。
 - 正文渲染、目录、阅读时长和上传引用继续复用 `lib/content.ts`。
 - 不在组件中增加另一套标题 slug 或 Tiptap 转换函数。
 - 发布时间规则只改 `lib/post-policy.ts`，并同步测试首次发布、更新、退回草稿和指定时间。

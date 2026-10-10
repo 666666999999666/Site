@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import { ideaTestContent, postTestContent } from "../fixtures/document-content"
 import path from "node:path"
+import { validatePostUpdate } from "../../lib/validation"
 
 const owner = "document-test-owner"
 const ideaKey = "qz-idea-draft:" + owner + ":document-test-idea"
@@ -211,6 +212,54 @@ test("post saves pasted embedded images as uploaded URLs instead of base64", asy
   await page.screenshot({ path: path.resolve("backups/document-reading-qa/embedded-image-saved-light.png") })
   await page.evaluate(() => document.documentElement.classList.add("dark"))
   await page.screenshot({ path: path.resolve("backups/document-reading-qa/embedded-image-saved-dark.png") })
+})
+
+test("post saves six embedded images restored from a legacy draft without exceeding the body limit", async ({ page }) => {
+  const header = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64")
+  const content = JSON.stringify({ type: "doc", content: [
+    { type: "paragraph", content: [{ type: "text", text: "合成六图草稿" }] },
+    ...Array.from({ length: 6 }, (_, index) => ({ type: "image", attrs: {
+      src: "data:image/png;base64," + Buffer.concat([header, Buffer.alloc(250_000, index)]).toString("base64"),
+      alt: `图片${index + 1}`,
+    } })),
+  ] })
+  expect(content.length).toBeGreaterThan(2_000_000)
+  await page.addInitScript(({ key, content }) => {
+    localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data: {
+      title: "合成六图草稿", content, excerpt: "", categoryId: "", seriesId: "", seriesOrder: "", tags: "", publishedAt: "",
+    } }))
+  }, { key: postKey, content })
+  let uploads = 0
+  const writes: Record<string, unknown>[] = []
+  await page.route("**/api/upload", (route) => route.fulfill({ status: 200, contentType: "application/json",
+    body: JSON.stringify({ url: `/uploads/restored-image-${++uploads}.png` }) }))
+  await page.route("**/uploads/restored-image-*.png", (route) => route.fulfill({ contentType: "image/png", body: header }))
+  await page.route("**/api/posts/**", async (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>
+    try { validatePostUpdate(body) } catch (error) {
+      await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: (error as Error).message }) })
+      return
+    }
+    writes.push(body)
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      id: "document-test-post", title: "合成六图草稿", content: "", excerpt: "", categoryId: null,
+      seriesId: null, seriesOrder: null, tags: [], publishedAt: null, ...body,
+    }) })
+  })
+  await page.goto("/document-workflow?kind=post&edit=1")
+  await page.getByRole("button", { name: "恢复草稿", exact: true }).click()
+  await expect(page.locator(".ProseMirror img")).toHaveCount(6)
+  await page.getByRole("button", { name: "更新发布", exact: true }).click()
+  await expect(page.getByRole("article", { name: "文章阅读" })).toBeVisible()
+  expect(uploads).toBe(6)
+  expect(writes).toHaveLength(1)
+  expect(writes[0].content).not.toContain("data:image/")
+  expect(String(writes[0].content).length).toBeLessThan(1000)
+  expect(writes[0].content).toContain("合成六图草稿")
+  await expect(page.getByRole("article", { name: "文章阅读" }).locator("img")).toHaveCount(6)
+  await page.screenshot({ path: path.resolve("backups/document-reading-qa/six-images-saved-light.png") })
+  await page.evaluate(() => document.documentElement.classList.add("dark"))
+  await page.screenshot({ path: path.resolve("backups/document-reading-qa/six-images-saved-dark.png") })
 })
 
 test("opening the editor and preview without changes preserves the original Markdown", async ({ page }) => {

@@ -137,7 +137,7 @@ export function PostForm({
 
   async function save(status: "DRAFT" | "PUBLISHED") {
     if (pending) return
-    let current = { ...draft.current(), content: editorRef.current?.getMarkdown() ?? draft.current().content }
+    let current = { ...draft.current(), content: editorRef.current?.getMarkdownForSave() ?? draft.current().content }
     draft.update(current)
     if (!current.title.trim()) { setError("请输入标题"); return }
     setPending(true)

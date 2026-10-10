@@ -179,6 +179,7 @@ function TableInsertDialog({
  */
 export interface PostEditorHandle {
   getMarkdown: () => string
+  getMarkdownForSave: () => string
   focus: () => void
 }
 
@@ -221,17 +222,30 @@ export function PostEditor({
   // 当前编辑器内容，避免外部 value 变化时回环更新
   const currentValueRef = useRef<string>(value)
 
-  function snapshot() {
+  function snapshot(forSave = false) {
     const crepe = crepeRef.current
     if (!crepe) return currentValueRef.current
     return crepe.editor.action((ctx) => {
       const doc = ctx.get(editorViewCtx).state.doc
+      if (forSave) {
+        let embeddedImage = false
+        doc.descendants((node) => {
+          if ((node.type.name === "image" || node.type.name === "image-block") &&
+            typeof node.attrs.src === "string" && /^data:image\//i.test(node.attrs.src)) {
+            embeddedImage = true
+          }
+        })
+        // An unchanged recovered draft may still be Tiptap JSON or rich text.
+        // Serialize its visible image nodes before the Markdown upload pass.
+        if (embeddedImage) return getMarkdown()(ctx)
+      }
       return baselineDocRef.current?.eq(doc) ? rawBaselineRef.current : getMarkdown()(ctx)
     })
   }
 
   useImperativeHandle(controlRef, () => ({
     getMarkdown: snapshot,
+    getMarkdownForSave: () => snapshot(true),
     focus: () => crepeRef.current?.editor.action((ctx) => ctx.get(editorViewCtx).focus()),
   }))
 
