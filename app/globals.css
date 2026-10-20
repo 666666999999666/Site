@@ -394,6 +394,136 @@
   color: color-mix(in srgb, var(--foreground), transparent 45%);
 }
 
+/* Crepe's unlayered resets override Tailwind utilities inside NodeViews.
+ * Scope the custom image controls here so their spacing and borders survive. */
+.milkdown-editor-wrapper .milkdown .editor-image-block {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block .editor-image-caption {
+  margin: 0.5rem 0;
+  color: var(--muted-foreground);
+  font: 0.875rem/1.5 var(--font-sans);
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block .editor-image-settings {
+  margin: 0 0 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--muted);
+  color: var(--foreground);
+  font: 0.875rem/1.5 var(--font-sans);
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block .editor-image-settings:not([hidden]) {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block :is(.editor-image-settings, .editor-image-caption)[hidden] {
+  display: none;
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block .editor-image-field {
+  display: grid;
+  min-width: 0;
+  gap: 0.375rem;
+  font-weight: 500;
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block .editor-image-input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2.5rem;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  color: var(--foreground);
+  color-scheme: light;
+  font: inherit;
+  font-weight: 400;
+}
+
+.dark .milkdown-editor-wrapper .milkdown .editor-image-block .editor-image-input {
+  color-scheme: dark;
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block .editor-image-input:focus-visible {
+  outline: 2px solid var(--editor-interaction);
+  outline-offset: 2px;
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block .editor-image-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block :is(.editor-image-action, .editor-image-resize) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  color: var(--foreground);
+  font: 0.875rem/1.5 var(--font-sans);
+  cursor: pointer;
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block .editor-image-settings-toggle {
+  margin: 0.5rem 0;
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block .editor-image-action:hover {
+  background: var(--accent);
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block .editor-image-apply {
+  border-color: var(--foreground);
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block .editor-image-apply:hover {
+  background: var(--foreground);
+  opacity: 0.85;
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block .editor-image-resize {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  width: 1.75rem;
+  min-height: 1.75rem;
+  padding: 0;
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block :is(.editor-image-action, .editor-image-resize):disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block .editor-image-error {
+  color: var(--destructive);
+  overflow-wrap: anywhere;
+}
+
+.milkdown-editor-wrapper .milkdown .editor-image-block .editor-image-error:empty {
+  display: none;
+}
+
 /* Mermaid 容器：暗色模式背景 */
 .dark .milkdown-editor-wrapper .mermaid {
   background: var(--card);

@@ -43,7 +43,7 @@ const imageView: NodeViewConstructor = (initial, view, getPos, decorations, inne
 
   const resize = document.createElement("button")
   resize.type = "button"
-  resize.className = "absolute bottom-0 right-0 z-10 h-6 w-6 rounded border border-border bg-background text-foreground"
+  resize.className = "editor-image-resize"
   resize.textContent = "↔"
   resize.setAttribute("aria-label", "拖动调整图片宽度")
   resize.title = "拖动调整图片宽度；也可在图片设置中输入像素值"
@@ -51,23 +51,25 @@ const imageView: NodeViewConstructor = (initial, view, getPos, decorations, inne
   wrapper.append(resize)
 
   const caption = document.createElement("p")
-  caption.className = "my-2 text-center text-sm text-muted-foreground"
+  caption.className = "editor-image-caption"
 
   const toggle = document.createElement("button")
   toggle.type = "button"
-  toggle.className = "my-2 rounded border border-border px-3 py-1 text-sm"
+  toggle.className = "editor-image-action editor-image-settings-toggle"
   toggle.textContent = "图片设置"
   toggle.setAttribute("aria-expanded", "false")
   const panel = document.createElement("div")
-  panel.className = "mb-3 rounded border border-border bg-muted p-3 text-sm"
+  panel.className = "editor-image-settings"
   panel.hidden = true
   const makeInput = (text: string, type = "text") => {
     const label = document.createElement("label")
-    label.className = "mb-2 block"
-    label.append(document.createTextNode(text))
+    label.className = "editor-image-field"
+    const labelText = document.createElement("span")
+    labelText.textContent = text
+    label.append(labelText)
     const input = document.createElement("input")
     input.type = type
-    input.className = "ml-2 max-w-full rounded border border-input bg-background px-2 py-1"
+    input.className = "editor-image-input"
     input.setAttribute("aria-label", text)
     label.append(input)
     panel.append(label)
@@ -81,17 +83,21 @@ const imageView: NodeViewConstructor = (initial, view, getPos, decorations, inne
   const altInput = makeInput("替代文本")
   const captionInput = makeInput("图片说明")
   const error = document.createElement("p")
+  error.className = "editor-image-error"
   error.setAttribute("role", "alert")
   panel.append(error)
   const apply = document.createElement("button")
   apply.type = "button"
-  apply.className = "mr-2 rounded border border-border px-3 py-1"
+  apply.className = "editor-image-action editor-image-apply"
   apply.textContent = "应用图片设置"
   const cancel = document.createElement("button")
   cancel.type = "button"
-  cancel.className = "rounded border border-border px-3 py-1"
+  cancel.className = "editor-image-action"
   cancel.textContent = "取消图片设置"
-  panel.append(apply, cancel)
+  const actions = document.createElement("div")
+  actions.className = "editor-image-actions"
+  actions.append(apply, cancel)
+  panel.append(actions)
   dom.append(wrapper, caption, toggle, panel)
 
   function displayWidth(width: number | undefined) {

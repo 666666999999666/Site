@@ -192,3 +192,91 @@ test("external replacement and cancelling edits work for an image-only document"
   expect(await page.getByTestId("markdown-output").textContent()).toBe(saved)
   expect(errors).toEqual([])
 })
+
+for (const width of [390, 1440]) {
+  for (const theme of ["light", "dark"]) {
+    test(`image settings retain their layout and contrast against Crepe resets at ${width}px in ${theme}`, async ({ page }, testInfo) => {
+      await page.setViewportSize({ width, height: 900 })
+      await openImages(page)
+      await page.evaluate((dark) => document.documentElement.classList.toggle("dark", dark), theme === "dark")
+      const block = page.locator(".editor-image-block").first()
+      await block.getByRole("button", { name: "图片设置", exact: true }).click()
+      const panel = block.locator(".editor-image-settings")
+      await expect(panel).toBeVisible()
+      const panelBox = (await panel.boundingBox())!
+      const panelStyles = await panel.evaluate((element) => {
+        const style = getComputedStyle(element)
+        return { padding: parseFloat(style.paddingTop), border: parseFloat(style.borderTopWidth) }
+      })
+      expect(panelStyles.padding).toBeGreaterThanOrEqual(12)
+      expect(panelStyles.border).toBeGreaterThanOrEqual(1)
+
+      for (const field of await panel.locator(".editor-image-field").all()) {
+        const labelBox = (await field.locator("span").boundingBox())!
+        const input = field.locator("input")
+        const inputBox = (await input.boundingBox())!
+        // The label owns a separate row, and the field fills the panel instead
+        // of relying on a browser's narrow default inline input width.
+        expect(inputBox.y).toBeGreaterThanOrEqual(labelBox.y + labelBox.height + 5)
+        expect(inputBox.width).toBeGreaterThan(panelBox.width * 0.8)
+        expect(inputBox.x).toBeGreaterThanOrEqual(panelBox.x + 10)
+        expect(inputBox.x + inputBox.width).toBeLessThanOrEqual(panelBox.x + panelBox.width - 10)
+        const inputStyles = await input.evaluate((element) => {
+          const style = getComputedStyle(element)
+          return { padding: parseFloat(style.paddingTop), border: parseFloat(style.borderTopWidth) }
+        })
+        expect(inputStyles.padding).toBeGreaterThanOrEqual(8)
+        expect(inputStyles.border).toBeGreaterThanOrEqual(1)
+      }
+
+      const buttons = panel.getByRole("button")
+      const buttonBoxes = []
+      for (const button of await buttons.all()) {
+        const box = (await button.boundingBox())!
+        buttonBoxes.push(box)
+        expect(box.height).toBeGreaterThanOrEqual(36)
+        expect(box.x).toBeGreaterThanOrEqual(panelBox.x + 10)
+        expect(box.x + box.width).toBeLessThanOrEqual(panelBox.x + panelBox.width - 10)
+        await expect(button).toHaveCSS("padding-left", "12px")
+        await expect(button).toHaveCSS("border-top-width", "1px")
+      }
+      const [applyBox, cancelBox] = buttonBoxes
+      expect(cancelBox.y >= applyBox.y + applyBox.height + 7 || cancelBox.x >= applyBox.x + applyBox.width + 7).toBe(true)
+
+      const contrasts = await panel.evaluate((element) => {
+        const canvas = document.createElement("canvas")
+        canvas.width = canvas.height = 1
+        const context = canvas.getContext("2d")!
+        const luminance = (color: string) => {
+          context.clearRect(0, 0, 1, 1)
+          context.fillStyle = color
+          context.fillRect(0, 0, 1, 1)
+          const rgb = Array.from(context.getImageData(0, 0, 1, 1).data).slice(0, 3).map((channel) => {
+            const value = channel / 255
+            return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+          })
+          return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722
+        }
+        const ratio = (foreground: string, background: string) => {
+          const first = luminance(foreground), second = luminance(background)
+          return (Math.max(first, second) + 0.05) / (Math.min(first, second) + 0.05)
+        }
+        const panelStyle = getComputedStyle(element)
+        const labels = ratio(panelStyle.color, panelStyle.backgroundColor)
+        const controls = Array.from(element.querySelectorAll("input, button"), (control) => {
+          const style = getComputedStyle(control)
+          return ratio(style.color, style.backgroundColor)
+        })
+        return { labels, controls }
+      })
+      expect(contrasts.labels).toBeGreaterThanOrEqual(4.5)
+      for (const contrast of contrasts.controls) expect(contrast).toBeGreaterThanOrEqual(4.5)
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+      const screenshot = testInfo.outputPath(`image-settings-${width}-${theme}.png`)
+      await panel.screenshot({ path: screenshot })
+      await testInfo.attach("image-settings", { path: screenshot, contentType: "image/png" })
+      await panel.getByRole("button", { name: "取消图片设置", exact: true }).click()
+      await expect(panel).toBeHidden()
+    })
+  }
+}
