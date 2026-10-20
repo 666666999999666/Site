@@ -25,7 +25,7 @@ RUN set -eu; \
         "https://${mirror}/alpine/${alpine_branch}/main" \
         "https://${mirror}/alpine/${alpine_branch}/community" \
         > /etc/apk/repositories; \
-      if apk add --no-cache bash coreutils git postgresql16 postgresql16-client su-exec; then \
+      if apk add --no-cache bash coreutils git tar postgresql16 postgresql16-client su-exec; then \
         exit 0; \
       fi; \
       sleep 2; \
