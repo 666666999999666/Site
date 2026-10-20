@@ -15,7 +15,8 @@ test("Daily debounce and stale save cannot overwrite a newer draft; blur flushes
   const pending: Route[] = []
   await page.route("**/api/daily/tasks/1", (route) => { pending.push(route) })
   await open(page, "Daily")
-  await page.clock.install()
+  await page.clock.install({ time: new Date("2026-10-20T04:00:00Z") })
+  await page.clock.pauseAt(new Date("2026-10-20T04:01:00Z"))
   const title = page.getByRole("textbox", { name: "第 1 件事", exact: true })
   await title.fill("First")
   await page.clock.runFor(499)
