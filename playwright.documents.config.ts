@@ -19,9 +19,7 @@ export default defineConfig({
       : { channel: "chrome" }),
   } }],
   webServer: {
-    command: process.env.PLAYWRIGHT_FULL_APP_PRODUCTION === "1"
-      ? "node node_modules/next/dist/bin/next build --webpack && node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3255"
-      : "node node_modules/next/dist/bin/next dev --webpack -H 127.0.0.1 -p 3255",
+    command: "node node_modules/next/dist/bin/next dev --webpack -H 127.0.0.1 -p 3255",
     url: baseURL,
     reuseExistingServer: false,
     timeout: 300_000,
