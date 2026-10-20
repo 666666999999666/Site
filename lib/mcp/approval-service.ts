@@ -229,6 +229,24 @@ async function existingExecution(approvalId: string, toolName: string) {
   return resultObject(execution.resultSummary)
 }
 
+async function markApprovalExecuted(
+  database: Pick<Prisma.TransactionClient, "mcpApproval">,
+  approvalId: string,
+  result: JsonSummary
+) {
+  return database.mcpApproval.update({
+    where: { id: approvalId },
+    data: {
+      status: "APPROVED",
+      resultSummary: jsonValue(result),
+      reviewedAt: new Date(),
+      executedAt: new Date(),
+      processingAt: null,
+      executionError: null,
+    },
+  })
+}
+
 async function runDatabaseExecution(
   approvalId: string,
   toolName: string,
@@ -241,17 +259,7 @@ async function runDatabaseExecution(
         throw new PermissionError("审批执行记录与 tool 不匹配")
       }
       const result = resultObject(existing.resultSummary)
-      await transaction.mcpApproval.update({
-        where: { id: approvalId },
-        data: {
-          status: "APPROVED",
-          resultSummary: jsonValue(result),
-          reviewedAt: new Date(),
-          executedAt: new Date(),
-          processingAt: null,
-          executionError: null,
-        },
-      })
+      await markApprovalExecuted(transaction, approvalId, result)
       return { result, reused: true }
     }
 
@@ -263,17 +271,7 @@ async function runDatabaseExecution(
         resultSummary: jsonValue(result),
       },
     })
-    await transaction.mcpApproval.update({
-      where: { id: approvalId },
-      data: {
-        status: "APPROVED",
-        resultSummary: jsonValue(result),
-        reviewedAt: new Date(),
-        executedAt: new Date(),
-        processingAt: null,
-        executionError: null,
-      },
-    })
+    await markApprovalExecuted(transaction, approvalId, result)
     return { result, reused: false }
   })
 }
@@ -286,17 +284,7 @@ async function dispatchApproval(
   const payload = actionPayloadSchema.parse(payloadValue)
   const completed = await existingExecution(approvalId, toolName)
   if (completed) {
-    await prisma.mcpApproval.update({
-      where: { id: approvalId },
-      data: {
-        status: "APPROVED",
-        resultSummary: jsonValue(completed),
-        reviewedAt: new Date(),
-        executedAt: new Date(),
-        processingAt: null,
-        executionError: null,
-      },
-    })
+    await markApprovalExecuted(prisma, approvalId, completed)
     if (payload.kind === "create_draft_from_staged_markdown") {
       const { cleanupStagedImportBundle } = await import("./import-staging-service")
       await cleanupStagedImportBundle(payload.bundleId, true).catch((error) => {

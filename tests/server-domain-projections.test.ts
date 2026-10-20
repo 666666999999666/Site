@@ -94,8 +94,8 @@ test("Question list projects only allowed fields while owner detail retains refe
   })
   const result = await service.listQuestions("owner", { page: 1 }, at)
   const detail = service.questionView(question as never)
-  assert.equal(detail.referenceAnswerMarkdown, secret)
-  const { referenceAnswerMarkdown: _answer, ...safeDetail } = detail
+  const { referenceAnswerMarkdown, ...safeDetail } = detail
+  assert.equal(referenceAnswerMarkdown, secret)
   assert.deepEqual(result.items, [safeDetail])
   assert.deepEqual(Object.keys(result.items[0]).sort(), ["id", "promptMarkdown", "enabled", "ready", "state", "dueAt", "newQueueAt", "latestRating", "contentVersion", "scheduleVersion", "createdAt", "updatedAt"].sort())
   assert.equal(JSON.stringify(result).includes(secret), false)

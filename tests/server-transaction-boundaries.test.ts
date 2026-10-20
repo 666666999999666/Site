@@ -79,7 +79,7 @@ for (const mode of ["new", "replay", "transaction-replay", "mismatched-tool", "w
     }
     const approval = {
       id: "approval", toolName: "create_category", status: "PENDING_APPROVAL", credentialId: "credential",
-      requiredScope: "taxonomy:write", expiresAt: new Date(Date.now() + 60_000),
+      requiredScope: "category:create", expiresAt: new Date(Date.now() + 60_000),
       credential: { revokedAt: null }, payload: { kind: "create_category", input: { name: "name", type: "BLOG" } },
     }
     const prisma = {
@@ -106,7 +106,7 @@ for (const mode of ["new", "replay", "transaction-replay", "mismatched-tool", "w
       } },
       "../posts": {}, "../todos": {}, "../validation": { validateCategoryCreate: (value: unknown) => value },
       "./audit-service": { recordMcpAudit: async () => {}, errorDetails: (error: Error) => ({ message: error.message }) },
-      "./credential-service": { MCP_SCOPES: ["taxonomy:write"], requireMcpScope: () => {} },
+      "./credential-service": { MCP_SCOPES: ["category:create"], requireMcpScope: () => {} },
       "./deletion-policy": {},
     })
     if (mode === "mismatched-tool") {
