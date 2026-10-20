@@ -33,6 +33,8 @@ for f in ops/*.sh; do bash -n "$f" || exit; done
 
 ## 明确未验证的边界
 
+实际镜像构建受环境限制阻塞：当前没有 Docker/Podman daemon/socket；官方 BuildKit v0.34.0 的 rootless/native-snapshotter 启动在任何镜像构建前退出 1，报 `failed to create unix socket on /tmp/qz-buildkit.sock: listen unix /tmp/qz-buildkit.sock: socket: operation not permitted`。未尝试替换监听方式或绕过权限。source manifest 打包已独立验证，但实际镜像未构建，因此容器部署和真实数据库恢复不能据此标为通过。
+
 Docker、Git 及 smoke/prepare 依赖在执行测试中为 mocks；tar/hash 为真实工具。此次不是实际 Docker/Compose、PostgreSQL 恢复或完整 deploy.sh 的端到端演练。实际网络、DNS/TLS、镜像仓库凭证、生产容量、Cron 权限和生产数据兼容性均未测试。候选迁移 gate 的现有测试为脚本合同检查，不等同真实数据库迁移成功。
 
 ## 目标环境上线检查单（尚未执行）
