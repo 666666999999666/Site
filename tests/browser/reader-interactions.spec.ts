@@ -179,7 +179,8 @@ test("unavailable Clipboard API uses a verified fallback with exact text and res
   await expect(page.locator("textarea")).toHaveCount(0)
 })
 
-test("touch gestures pan the original-size image in both directions", async ({ browser }) => {
+test("touch gestures pan the original-size image in both directions", async ({ browser, browserName }) => {
+  test.skip(browserName !== "chromium", "This touch-input regression requires Chromium's CDP Input.dispatchTouchEvent.")
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true })
   const page = await context.newPage()
   try {
