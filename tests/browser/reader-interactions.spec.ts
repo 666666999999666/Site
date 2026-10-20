@@ -192,13 +192,21 @@ test("touch gestures pan the original-size image in both directions", async ({ b
     const client = await context.newCDPSession(page)
     const x = bounds.x + bounds.width * 0.75
     const y = bounds.y + bounds.height * 0.65
-    await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] })
-    for (let step = 1; step <= 8; step += 1) {
-      await client.send("Input.dispatchTouchEvent", {
-        type: "touchMove", touchPoints: [{ x: x - step * 20, y: y - step * 30 }],
-      })
+    expect(await viewport.evaluate((element) => element.scrollLeft)).toBe(0)
+    expect(await viewport.evaluate((element) => element.scrollTop)).toBe(0)
+    // Native Chromium locks a diagonal gesture to its dominant axis. Verify
+    // both pan directions with separate real touch gestures, not one diagonal.
+    for (const [dx, dy] of [[20, 0], [0, 30]]) {
+      await client.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] })
+      for (let step = 1; step <= 8; step += 1) {
+        await client.send("Input.dispatchTouchEvent", {
+          type: "touchMove", touchPoints: [{ x: x - step * dx, y: y - step * dy }],
+        })
+      }
+      await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
+      await expect.poll(() => viewport.evaluate((element, horizontal) =>
+        horizontal ? element.scrollLeft : element.scrollTop, dx !== 0)).toBeGreaterThan(0)
     }
-    await client.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
     await expect.poll(() => viewport.evaluate((element) => element.scrollLeft)).toBeGreaterThan(0)
     await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
     await expect(dialog).toBeVisible()
