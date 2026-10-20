@@ -16,7 +16,7 @@ export default function ImageWorkflowHarness() {
   return (
     <main className="admin-document min-w-0">
       <div className="sticky top-0 z-50 flex flex-wrap gap-3 bg-background p-3">
-        <button onClick={() => { const next = editor.current!.getMarkdownForSave(); setValue(next); setSaved(next) }}>保存正文</button>
+        <button onClick={async () => { const next = await editor.current!.getMarkdownForSave(); setValue(next); setSaved(next) }}>保存正文</button>
         <button onClick={() => { setValue(saved); setGeneration((key) => key + 1); setPreview(false) }}>重新打开</button>
         <button onClick={() => setValue(saved)}>取消正文修改</button>
         <button onClick={() => { setValue(imageOnly); setSaved(imageOnly) }}>切换为单图文档</button>

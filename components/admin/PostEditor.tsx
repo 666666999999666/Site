@@ -22,6 +22,7 @@ import "@milkdown/crepe/theme/common/style.css"
 import "@milkdown/crepe/theme/frame.css"
 import { normalizeContent } from "@/lib/content"
 import { clampEditorSelectionPosition } from "@/lib/editor-selection"
+import { EditorImageUploads } from "@/lib/editor-image-uploads"
 import { configureImagePresentation, imagePresentationView } from "./editor-image"
 import { Button } from "@/components/ui/button"
 import {
@@ -181,7 +182,7 @@ function TableInsertDialog({
  */
 export interface PostEditorHandle {
   getMarkdown: () => string
-  getMarkdownForSave: () => string
+  getMarkdownForSave: () => Promise<string>
   focus: () => void
 }
 
@@ -207,6 +208,7 @@ export function PostEditor({
   const baselineDocRef = useRef<ProseNode | null>(null)
   const synchronizingRef = useRef(false)
   const loadingRef = useRef(false)
+  const imageUploadsRef = useRef<EditorImageUploads | null>(null)
   const tableDialogTimerRef = useRef<number | null>(null)
   const [tableDialogOpen, setTableDialogOpen] = useState(false)
 
@@ -223,6 +225,17 @@ export function PostEditor({
 
   // 当前编辑器内容，避免外部 value 变化时回环更新
   const currentValueRef = useRef<string>(value)
+
+  function imageState(doc: ProseNode) {
+    const urls = new Set<string>()
+    let hasEmptyImage = false
+    doc.descendants((node) => {
+      if (node.type.name !== "image" && node.type.name !== "image-block") return
+      if (typeof node.attrs.src === "string" && node.attrs.src.trim()) urls.add(node.attrs.src)
+      else hasEmptyImage = true
+    })
+    return { urls, hasEmptyImage }
+  }
 
   function snapshot(forSave = false) {
     const crepe = crepeRef.current
@@ -247,7 +260,12 @@ export function PostEditor({
 
   useImperativeHandle(controlRef, () => ({
     getMarkdown: snapshot,
-    getMarkdownForSave: () => snapshot(true),
+    getMarkdownForSave: async () => {
+      await imageUploadsRef.current?.wait()
+      const hasEmptyImage = crepeRef.current?.editor.action((ctx) => imageState(ctx.get(editorViewCtx).state.doc).hasEmptyImage)
+      if (hasEmptyImage) throw new Error("图片尚未上传成功，请重新选择文件或删除空图片块后保存")
+      return snapshot(true)
+    },
     focus: () => crepeRef.current?.editor.action((ctx) => ctx.get(editorViewCtx).focus()),
   }))
 
@@ -263,6 +281,8 @@ export function PostEditor({
     if (!divRef.current) return
     if (loadingRef.current) return
     loadingRef.current = true
+    const imageUploads = new EditorImageUploads()
+    imageUploadsRef.current = imageUploads
     let cancelled = false
     const controlObserver = new MutationObserver(() => {
       if (divRef.current) enhanceEditorControls(divRef.current)
@@ -281,17 +301,37 @@ export function PostEditor({
         },
         [Crepe.Feature.ImageBlock]: {
           onUpload: async (file: File) => {
-            const fd = new FormData()
-            fd.append("file", file)
-            const res = await fetch("/api/upload", {
-              method: "POST",
-              body: fd,
-            })
-            const payload = await res.json().catch(() => ({})) as { url?: string; error?: string }
-            if (!res.ok || !payload.url) throw new Error(payload.error || "图片上传失败")
-            const url = payload.url
-            onUploadRef.current?.(url)
-            return url
+            // Crepe keeps this input until it receives the uploaded URL. Its
+            // removal therefore identifies a cancelled target, even when other
+            // empty image blocks remain in the document.
+            const input = Array.from(divRef.current?.querySelectorAll<HTMLInputElement>('input[type="file"]') ?? [])
+              .find((element) => element.files?.[0] === file)
+            const controller = new AbortController()
+            const upload = imageUploads.begin(() => controller.abort())
+            try {
+              const fd = new FormData()
+              fd.append("file", file)
+              const res = await fetch("/api/upload", {
+                method: "POST",
+                body: fd,
+                signal: controller.signal,
+              })
+              const payload = await res.json().catch(() => ({})) as { url?: string; error?: string }
+              if (!res.ok || !payload.url) throw new Error(payload.error || "图片上传失败")
+              const url = payload.url
+              onUploadRef.current?.(url)
+              if (input && !input.isConnected) {
+                upload.cancel()
+                return ""
+              }
+              // Return first: Crepe writes this URL in its .then callback. The
+              // document plugin below acknowledges that actual transaction.
+              return upload.received(url) ? url : ""
+            } catch (error) {
+              if (upload.cancelled) return ""
+              upload.failed(error)
+              throw error
+            }
           },
         },
         [Crepe.Feature.Placeholder]: {
@@ -342,7 +382,10 @@ export function PostEditor({
       .use($prose(() => new Plugin({
         view: () => ({
           update(view, previous) {
-            if (synchronizingRef.current || view.state.doc.eq(previous.doc) || !onDocumentChangeRef.current) return
+            if (view.state.doc.eq(previous.doc)) return
+            const images = imageState(view.state.doc)
+            imageUploads.acknowledge(images.urls, images.hasEmptyImage)
+            if (synchronizingRef.current || !onDocumentChangeRef.current) return
             const markdown = snapshot()
             currentValueRef.current = markdown
             onDocumentChangeRef.current(markdown)
@@ -366,6 +409,7 @@ export function PostEditor({
 
     return () => {
       cancelled = true
+      imageUploads.dispose()
       controlObserver.disconnect()
       if (tableDialogTimerRef.current !== null) {
         window.clearTimeout(tableDialogTimerRef.current)

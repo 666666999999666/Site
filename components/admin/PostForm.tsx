@@ -42,6 +42,7 @@ export function PostForm({
   const [savedPost, setSavedPost] = useState(post)
   const [editorCreated, setEditorCreated] = useState(!post || initiallyEditing)
   const [pending, setPending] = useState(false)
+  const savingRef = useRef(false)
   const [error, setError] = useState("")
   const [publicationReview, setPublicationReview] = useState<PublicationReview | null>(null)
   const [reviewedToken, setReviewedToken] = useState("")
@@ -127,13 +128,15 @@ export function PostForm({
   }
 
   async function save(status: "DRAFT" | "PUBLISHED") {
-    if (pending) return
-    let current = { ...draft.current(), content: editorRef.current?.getMarkdownForSave() ?? draft.current().content }
-    draft.update(current)
-    if (!current.title.trim()) { setError("请输入标题"); return }
+    if (pending || savingRef.current) return
+    savingRef.current = true
     setPending(true)
     setError("")
     try {
+      const editorContent = await editorRef.current?.getMarkdownForSave()
+      let current = { ...draft.current(), content: editorContent ?? draft.current().content }
+      draft.update(current)
+      if (!current.title.trim()) { setError("请输入标题"); return }
       const content = await uploadEmbeddedPostImages(current.content, async (file) => {
         const form = new FormData()
         form.append("file", file)
@@ -177,6 +180,7 @@ export function PostForm({
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存失败")
     } finally {
+      savingRef.current = false
       setPending(false)
     }
   }
