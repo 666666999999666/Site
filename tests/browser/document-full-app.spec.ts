@@ -170,7 +170,7 @@ test("post saves the last input, refreshes into reading and keeps publishing exp
   await page.getByRole("tab", { name: "预览", exact: true }).click()
   expect((await (await page.request.get(url)).json()).status).toBe("PUBLISHED")
   await page.getByRole("button", { name: "撤回为草稿", exact: true }).click()
-  await expect(page.getByRole("status")).toHaveText("草稿")
+  await expect(page.locator('[aria-label="文档操作"]').getByRole("status")).toHaveText("草稿")
   expect((await (await page.request.get(url)).json()).status).toBe("DRAFT")
   expect((await page.request.put(url, { headers: { Origin: origin }, data: {
     content: initial.content, status: initial.status, publishedAt: initial.publishedAt,
