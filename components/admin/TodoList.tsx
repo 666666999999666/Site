@@ -7,6 +7,7 @@ import type { Category, Post, Project, Todo, TodoSubtask } from "@/lib/generated
 import { apiRequest, jsonRequest } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 import { CategoryManager } from "./CategoryManager"
+import { dueDateInput, editableTodoSubtasks, filterTodos, todoMutationInput, type EditableSubtask, type StatusFilter } from "./todo-model"
 import { reconcileCategoryItems, useCategories } from "./useCategories"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,14 +19,6 @@ type TodoWithRelations = Todo & {
   project: Project | null
   subtasks: TodoSubtask[]
 }
-type EditableSubtask = {
-  id?: string
-  clientId: string
-  title: string
-  completed: boolean
-}
-type StatusFilter = "TODO" | "DONE" | "ALL"
-
 // #29: 用 useSyncExternalStore 在 hydration 后读取 localStorage 记住的新建分类，
 // 避免 useState 初始化访问 localStorage 导致 hydration mismatch，
 // 也避免 useEffect 里 setState 触发 react-hooks/set-state-in-effect lint。
@@ -46,18 +39,6 @@ function getTodoCategorySnapshot(): string {
 
 function getTodoCategoryServerSnapshot(): string {
   return ""
-}
-
-function dueDateInput(value: Date | string | null): string {
-  if (!value) return ""
-  const date = new Date(value)
-  const offset = date.getTimezoneOffset() * 60_000
-  return new Date(date.getTime() - offset).toISOString().slice(0, 10)
-}
-
-function dueDateIso(value: string): string | null {
-  if (!value) return null
-  return new Date(`${value}T12:00:00`).toISOString()
 }
 
 function priorityLabel(priority: number) {
@@ -217,23 +198,10 @@ export function TodoList({
     }
   }
 
-  const filteredTodos = useMemo(() => {
-    const normalizedQuery = query.trim().toLocaleLowerCase()
-    return todos
-      .filter((todo) => !activeGroupId || todo.categoryId === activeGroupId)
-      .filter((todo) => statusFilter === "ALL" || todo.status === statusFilter)
-      .filter((todo) => {
-        if (!normalizedQuery) return true
-        return `${todo.title}\n${todo.description || ""}\n${todo.completionCriteria || ""}\n${todo.project?.title || ""}\n${todo.subtasks.map((subtask) => subtask.title).join("\n")}`
-          .toLocaleLowerCase()
-          .includes(normalizedQuery)
-      })
-      .sort((a, b) => {
-        if (a.status !== b.status) return a.status === "TODO" ? -1 : 1
-        if (a.priority !== b.priority) return (b.priority ?? -1) - (a.priority ?? -1)
-        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-      })
-  }, [activeGroupId, query, statusFilter, todos])
+  const filteredTodos = useMemo(
+    () => filterTodos(todos, activeGroupId, statusFilter, query),
+    [activeGroupId, query, statusFilter, todos]
+  )
 
   return (
     <div className="flex flex-col gap-6 lg:flex-row">
@@ -371,12 +339,7 @@ function TodoItem({
   const [priority, setPriority] = useState(todo.priority === null ? "" : String(todo.priority))
   const [dueDate, setDueDate] = useState(dueDateInput(todo.dueDate))
   const [completionCriteria, setCompletionCriteria] = useState(todo.completionCriteria || "")
-  const [subtasks, setSubtasks] = useState<EditableSubtask[]>(() => todo.subtasks.map((subtask) => ({
-    id: subtask.id,
-    clientId: subtask.id,
-    title: subtask.title,
-    completed: subtask.completed,
-  })))
+  const [subtasks, setSubtasks] = useState<EditableSubtask[]>(() => editableTodoSubtasks(todo.subtasks))
   const [error, setError] = useState("")
   const [copiedId, setCopiedId] = useState(false)
   const done = todo.status === "DONE"
@@ -389,12 +352,7 @@ function TodoItem({
     setPriority(todo.priority === null ? "" : String(todo.priority))
     setDueDate(dueDateInput(todo.dueDate))
     setCompletionCriteria(todo.completionCriteria || "")
-    setSubtasks(todo.subtasks.map((subtask) => ({
-      id: subtask.id,
-      clientId: subtask.id,
-      title: subtask.title,
-      completed: subtask.completed,
-    })))
+    setSubtasks(editableTodoSubtasks(todo.subtasks))
     setError("")
     setEditing(true)
   }
@@ -405,23 +363,9 @@ function TodoItem({
       return
     }
     try {
-      await onSave({
-        title,
-        description: description || null,
-        categoryId: categoryId || null,
-        projectId: projectId || null,
-        priority: priority === "" ? null : Number(priority),
-        dueDate: dueDateIso(dueDate),
-        completionCriteria: completionCriteria || null,
-        subtasks: subtasks
-          .filter((subtask) => subtask.title.trim())
-          .map((subtask, index) => ({
-            ...(subtask.id ? { id: subtask.id } : {}),
-            title: subtask.title,
-            completed: subtask.completed,
-            sortOrder: index,
-          })),
-      })
+      await onSave(todoMutationInput({
+        title, description, categoryId, projectId, priority, dueDate, completionCriteria, subtasks,
+      }))
       setEditing(false)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "保存失败")

@@ -248,3 +248,71 @@ test("series create and update retain slug differences, failed drafts and succes
   await expect(page.getByRole("textbox", { name: "系列 slug", exact: true })).toHaveCount(0)
   await expect(page.getByText("0 · /edited-slug", { exact: true })).toBeVisible()
 })
+
+test("Todo edit cancellation rehydrates persisted fields and sends no mutation", async ({ page }) => {
+  const writes: unknown[] = []
+  await page.route("**/api/todos/**", async (route) => {
+    writes.push(route.request().postDataJSON())
+    await route.fulfill({ status: 500, json: { error: "Unexpected mutation" } })
+  })
+  await openResource(page, "TODO")
+  const row = item(page, "TODO", "Alpha")
+  await row.getByRole("button", { name: "编辑：Todo Alpha", exact: true }).click()
+  await row.getByRole("textbox", { name: "标题", exact: true }).fill("Unsaved title")
+  await row.getByRole("textbox", { name: "描述", exact: true }).fill("Unsaved description")
+  await row.getByRole("combobox", { name: "优先级", exact: true }).selectOption("2")
+  await row.getByRole("button", { name: "添加子任务", exact: true }).click()
+  await row.getByRole("textbox", { name: "子任务 1 标题", exact: true }).fill("Unsaved subtask")
+  await row.getByRole("button", { name: "取消", exact: true }).click()
+  await row.getByRole("button", { name: "编辑：Todo Alpha", exact: true }).click()
+  await expect(row.getByRole("textbox", { name: "标题", exact: true })).toHaveValue("Todo Alpha")
+  await expect(row.getByRole("textbox", { name: "描述", exact: true })).toHaveValue("")
+  await expect(row.getByRole("combobox", { name: "优先级", exact: true })).toHaveValue("0")
+  await expect(row.getByRole("textbox", { name: "子任务 1 标题", exact: true })).toHaveCount(0)
+  expect(writes).toEqual([])
+})
+
+test("Todo save preserves failed input then commits normalized subtasks and searchable text", async ({ page }) => {
+  const writes: Record<string, unknown>[] = []
+  let fail = true
+  await page.route("**/api/todos/todo-category-a", async (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>
+    writes.push(body)
+    await route.fulfill(fail ? { status: 500, json: { error: "Todo save rejected" } } : { json: {
+      id: "todo-category-a", status: "TODO", createdAt: "2026-10-20T00:00:00Z",
+      updatedAt: "2026-10-20T00:00:00Z", category: null, project: null, ...body,
+      subtasks: (body.subtasks as Record<string, unknown>[]).map((subtask, index) => ({ ...subtask, id: `saved-${index}` })),
+    } })
+  })
+  await openResource(page, "TODO")
+  const row = item(page, "TODO", "Alpha")
+  await row.getByRole("button", { name: "编辑：Todo Alpha", exact: true }).click()
+  await row.getByRole("textbox", { name: "描述", exact: true }).fill("Searchable description")
+  await row.getByRole("combobox", { name: "分区", exact: true }).selectOption("")
+  await row.getByRole("combobox", { name: "优先级", exact: true }).selectOption("")
+  await row.getByRole("button", { name: "添加子任务", exact: true }).click()
+  await row.getByRole("textbox", { name: "子任务 1 标题", exact: true }).fill("   ")
+  await row.getByRole("button", { name: "添加子任务", exact: true }).click()
+  await row.getByRole("textbox", { name: "子任务 2 标题", exact: true }).fill("  kept subtask  ")
+  await row.getByRole("checkbox", { name: "子任务 2 完成状态", exact: true }).check()
+  await row.getByRole("button", { name: "保存", exact: true }).click()
+  await expect(row.getByRole("alert")).toHaveText("Todo save rejected")
+  await expect(row.getByRole("textbox", { name: "描述", exact: true })).toHaveValue("Searchable description")
+  await expect(row.getByRole("textbox", { name: "子任务 2 标题", exact: true })).toHaveValue("  kept subtask  ")
+  const expected = {
+    title: "Todo Alpha", description: "Searchable description", categoryId: null,
+    projectId: null, priority: null, dueDate: null, completionCriteria: null,
+    subtasks: [{ title: "  kept subtask  ", completed: true, sortOrder: 0 }],
+  }
+  expect(writes).toEqual([expected])
+  fail = false
+  await row.getByRole("button", { name: "保存", exact: true }).click()
+  await expect(row.getByRole("textbox", { name: "描述", exact: true })).toHaveCount(0)
+  expect(writes).toEqual([expected, expected])
+  await page.getByPlaceholder("搜索标题或描述").fill(" KEPT SUBTASK ")
+  await expect(row).toBeVisible()
+  await expect(item(page, "TODO", "Beta")).toBeHidden()
+  await row.getByRole("button", { name: "编辑：Todo Alpha", exact: true }).click()
+  await expect(row.getByRole("textbox", { name: "子任务 1 标题", exact: true })).toHaveValue("  kept subtask  ")
+  await expect(row.getByRole("textbox", { name: "子任务 2 标题", exact: true })).toHaveCount(0)
+})
