@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { PostEditorHandle } from "./PostEditor"
+import { draftFromPost, postMutationInput, type PostDraft } from "./post-form"
 import { DocumentActionBar } from "./DocumentActionBar"
 import { DraftRecoveryNotice } from "./DraftRecoveryNotice"
 import { useDocumentDraft } from "./useDocumentDraft"
@@ -26,40 +27,7 @@ const PostEditor = dynamic(
 )
 
 type PostWithRelations = Post & { category: Category | null; series: Series | null }
-type DraftData = {
-  title: string
-  content: string
-  excerpt: string
-  contentFormat: string
-  readHint: string
-  categoryId: string
-  seriesId: string
-  seriesOrder: string
-  tags: string
-  publishedAt: string
-}
 const LEGACY_DRAFT_DEFAULTS = { seriesId: "", seriesOrder: "", contentFormat: "", readHint: "" }
-
-function toLocalDatetimeInput(date: string | Date): string {
-  const value = new Date(date)
-  const offset = value.getTimezoneOffset() * 60_000
-  return new Date(value.getTime() - offset).toISOString().slice(0, 16)
-}
-
-function draftFromPost(post?: PostWithRelations): DraftData {
-  return {
-    title: post?.title ?? "",
-    content: post?.content ?? "",
-    excerpt: post?.excerpt ?? "",
-    contentFormat: post?.contentFormat ?? "",
-    readHint: post?.readHint ?? "",
-    categoryId: post?.categoryId ?? "",
-    seriesId: post?.seriesId ?? "",
-    seriesOrder: post?.seriesOrder == null ? "" : String(post.seriesOrder),
-    tags: (post?.tags ?? []).join(", "),
-    publishedAt: post?.publishedAt ? toLocalDatetimeInput(post.publishedAt) : "",
-  }
-}
 
 export function PostForm({
   post, categories, series, ownerId, initiallyEditing = false,
@@ -98,7 +66,7 @@ export function PostForm({
   const { title, content, excerpt, contentFormat, readHint, categoryId, seriesId, seriesOrder, tags, publishedAt } = draft.data
   const locked = pending || !draft.ready || !!draft.recovery
 
-  function setField(key: keyof DraftData, value: string) {
+  function setField(key: keyof PostDraft, value: string) {
     const current = draft.current()
     // The editor also emits a delayed serialization callback after a synchronous
     // document update. An identical value must not erase a pending review.
@@ -190,33 +158,7 @@ export function PostForm({
           publicationReviewToken = review.reviewToken
         }
       }
-      let publishIso: string | null = null
-      if (current.publishedAt) {
-        const date = new Date(current.publishedAt)
-        if (Number.isNaN(date.getTime())) throw new Error("发布时间无效")
-        publishIso = date.toISOString()
-      }
-      const fields = {
-        title: current.title,
-        // 未改正文时不发送 content，避免保存 metadata 顺带规范化旧格式。
-        ...(!savedPost || current.content !== draft.baseline.content ? { content: current.content } : {}),
-        excerpt: current.excerpt,
-        contentFormat: current.contentFormat || null,
-        readHint: current.readHint || null,
-        categoryId: current.categoryId || null,
-        seriesId: current.seriesId || null,
-        seriesOrder: current.seriesId ? (current.seriesOrder.trim() ? Number(current.seriesOrder) : null) : null,
-        tags: normalizeTags([current.tags]),
-        publishedAt: publishIso,
-      }
-      const body = savedPost ? {
-        status,
-        ...(publicationReviewToken ? { publicationReviewToken } : {}),
-        ...Object.fromEntries(Object.entries(fields).filter(([key]) => (
-          current[key as keyof DraftData] !== draft.baseline[key as keyof DraftData] ||
-          key === "seriesOrder" && current.seriesId !== draft.baseline.seriesId
-        ))),
-      } : { ...fields, status, ...(publicationReviewToken ? { publicationReviewToken } : {}) }
+      const body = postMutationInput(current, draft.baseline, !!savedPost, status, publicationReviewToken)
       const saved = await apiRequest<PostWithRelations>(
         savedPost ? "/api/posts/" + savedPost.id : "/api/posts",
         jsonRequest(savedPost ? "PUT" : "POST", body)

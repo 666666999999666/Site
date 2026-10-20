@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { IdeaConversionDialog } from "./IdeaConversionDialog"
 import { IdeaContent } from "./IdeaContent"
+import { draftFromIdea, ideaDraftTags, ideaMutationInput } from "./idea-form"
 import { DocumentActionBar } from "./DocumentActionBar"
 import { DraftRecoveryNotice } from "./DraftRecoveryNotice"
 import { useDocumentDraft } from "./useDocumentDraft"
@@ -24,16 +25,6 @@ interface EditableIdea {
   tags: string[]
   projects: Project[]
   sourceInboxItem?: { id: string; rawInput: string } | null
-}
-
-type IdeaDraft = { title: string; content: string; tags: string; projectIds: string[] }
-function draftFromIdea(idea?: EditableIdea): IdeaDraft {
-  return {
-    title: idea?.title ?? "",
-    content: idea?.content ?? "",
-    tags: (idea?.tags ?? []).join(", "),
-    projectIds: (idea?.projects.map((project) => project.id) ?? []).sort(),
-  }
 }
 
 export function IdeaForm({
@@ -83,18 +74,7 @@ export function IdeaForm({
     setPending(true)
     setError("")
     try {
-      const allFields = {
-        title: data.title, content: data.content,
-        tags: data.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
-        projectIds: data.projectIds,
-      }
-      const body = savedIdea
-        ? Object.fromEntries(Object.entries(allFields).filter(([key]) => (
-          key === "projectIds"
-            ? data.projectIds.join("\0") !== draft.baseline.projectIds.join("\0")
-            : data[key as "title" | "content" | "tags"] !== draft.baseline[key as "title" | "content" | "tags"]
-        )))
-        : allFields
+      const body = ideaMutationInput(data, draft.baseline, !!savedIdea)
       if (savedIdea && Object.keys(body).length === 0) {
         switchMode("read")
         return
@@ -155,7 +135,7 @@ export function IdeaForm({
               {mode === "read" ? savedIdea?.title : data.title || "未命名 Idea"}
             </h1>
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-              {(mode === "read" ? savedIdea?.tags ?? [] : data.tags.split(",").map((tag) => tag.trim()).filter(Boolean))
+              {(mode === "read" ? savedIdea?.tags ?? [] : ideaDraftTags(data.tags))
                 .map((tag) => <span key={tag} className="rounded-md bg-muted px-2 py-1">{"#" + tag}</span>)}
               {(mode === "read" ? savedIdea?.projects ?? [] : projects.filter((project) => data.projectIds.includes(project.id)))
                 .map((project) => <span key={project.id} className="rounded-md border border-border px-2 py-1">{project.title}</span>)}
