@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { execFileSync, spawnSync } from "node:child_process"
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import test from "node:test"
@@ -341,5 +341,66 @@ curl() {
       assert.doesNotMatch(f.recorded(), /--resolve/)
     }
     assert.notEqual(f.run("ops/smoke-test.sh", { EXPECTED_RELEASE_SHA: target, MOCK_HTTP_FAIL: "1" }, ["public"]).status, 0)
+  } finally { f.cleanup() }
+})
+
+
+test("retention dry-run exercises scheduled expiry and quota without deleting or allocating large files", { skip: process.platform === "win32" }, () => {
+  const f = fixture()
+  try {
+    const backups = path.join(f.root, "backups")
+    mkdirSync(backups)
+    const suffixes = [".dump", "-uploads.tar.gz", "-study-uploads.tar.gz", ".sha256"]
+    const name = (day: number, label: string) => `qzsite-202601${String(day).padStart(2, "0")}T010203Z-${label}`
+    function create(base: string, ageDays = 0) {
+      for (const suffix of suffixes) writeFileSync(path.join(backups, base + suffix), "fixture")
+      const modified = new Date(Date.now() - ageDays * 86400000)
+      utimesSync(path.join(backups, base + ".sha256"), modified, modified)
+    }
+    const source = readFileSync("ops/backup.sh", "utf8")
+    const retention = source.slice(source.indexOf("declare -A pruned_backup_sets=()"), source.indexOf('log "Backup complete:'))
+    const script = path.join(f.root, "retention-age-quota-dry-run.sh")
+    writeFileSync(script, `source "$QZSITE_OPS_COMMON"
+rm() { printf 'dry-run-rm %s\\n' "$*" >> "$CALLS"; }
+stat() {
+  if [[ "$*" == *'.dump' ]]; then
+    printf '%s\\n' "\${MOCK_DUMP_BYTES:-7}"
+  else
+    command stat "$@"
+  fi
+}
+${retention}`)
+    create(name(1, "scheduled"), 40)
+    create(name(2, "scheduled"), 29)
+    create(name(3, "scheduled"), 40)
+    create(name(4, "manual"), 40)
+    writeFileSync(path.join(backups, ".last-verified-backup"), name(3, "scheduled") + "\n")
+    let result = f.run(script)
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(f.recorded().trim().split("\n").length, 1)
+    assert.ok(f.recorded().includes(name(1, "scheduled")))
+    for (const base of [name(2, "scheduled"), name(3, "scheduled"), name(4, "manual")]) assert.ok(!f.recorded().includes(base))
+    // Reset only synthetic fixtures, never run retention's rm against files.
+    rmSync(backups, { recursive: true })
+    mkdirSync(backups)
+    for (let day = 1; day <= 3; day++) create(name(day, "predeploy"))
+    writeFileSync(path.join(backups, ".last-verified-backup"), name(1, "predeploy") + "\n")
+    result = f.run(script, { MOCK_DUMP_BYTES: String(400 * 1024 * 1024) })
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(f.recorded().trim().split("\n").length, 1)
+    assert.ok(f.recorded().includes(name(2, "predeploy")))
+    assert.ok(!f.recorded().includes(name(1, "predeploy")))
+    assert.ok(!f.recorded().includes(name(3, "predeploy")))
+    assert.doesNotMatch(result.stdout, /still exceed 1 GiB/)
+    create(name(4, "manual"))
+    result = f.run(script, { MOCK_DUMP_BYTES: String(600 * 1024 * 1024) })
+    assert.equal(result.status, 0, result.stderr)
+    assert.match(result.stdout, /still exceed 1 GiB; protected and non-predeploy sets were retained/)
+    assert.equal(f.recorded().trim().split("\n").length, 1)
+    assert.ok(f.recorded().includes(name(2, "predeploy")))
+    for (const base of [name(1, "predeploy"), name(3, "predeploy"), name(4, "manual")]) assert.ok(!f.recorded().includes(base))
+    for (let day = 1; day <= 3; day++) {
+      for (const suffix of suffixes) assert.ok(existsSync(path.join(backups, name(day, "predeploy") + suffix)))
+    }
   } finally { f.cleanup() }
 })
