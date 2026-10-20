@@ -2,8 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { ensureAuthenticated } from "@/lib/api/auth"
 import { requireJsonRequest } from "@/lib/api/admin-mutation"
-import { handleApiError } from "@/lib/api/handler"
-import { privateNoStore } from "@/lib/api/private-response"
+import { privateNoStore, handlePrivateApiError } from "@/lib/api/private-response"
 import { createSeries } from "@/lib/series"
 import { readJsonObject, validateSeriesCreate } from "@/lib/validation"
 
@@ -13,7 +12,7 @@ export async function GET() {
     const series = await prisma.series.findMany({ orderBy: [{ sortOrder: "asc" }, { title: "asc" }, { id: "asc" }] })
     return privateNoStore(NextResponse.json(series))
   } catch (error) {
-    return privateNoStore(handleApiError(error))
+    return handlePrivateApiError(error)
   }
 }
 
@@ -24,6 +23,6 @@ export async function POST(request: NextRequest) {
     const series = await createSeries(validateSeriesCreate(await readJsonObject(request)))
     return privateNoStore(NextResponse.json(series, { status: 201 }))
   } catch (error) {
-    return privateNoStore(handleApiError(error))
+    return handlePrivateApiError(error)
   }
 }

@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ensureAuthenticated } from "@/lib/api/auth"
 import { requireJsonRequest } from "@/lib/api/admin-mutation"
-import { handleApiError } from "@/lib/api/handler"
+import { privateNoStore, handlePrivateApiError } from "@/lib/api/private-response"
 import { readJsonObject } from "@/lib/validation"
-import { convertIdea, ideaConversionSchema, parseIdeaInput } from "@/lib/ideas"
-
-const privateHeaders = { "Cache-Control": "private, no-store" }
+import { convertIdea } from "@/lib/ideas"
+import { ideaConversionSchema, parseIdeaInput } from "@/lib/ideas-validation"
 
 export async function POST(
   request: NextRequest,
@@ -17,10 +16,8 @@ export async function POST(
     const { id } = await params
     const input = parseIdeaInput(ideaConversionSchema, await readJsonObject(request))
     const result = await convertIdea(userId, id, input)
-    return NextResponse.json(result, { status: 201, headers: privateHeaders })
+    return privateNoStore(NextResponse.json(result, { status: 201 }))
   } catch (error) {
-    const response = handleApiError(error)
-    response.headers.set("Cache-Control", "private, no-store")
-    return response
+    return handlePrivateApiError(error)
   }
 }

@@ -1,11 +1,13 @@
 import { ValidationError } from "@/lib/errors"
 import type { PostStatusValue } from "@/lib/post-policy"
+import { CONTENT_FORMATS, type ContentFormat } from "./publication-content"
+import { normalizeTags } from "./tags"
 
 type JsonObject = Record<string, unknown>
 
 const POST_KEYS = [
   "title", "content", "excerpt", "categoryId", "tags", "coverImage", "draftMetadata",
-  "seriesId", "seriesOrder", "status", "publishedAt",
+  "seriesId", "seriesOrder", "status", "publishedAt", "contentFormat", "readHint", "publicationReviewToken",
 ] as const
 const SERIES_KEYS = ["title", "slug", "description", "coverImage", "sortOrder"] as const
 const TODO_KEYS = [
@@ -166,7 +168,7 @@ function optionalUploadPath(value: unknown): string | null | undefined {
   return input
 }
 
-function optionalTags(value: unknown): string[] | undefined {
+function optionalTags(value: unknown, normalizeSeparators = false): string[] | undefined {
   if (value === undefined) return undefined
   if (!Array.isArray(value)) throw new ValidationError("标签必须是字符串数组")
   if (value.length > 20) throw new ValidationError("标签不能超过 20 个")
@@ -175,11 +177,13 @@ function optionalTags(value: unknown): string[] | undefined {
     if (typeof tag !== "string") throw new ValidationError("标签必须是字符串数组")
     const trimmed = tag.trim()
     if (!trimmed) throw new ValidationError("标签不能为空")
-    if (trimmed.length > 50) throw new ValidationError("单个标签不能超过 50 个字符")
     return trimmed
   })
 
-  return [...new Set(tags)]
+  const normalized = normalizeSeparators ? normalizeTags(tags) : [...new Set(tags)]
+  if (normalized.length > 20) throw new ValidationError("标签不能超过 20 个")
+  if (normalized.some((tag) => tag.length > 50)) throw new ValidationError("单个标签不能超过 50 个字符")
+  return normalized
 }
 
 function requireAtLeastOneKey(value: JsonObject) {
@@ -190,6 +194,9 @@ export interface PostInput {
   title?: string
   content?: string
   excerpt?: string | null
+  contentFormat?: ContentFormat | null
+  readHint?: string | null
+  publicationReviewToken?: string
   categoryId?: string | null
   seriesId?: string | null
   seriesOrder?: number | null
@@ -239,12 +246,19 @@ function parsePost(value: JsonObject, partial: boolean): PostInput {
     result.content = ""
   }
   if (value.excerpt !== undefined) result.excerpt = optionalString(value.excerpt, "摘要", 1000)
+  if (value.contentFormat !== undefined) {
+    result.contentFormat = value.contentFormat === null ? null : optionalEnum(value.contentFormat, "内容形式", CONTENT_FORMATS)
+  }
+  if (value.readHint !== undefined) result.readHint = optionalString(value.readHint, "阅读提示", 120)
+  if (value.publicationReviewToken !== undefined) {
+    result.publicationReviewToken = requiredString(value.publicationReviewToken, "发布检查确认", 100)
+  }
   if (value.categoryId !== undefined) result.categoryId = optionalString(value.categoryId, "分区", 128)
   if (value.seriesId !== undefined) result.seriesId = optionalString(value.seriesId, "系列", 128)
   if (value.seriesOrder !== undefined) {
     result.seriesOrder = optionalNullableInteger(value.seriesOrder, "系列顺序", 0, 10_000)
   }
-  if (value.tags !== undefined) result.tags = optionalTags(value.tags)
+  if (value.tags !== undefined) result.tags = optionalTags(value.tags, true)
   if (value.coverImage !== undefined) result.coverImage = optionalUploadPath(value.coverImage)
   if (value.draftMetadata !== undefined) {
     result.draftMetadata = optionalJsonObject(value.draftMetadata, "草稿 metadata", 64 * 1024)

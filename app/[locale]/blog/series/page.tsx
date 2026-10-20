@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { publicPageMetadata } from "@/lib/public-metadata"
 import { getTranslations } from "next-intl/server"
 import { prisma } from "@/lib/db"
 import { Container } from "@/components/layout/Container"
@@ -14,12 +15,12 @@ export async function generateMetadata(): Promise<Metadata> {
   const title = "博客系列"
   const description = "按主题连续阅读 Agent、Python 与 Web 工程文章。"
   const pathname = "/zh/blog/series"
-  return {
+  return publicPageMetadata({
     title,
     description,
-    alternates: { canonical: pathname },
-    openGraph: { title, description, url: absoluteUrl(pathname), locale: "zh_CN" },
-  }
+    pathname,
+    openGraph: { url: absoluteUrl(pathname) },
+  })
 }
 
 export default async function SeriesIndexPage() {

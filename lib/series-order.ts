@@ -12,3 +12,11 @@ export function seriesDisplayPosition(sequenceIndex: number): number {
   }
   return sequenceIndex + 1
 }
+
+// Shared by the series overview and article navigation; dates only break order ties.
+export const seriesPostOrder = [
+  { seriesOrder: "asc" as const },
+  { publishedAt: "asc" as const },
+  { createdAt: "asc" as const },
+  { id: "asc" as const },
+]

@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ensureAuthenticated } from "@/lib/api/auth"
 import { requireJsonRequest } from "@/lib/api/admin-mutation"
-import { privateNoStore } from "@/lib/api/private-response"
-import { handleApiError } from "@/lib/api/handler"
+import { privateNoStore, handlePrivateApiError } from "@/lib/api/private-response"
 import { prisma } from "@/lib/db"
 import { NotFoundError } from "@/lib/errors"
 import { readJsonObject, validateTodoSubtaskUpdate } from "@/lib/validation"
-import { privateJsonHeaders } from "../../../_shared"
 
 type RouteContext = { params: Promise<{ id: string; subtaskId: string }> }
 
@@ -29,9 +27,9 @@ export async function PATCH(request: NextRequest, { params }: RouteContext) {
       where: { id: subtaskId },
       data: input,
     })
-    return NextResponse.json(subtask, { headers: privateJsonHeaders })
+    return privateNoStore(NextResponse.json(subtask))
   } catch (error) {
-    return privateNoStore(handleApiError(error))
+    return handlePrivateApiError(error)
   }
 }
 
@@ -42,8 +40,8 @@ export async function DELETE(request: NextRequest, { params }: RouteContext) {
     const { id, subtaskId } = await params
     await requireSubtask(id, subtaskId)
     await prisma.todoSubtask.delete({ where: { id: subtaskId } })
-    return NextResponse.json({ ok: true }, { headers: privateJsonHeaders })
+    return privateNoStore(NextResponse.json({ ok: true }))
   } catch (error) {
-    return privateNoStore(handleApiError(error))
+    return handlePrivateApiError(error)
   }
 }

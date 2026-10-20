@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { extractPlainText } from "@/lib/content"
+import { getPostSummary } from "@/lib/publication-content"
 import { buildRssFeed } from "@/lib/rss"
 import { absoluteUrl } from "@/lib/site"
 import { getPublicSettings } from "@/lib/settings"
@@ -34,7 +34,7 @@ export async function GET() {
       items: posts.map((post) => ({
         title: post.title,
         url: absoluteUrl(`/zh/blog/${post.slug}`),
-        description: post.excerpt || extractPlainText(post.content).slice(0, 300),
+        description: getPostSummary(post, 300),
         publishedAt: post.publishedAt ?? post.createdAt,
         tags: post.tags,
       })),
@@ -43,7 +43,7 @@ export async function GET() {
     return new NextResponse(xml, {
       headers: {
         "Content-Type": "application/rss+xml; charset=utf-8",
-        "Cache-Control": "public, max-age=0, s-maxage=3600, stale-while-revalidate=86400",
+        "Cache-Control": "public, max-age=0, must-revalidate",
       },
     })
   } catch (error) {

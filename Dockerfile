@@ -51,7 +51,6 @@ RUN --mount=type=cache,target=/app/.cache/eslint \
 RUN --mount=type=cache,target=/app/.cache/typescript \
     npx tsc --noEmit --tsBuildInfoFile /app/.cache/typescript/tsconfig.tsbuildinfo
 RUN npm test
-RUN npm run test:mcp
 RUN bash scripts/run-build-db-gate.sh
 RUN --mount=type=cache,target=/app/.next/cache \
     QZSITE_SKIP_NEXT_TYPECHECK=1 NEXT_PHASE=phase-production-build npm run build
@@ -84,7 +83,7 @@ COPY --from=builder /app/lib/generated/ ./lib/generated/
 
 COPY --from=prisma-cli /prisma/node_modules/ /prisma/node_modules/
 COPY --from=builder /app/scripts/ /prisma/tools/scripts/
-COPY --from=builder /app/lib/content.ts /prisma/tools/lib/content.ts
+COPY --from=builder /app/lib/content.ts /app/lib/image-presentation.ts /app/lib/responsive-image.ts /prisma/tools/lib/
 
 RUN mkdir -p /app/public/uploads /app/data/study-uploads \
     && chown -R node:node /app/public/uploads /app/data/study-uploads

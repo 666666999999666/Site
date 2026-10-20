@@ -24,6 +24,7 @@ flowchart LR
     Nginx --> Web[Next.js Web]
     Web --> DB[(PostgreSQL)]
     Web --> Uploads[(data/uploads)]
+    Web --> StudyUploads[(data/study-uploads)]
     Nginx --> Uploads
 
     Developer[代码提交] --> Gitee[Gitee main]
@@ -42,10 +43,11 @@ flowchart LR
 | `web` | Next.js 页面、API、认证、业务规则 | 上传目录挂载到宿主机 | 768MB |
 | `db` | PostgreSQL 业务数据与 Prisma migration 记录 | `data/postgres` | 512MB |
 
-**生产事实来源只有两处**：
+**需要共同备份和恢复的生产持久化数据有三处**：
 
 - PostgreSQL 中的结构化数据。
-- 服务器 `data/uploads` 中的上传文件。
+- 服务器 `data/uploads` 中的公开上传文件。
+- 服务器 `data/study-uploads` 中的私有学习图片，必须与对应数据库记录一同保留。
 
 本地数据库、本地上传目录、Seed 数据和测试数据库都不是生产副本，不得反向覆盖生产数据。
 
@@ -63,7 +65,7 @@ flowchart LR
 | 入口代理 | `nginx/` | 正式域名/IP 虚拟主机、TLS、上传静态服务和安全头 |
 | 流水线 | `.workflow/` | Gitee Go 自动部署与受限维护定义 |
 | 自动化验证 | `tests/` | 业务规则、内容、校验、上传签名、中文文案和退役路由合同测试 |
-| MCP | `app/api/mcp/`、`mcp/`、`lib/mcp/` | Streamable HTTP、本地导入 stdio、credential、审批、审计和持久化限流 |
+| MCP | `app/api/mcp/`、`mcp/`、`lib/mcp/` | 在线 Streamable HTTP 工具注册与传输、OAuth 身份、审批、审计和持久化限流 |
 
 ### 3.1 依赖方向
 
@@ -295,9 +297,10 @@ push Gitee main
 -> 部署前完整备份
 -> 将 SHA tag 解析为不可变 digest
 -> 校验 OCI revision、目标 Git 源码与镜像源码指纹
--> 显式执行一次 migration，再进行 Compose 切换
--> db/web/nginx 健康检查
--> 内部冒烟后记录 .deploy-pending
+-> 使用完整备份在隔离库中两次迁移候选镜像，验证幂等性
+-> 记录 .deploy-pending，再检出目标提交
+-> 对正式数据库显式执行一次 migration，再进行 Compose 切换
+-> db/web/nginx 健康检查与内部冒烟
 -> 真实公网 DNS/TLS/路由/版本验证
 -> 运行提交、镜像 digest、源码指纹写入 .deploy-state 和 .deploy-history
 ```
@@ -345,3 +348,12 @@ push Gitee main
 | [`site-audit-and-improvement-plan.md`](site-audit-and-improvement-plan.md) | 改造前问题基线与已实施项 |
 | [`dependency-audit.md`](dependency-audit.md) | 依赖风险和运行路径判断 |
 | [`session-summary.md`](session-summary.md) | 历史建站记录，不作为当前操作依据 |
+
+
+## 2026-10-20 体验审查代码增量
+
+- 图片展示宽度使用 Markdown image title 的受限 `{qz-width=N}` 后缀，与 alt、图注独立；旧数字 alt 不猜测修复。
+- Post 新增 nullable `contentFormat` 和 `readHint`；`lib/publication-content.ts` 统一摘要/阅读信息与只读发布检查。管理 API 对相关内容变化验证显式审核，草稿和无关 metadata 不受阻。
+- 公开 BlogCard 只接收必要展示 DTO，正文搜索与摘要抽取留在服务端。sitemap 为动态路由，子页面 canonical 保留 RSS alternate。
+- 原图继续由上传目录提供；Sharp 仅为离线开发依赖生成 WebP/受限 manifest，运行镜像仍删除 Sharp/libvips。渲染只读有效静态 metadata，缺失时回退原图；清理器保护引用原图的派生集合。
+- 没有新增公开写接口、权限或生产定时任务。完整实现/未验收边界见 [体验审查修复说明](experience-audit-remediation.md)。

@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { publicPageMetadata } from "@/lib/public-metadata"
 import { getTranslations } from "next-intl/server"
 import { prisma } from "@/lib/db"
 import { Container } from "@/components/layout/Container"
@@ -10,12 +11,12 @@ import { breadcrumbJsonLd } from "@/lib/structured-data"
 
 export const dynamic = "force-dynamic"
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
   title: "博客归档",
   description: "按发布时间浏览历史文章。",
-  alternates: { canonical: "/zh/blog/archive" },
-  openGraph: { title: "博客归档", description: "按发布时间浏览历史文章。", url: absoluteUrl("/zh/blog/archive"), locale: "zh_CN" },
-}
+  pathname: "/zh/blog/archive",
+  openGraph: { url: absoluteUrl("/zh/blog/archive") },
+})
 
 export default async function ArchivePage() {
   const [t, posts] = await Promise.all([

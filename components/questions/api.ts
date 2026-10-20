@@ -1,7 +1,8 @@
-export type QuestionApiErrorPayload = {
-  error?: string
-  code?: string
-}
+import { apiRequest, type ApiErrorPayload } from "@/lib/api-client"
+
+export { jsonRequest as questionJsonRequest } from "@/lib/api-client"
+export type QuestionApiErrorPayload = ApiErrorPayload
+
 export class QuestionApiError extends Error {
   status: number
   code?: string
@@ -18,26 +19,7 @@ export async function questionApiRequest<T>(
   input: RequestInfo | URL,
   init?: RequestInit
 ): Promise<T> {
-  const response = await fetch(input, init)
-  const payload = await response.json().catch(() => null) as (T & QuestionApiErrorPayload) | null
-
-  if (!response.ok) {
-    throw new QuestionApiError(
-      payload?.error || `请求失败（${response.status}）`,
-      response.status,
-      payload?.code
-    )
-  }
-
-  return payload as T
-}
-
-export function questionJsonRequest(method: string, body: unknown): RequestInit {
-  return {
-    method,
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  }
+  return apiRequest<T>(input, init, (message, status, code) => new QuestionApiError(message, status, code))
 }
 
 export function questionErrorMessage(error: unknown, fallback = "操作失败"): string {

@@ -2,30 +2,51 @@
 
 /* eslint-disable @next/next/no-img-element -- The lightbox must preserve arbitrary article image URLs and dimensions. */
 
-import { useCallback, useEffect, useRef, useState } from "react"
-import { X } from "lucide-react"
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from "react"
+import { ChevronLeft, ChevronRight, ExternalLink, X, ZoomIn, ZoomOut } from "lucide-react"
 import { useTranslations } from "next-intl"
+import styles from "./Lightbox.module.css"
 
 interface LightboxImage {
   src: string
   alt: string
+  width: number
 }
 
-export function Lightbox() {
-  const [image, setImage] = useState<LightboxImage | null>(null)
-  const triggerRef = useRef<HTMLElement | null>(null)
-  const closeButtonRef = useRef<HTMLButtonElement>(null)
-  const t = useTranslations("content")
+interface Gallery {
+  images: LightboxImage[]
+  index: number
+}
 
-  const close = useCallback(() => {
-    setImage(null)
-    requestAnimationFrame(() => triggerRef.current?.focus())
-  }, [])
+export function Lightbox({ containerRef }: { containerRef: RefObject<HTMLDivElement | null> }) {
+  const [gallery, setGallery] = useState<Gallery | null>(null)
+  const [zoomed, setZoomed] = useState(false)
+  const triggerRef = useRef<HTMLElement | null>(null)
+  const dialogRef = useRef<HTMLDialogElement>(null)
+  const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const hintId = useId()
+  const t = useTranslations("content")
+  const open = gallery !== null
+  const image = gallery?.images[gallery.index]
+  const close = useCallback(() => setGallery(null), [])
 
   useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
     const openImage = (target: HTMLImageElement) => {
+      const images = Array.from(container.querySelectorAll<HTMLImageElement>("img[data-lightbox-image]"))
       triggerRef.current = target
-      setImage({ src: target.currentSrc || target.src, alt: target.alt })
+      setZoomed(false)
+      setGallery({
+        images: images.map((img) => ({
+          // Display width never changes the original asset used for zoom or downloads.
+          src: img.dataset.originalSrc || img.src,
+          alt: img.alt,
+          width: Number(img.dataset.originalWidth) || img.naturalWidth,
+        })),
+        index: images.indexOf(target),
+      })
     }
     const handleClick = (event: MouseEvent) => {
       const target = event.target
@@ -34,66 +55,150 @@ export function Lightbox() {
         openImage(target)
       }
     }
-    const handleKey = (event: KeyboardEvent) => {
+    const handleKey = (event: globalThis.KeyboardEvent) => {
       const target = event.target
       if (
         (event.key === "Enter" || event.key === " ") &&
-        target instanceof HTMLImageElement &&
-        target.hasAttribute("data-lightbox-image")
+        target instanceof HTMLImageElement && target.hasAttribute("data-lightbox-image")
       ) {
         event.preventDefault()
         openImage(target)
       }
     }
-
-    document.addEventListener("click", handleClick)
-    document.addEventListener("keydown", handleKey)
+    container.addEventListener("click", handleClick)
+    container.addEventListener("keydown", handleKey)
     return () => {
-      document.removeEventListener("click", handleClick)
-      document.removeEventListener("keydown", handleKey)
+      container.removeEventListener("click", handleClick)
+      container.removeEventListener("keydown", handleKey)
     }
-  }, [])
+  }, [containerRef])
 
   useEffect(() => {
-    if (!image) return
+    const dialog = dialogRef.current
+    if (!open || !dialog) return
     const previousOverflow = document.body.style.overflow
-    const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close()
-    }
     document.body.style.overflow = "hidden"
-    window.addEventListener("keydown", handleEscape)
+    // Native modal dialogs make the entire background inert, including programmatic focus.
+    dialog.showModal()
     closeButtonRef.current?.focus()
     return () => {
+      dialog.close()
       document.body.style.overflow = previousOverflow
-      window.removeEventListener("keydown", handleEscape)
+      if (triggerRef.current?.isConnected) triggerRef.current.focus({ preventScroll: true })
     }
-  }, [close, image])
+  }, [open])
 
-  if (!image) return null
+  const move = (offset: number) => {
+    setZoomed(false)
+    setGallery((current) => current ? {
+      ...current,
+      index: (current.index + offset + current.images.length) % current.images.length,
+    } : null)
+    viewportRef.current?.scrollTo(0, 0)
+  }
+
+  const toggleZoom = () => {
+    setZoomed((current) => !current)
+    viewportRef.current?.scrollTo(0, 0)
+    viewportRef.current?.focus({ preventScroll: true })
+  }
+
+  const handleKey = (event: KeyboardEvent<HTMLDialogElement>) => {
+    if (event.key === "Tab") {
+      const focusable = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(
+        'button:not(:disabled), a[href], [tabindex="0"]',
+      ))
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last?.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first?.focus()
+      }
+    }
+    if (zoomed && viewportRef.current) {
+      const viewport = viewportRef.current
+      const step = Math.max(80, viewport.clientHeight * 0.15)
+      const scroll: Record<string, [number, number]> = {
+        ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step],
+        PageUp: [0, -viewport.clientHeight * 0.9], PageDown: [0, viewport.clientHeight * 0.9],
+      }
+      if (scroll[event.key]) {
+        event.preventDefault()
+        viewport.scrollBy(...scroll[event.key])
+      } else if (event.key === "Home" || event.key === "End") {
+        event.preventDefault()
+        viewport.scrollTo(event.key === "Home" ? 0 : viewport.scrollWidth, event.key === "Home" ? 0 : viewport.scrollHeight)
+      }
+    } else if (gallery && gallery.images.length > 1 && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+      event.preventDefault()
+      move(event.key === "ArrowLeft" ? -1 : 1)
+    }
+  }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm"
-      onClick={close}
-      role="dialog"
-      aria-modal="true"
+    <dialog
+      ref={dialogRef}
+      className={styles.dialog}
       aria-label={t("imagePreview")}
+      aria-describedby={hintId}
+      onCancel={(event) => { event.preventDefault(); close() }}
+      onClose={(event) => { if (!event.currentTarget.open) close() }}
+      onKeyDown={handleKey}
+      onClick={(event) => { if (event.target === event.currentTarget) close() }}
     >
-      <button
-        ref={closeButtonRef}
-        type="button"
-        onClick={close}
-        className="absolute right-4 top-4 rounded-full bg-white/10 p-2 text-white transition-colors hover:bg-white/20"
-        aria-label={t("closeImagePreview")}
-      >
-        <X className="size-5" />
-      </button>
-      <img
-        src={image.src}
-        alt={image.alt}
-        className="max-h-[85vh] max-w-[90vw] rounded-lg shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
-      />
-    </div>
+      {image && gallery && (
+        <>
+          <div className={styles.toolbar}>
+            {gallery.images.length > 1 && (
+              <>
+                <button type="button" onClick={() => move(-1)} className={styles.control} aria-label={t("previousImage")}>
+                  <ChevronLeft className="size-5" aria-hidden="true" />
+                </button>
+                <span className={styles.position} aria-live="polite">{t("imagePosition", { current: gallery.index + 1, total: gallery.images.length })}</span>
+                <button type="button" onClick={() => move(1)} className={styles.control} aria-label={t("nextImage")}>
+                  <ChevronRight className="size-5" aria-hidden="true" />
+                </button>
+              </>
+            )}
+            <button type="button" onClick={toggleZoom} className={styles.control} aria-pressed={zoomed} aria-label={t(zoomed ? "imageZoomOut" : "imageZoomIn")}>
+              {zoomed ? <ZoomOut className="size-5" aria-hidden="true" /> : <ZoomIn className="size-5" aria-hidden="true" />}
+              <span>{t(zoomed ? "imageZoomOut" : "imageZoomIn")}</span>
+            </button>
+            <a href={image.src} target="_blank" rel="noopener noreferrer" className={styles.control}>
+              <ExternalLink className="size-4" aria-hidden="true" />{t("imageOriginal")}
+            </a>
+            <button ref={closeButtonRef} type="button" onClick={close} className={`${styles.control} ${styles.close}`} aria-label={t("closeImagePreview")}>
+              <X className="size-5" aria-hidden="true" />
+            </button>
+          </div>
+          <div ref={viewportRef} className={styles.viewport} tabIndex={0} role="region" aria-label={t("imagePanHint")} data-image-viewport>
+            <div className={`${styles.stage} ${zoomed ? styles.zoomedStage : ""}`} onClick={(event) => {
+              if (!zoomed && event.target === event.currentTarget) close()
+            }}>
+              <img
+                key={image.src}
+                src={image.src}
+                alt={image.alt}
+                draggable={false}
+                className={`${styles.image} ${zoomed ? styles.zoomedImage : ""}`}
+                style={zoomed && image.width ? { width: image.width } : undefined}
+                onClick={toggleZoom}
+                onLoad={(event) => {
+                  const width = event.currentTarget.naturalWidth
+                  setGallery((current) => current ? {
+                    ...current,
+                    images: current.images.map((item, index) => index === current.index ? { ...item, width } : item),
+                  } : null)
+                }}
+              />
+            </div>
+          </div>
+          <p id={hintId} className={styles.hint}>{t("imagePanHint")}</p>
+        </>
+      )}
+    </dialog>
   )
 }

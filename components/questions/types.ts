@@ -116,6 +116,8 @@ export type RatingResponse = {
   reviewRevision: number
 }
 
+export const questionRatings: QuestionRating[] = ["AGAIN", "HARD", "GOOD", "EASY"]
+
 export const ratingLabels: Record<QuestionRating, string> = {
   AGAIN: "重来",
   HARD: "困难",
@@ -200,4 +202,16 @@ export function dueLabel(item: Pick<QuestionListItem, "enabled" | "ready" | "sta
   return due <= Date.now()
     ? `已到期 · ${formatQuestionDateTime(item.dueAt)}`
     : `将到期 · ${formatQuestionDateTime(item.dueAt)}`
+}
+
+export function questionQueueMessage(today: TodayResponse | null): string {
+  if (!today) return "正在读取今日队列"
+  if (today.summary.dueOldCount > 0) return `到期旧题 ${today.summary.dueOldCount} 道`
+  if (today.state === "READY" && today.summary.newRemaining > 0) {
+    return `可学习新题 · 剩余额度 ${today.summary.newRemaining}`
+  }
+  if (today.state === "WAITING") {
+    return `暂时完成 · ${formatQuestionTime(today.nextDueAt, false)} 后还有复习`
+  }
+  return "今日已完成"
 }

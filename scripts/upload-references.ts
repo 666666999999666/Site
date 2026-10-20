@@ -1,5 +1,6 @@
 import path from "path"
 import { extractUploadUrls } from "../lib/content"
+import { imageDerivativeNames } from "../lib/responsive-image"
 
 export interface UploadPostRow {
   content: string
@@ -22,6 +23,9 @@ export function collectReferencedUploadNames(
   }
   for (const item of [...projects, ...series]) {
     if (item.coverImage) referenced.add(path.basename(item.coverImage))
+  }
+  for (const filename of [...referenced]) {
+    for (const derivative of imageDerivativeNames(filename)) referenced.add(derivative)
   }
   return referenced
 }

@@ -1,28 +1,23 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ensureAuthenticated } from "@/lib/api/auth"
 import { requireJsonRequest } from "@/lib/api/admin-mutation"
-import { handleApiError } from "@/lib/api/handler"
+import { privateNoStore, handlePrivateApiError } from "@/lib/api/private-response"
 import { readJsonObject } from "@/lib/validation"
 import {
-  createIdea,
   ideaCreateSchema,
   parseIdeaInput,
   parseIdeaSearchParams,
-  searchIdeas,
-} from "@/lib/ideas"
-
-const privateHeaders = { "Cache-Control": "private, no-store" }
+} from "@/lib/ideas-validation"
+import { createIdea, searchIdeas } from "@/lib/ideas"
 
 export async function GET(request: NextRequest) {
   try {
     const { userId } = await ensureAuthenticated()
     const filters = parseIdeaSearchParams(new URL(request.url).searchParams)
     const ideas = await searchIdeas(userId, filters)
-    return NextResponse.json(ideas, { headers: privateHeaders })
+    return privateNoStore(NextResponse.json(ideas))
   } catch (error) {
-    const response = handleApiError(error)
-    response.headers.set("Cache-Control", "private, no-store")
-    return response
+    return handlePrivateApiError(error)
   }
 }
 
@@ -32,10 +27,8 @@ export async function POST(request: NextRequest) {
     requireJsonRequest(request)
     const input = parseIdeaInput(ideaCreateSchema, await readJsonObject(request))
     const idea = await createIdea(userId, input)
-    return NextResponse.json(idea, { status: 201, headers: privateHeaders })
+    return privateNoStore(NextResponse.json(idea, { status: 201 }))
   } catch (error) {
-    const response = handleApiError(error)
-    response.headers.set("Cache-Control", "private, no-store")
-    return response
+    return handlePrivateApiError(error)
   }
 }

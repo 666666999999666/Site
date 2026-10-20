@@ -1,8 +1,8 @@
 import type { Metadata } from "next"
+import { publicPageMetadata } from "@/lib/public-metadata"
 import { cache } from "react"
 import { notFound } from "next/navigation"
 import { getTranslations } from "next-intl/server"
-import { Prisma } from "@/lib/generated/prisma/client"
 import { prisma } from "@/lib/db"
 import { Link } from "@/i18n/navigation"
 import { PostContent } from "@/components/blog/PostContent"
@@ -16,8 +16,12 @@ import { decodeRouteSegment } from "@/lib/route-segment"
 import { getPublicSettings } from "@/lib/settings"
 import { breadcrumbJsonLd } from "@/lib/structured-data"
 import { articleOpenGraphImage } from "@/lib/open-graph"
-import { rankRelatedPosts } from "@/lib/related-posts"
-import { seriesDisplayPosition } from "@/lib/series-order"
+import { relatedPostReason, selectPostRecommendations } from "@/lib/related-posts"
+import { seriesDisplayPosition, seriesPostOrder } from "@/lib/series-order"
+import { blogCardSelect, toBlogCard } from "@/lib/blog-card"
+import { normalizeTags } from "@/lib/tags"
+import { getArticleImageMetadata } from "@/lib/article-images"
+import { getPostSummary, getPostPresentation } from "@/lib/publication-content"
 
 export const dynamic = "force-dynamic"
 
@@ -35,21 +39,18 @@ export async function generateMetadata({
   const post = await getPost(slug)
   if (!post || post.status !== "PUBLISHED") return {}
   const pathname = `/zh/blog/${post.slug}`
-  const description = post.excerpt || `${post.title} - QZ Site`
+  const description = getPostSummary(post)
   const image = articleOpenGraphImage(post.title, post.coverImage)
-  return {
+  return publicPageMetadata({
     title: post.title,
     description,
-    alternates: { canonical: pathname },
+    pathname,
     openGraph: {
       type: "article",
-      title: post.title,
-      description,
       url: absoluteUrl(pathname),
-      locale: "zh_CN",
       publishedTime: post.publishedAt?.toISOString(),
       modifiedTime: post.updatedAt.toISOString(),
-      tags: post.tags,
+      tags: normalizeTags(post.tags),
       images: [{
         url: absoluteUrl(image.path),
         alt: image.alt,
@@ -58,7 +59,7 @@ export async function generateMetadata({
           : {}),
       }],
     },
-  }
+  })
 }
 
 export default async function PostPage({
@@ -70,41 +71,36 @@ export default async function PostPage({
   const post = await getPost(slug)
   if (!post || post.status !== "PUBLISHED") notFound()
 
-  const findRelated = (signal: Prisma.PostWhereInput | null) => signal
-    ? prisma.post.findMany({
-        where: { id: { not: post.id }, status: "PUBLISHED", ...signal },
-        orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-        take: 24,
-        include: { category: true, series: true },
-      })
-    : Promise.resolve([])
-
-  const [t, settings, sequence, sameSeries, sameCategory, sharedTags, recent] = await Promise.all([
+  const [t, settings, imageMetadata, sequence, candidates] = await Promise.all([
     getTranslations("blog"),
     getPublicSettings(),
+    getArticleImageMetadata(post.content),
     prisma.post.findMany({
       where: {
         status: "PUBLISHED",
         ...(post.seriesId ? { seriesId: post.seriesId } : {}),
       },
-      orderBy: post.seriesId
-        ? [{ seriesOrder: "asc" }, { publishedAt: "asc" }, { createdAt: "asc" }]
-        : [{ publishedAt: "asc" }, { createdAt: "asc" }],
+      orderBy: post.seriesId ? seriesPostOrder : [{ publishedAt: "asc" }, { createdAt: "asc" }, { id: "asc" }],
       select: { id: true, slug: true, title: true, seriesOrder: true },
     }),
-    findRelated(post.seriesId ? { seriesId: post.seriesId } : null),
-    findRelated(post.categoryId ? { categoryId: post.categoryId } : null),
-    findRelated(post.tags.length > 0 ? { tags: { hasSome: post.tags } } : null),
-    findRelated({}),
+    prisma.post.findMany({
+      where: { status: "PUBLISHED", id: { not: post.id } },
+      select: { id: true, seriesId: true, categoryId: true, tags: true, publishedAt: true, createdAt: true },
+    }),
   ])
 
+  const presentation = getPostPresentation(post)
   const headings = extractHeadings(post.content)
-  const related = rankRelatedPosts(post, [
-    ...sameSeries,
-    ...sameCategory,
-    ...sharedTags,
-    ...recent,
-  ], 3)
+  const tags = normalizeTags(post.tags)
+  const recommendations = selectPostRecommendations(post, candidates, 3)
+  const recommendedPosts = recommendations.posts.length ? await prisma.post.findMany({
+    where: { id: { in: recommendations.posts.map((item) => item.id) }, status: "PUBLISHED" },
+    select: blogCardSelect,
+  }) : []
+  const related = recommendations.posts.flatMap((candidate) => {
+    const item = recommendedPosts.find((item) => item.id === candidate.id)
+    return item ? [{ ...toBlogCard(item), reason: relatedPostReason(post, candidate) }] : []
+  })
   const sequenceIndex = sequence.findIndex((candidate) => candidate.id === post.id)
   const previous = sequenceIndex > 0 ? sequence[sequenceIndex - 1] : null
   const next = sequenceIndex >= 0 && sequenceIndex < sequence.length - 1
@@ -123,13 +119,13 @@ export default async function PostPage({
     "@context": "https://schema.org",
     "@type": "BlogPosting",
     headline: post.title,
-    description: post.excerpt || undefined,
+    description: presentation.summary,
     mainEntityOfPage: articleUrl,
     url: articleUrl,
     datePublished: publishedAt.toISOString(),
     dateModified: post.updatedAt.toISOString(),
     inLanguage: "zh-CN",
-    keywords: post.tags,
+    keywords: tags,
     image: absoluteUrl(articleImage.path),
     author: {
       "@type": "Person",
@@ -150,7 +146,7 @@ export default async function PostPage({
       ]} />
       <MobileTableOfContents headings={headings} />
       <div className="mx-auto max-w-6xl px-6">
-        <div className="flex gap-12">
+        <div className={`flex gap-12${headings.length === 0 ? " justify-center" : ""}`}>
           <article className="min-w-0 max-w-3xl flex-1">
             <header className="mb-10">
               <Link href="/blog" className="mb-6 inline-flex items-center text-sm text-muted-foreground transition-colors hover:text-foreground">
@@ -168,16 +164,17 @@ export default async function PostPage({
                 {post.category && <><span>{post.category.name}</span><span>·</span></>}
                 <time dateTime={publishedAt.toISOString()}>{date}</time>
                 <span>·</span>
-                <span>{t("minuteRead", { count: post.readTime })}</span>
+                <span>{presentation.readingLabel}</span>
+                {presentation.contentFormatLabel && <><span>·</span><span>{presentation.contentFormatLabel}</span></>}
               </div>
             </header>
 
-            <PostContent content={post.content} />
+            <PostContent content={post.content} imageMetadata={imageMetadata} />
 
-            {post.tags.length > 0 && (
+            {tags.length > 0 && (
               <div className="mt-16 border-t border-border/50 pt-6">
                 <div className="flex flex-wrap gap-2">
-                  {post.tags.map((tag) => (
+                  {tags.map((tag) => (
                     <Link key={tag} href={`/blog/tags/${encodeURIComponent(tag)}`} className="rounded-full border border-border/50 px-3 py-1 text-xs text-muted-foreground transition-colors hover:border-border hover:text-foreground">
                       #{tag}
                     </Link>
@@ -206,16 +203,16 @@ export default async function PostPage({
             )}
 
             {(previous || next) && (
-              <nav aria-label="文章翻页" className="mt-10 grid gap-3 sm:grid-cols-2">
+              <nav aria-label={t("postNavigation")} className="mt-10 grid gap-3 sm:grid-cols-2">
                 {previous ? (
                   <Link href={`/blog/${previous.slug}`} className="rounded-lg border border-border/60 p-4 transition-colors hover:border-border hover:bg-muted/40">
-                    <span className="block text-xs text-muted-foreground">← {t("previousPost")}</span>
+                    <span className="block text-xs text-muted-foreground">← {t(post.seriesId ? "previousPost" : "previousChronologicalPost")}</span>
                     <span className="mt-1 block font-medium">{previous.title}</span>
                   </Link>
                 ) : <span />}
                 {next && (
                   <Link href={`/blog/${next.slug}`} className="rounded-lg border border-border/60 p-4 text-right transition-colors hover:border-border hover:bg-muted/40">
-                    <span className="block text-xs text-muted-foreground">{t("nextPost")} →</span>
+                    <span className="block text-xs text-muted-foreground">{t(post.seriesId ? "nextPost" : "nextChronologicalPost")} →</span>
                     <span className="mt-1 block font-medium">{next.title}</span>
                   </Link>
                 )}
@@ -224,17 +221,26 @@ export default async function PostPage({
 
             {related.length > 0 && (
               <section className="mt-14" aria-labelledby="related-posts-heading">
-                <h2 id="related-posts-heading" className="mb-5 text-xl font-semibold">{t("relatedPosts")}</h2>
+                <h2 id="related-posts-heading" className="mb-5 text-xl font-semibold">{t(recommendations.kind === "related" ? "relatedPosts" : "latestPosts")}</h2>
                 <div className="grid gap-4 sm:grid-cols-2">
-                  {related.map((item) => <BlogCard key={item.id} post={item} />)}
+                  {related.map(({ reason, ...item }) => (
+                    <div key={item.id} className="flex flex-col gap-2">
+                      {recommendations.kind === "related" && reason && (
+                        <p className="text-xs text-muted-foreground">{t(reason === "series" ? "relatedBySeries" : reason === "category" ? "relatedByCategory" : "relatedByTag")}</p>
+                      )}
+                      <BlogCard post={item} />
+                    </div>
+                  ))}
                 </div>
               </section>
             )}
           </article>
 
-          <aside className="hidden w-56 shrink-0 lg:block">
-            <TableOfContents headings={headings} />
-          </aside>
+          {headings.length > 0 && (
+            <aside className="hidden w-56 shrink-0 lg:block">
+              <TableOfContents headings={headings} />
+            </aside>
+          )}
         </div>
       </div>
     </section>

@@ -1,10 +1,12 @@
 import { prisma } from "./db"
+import { homePostSelect, toHomePost } from "./home-posts"
 import { extractPlainText, normalizeContent } from "./content"
 import { NotFoundError, ValidationError } from "./errors"
 import { resolvePublishedAt } from "./post-policy"
 import type { PostInput } from "./validation"
 import { Prisma } from "./generated/prisma/client"
 import { nextSeriesOrderFromMax } from "./series-order"
+import { needsPublicationReview, scanPublicationContent, type PublicationContent } from "./publication-content"
 
 export interface PostSearchInput {
   title?: string
@@ -24,27 +26,13 @@ export type DraftMetadataUpdateInput = Pick<
 type PostDatabase = typeof prisma | Prisma.TransactionClient
 
 export async function getRecentPosts(take = 5) {
-  return prisma.post.findMany({
+  const posts = await prisma.post.findMany({
     where: { status: "PUBLISHED" },
     orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
     take,
-    include: { category: true, series: true },
+    select: homePostSelect,
   })
-}
-
-export async function getAllPosts() {
-  return prisma.post.findMany({
-    where: { status: "PUBLISHED" },
-    orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-    include: { category: true, series: true },
-  })
-}
-
-export async function getPostBySlug(slug: string) {
-  return prisma.post.findUnique({
-    where: { slug },
-    include: { category: true, series: true },
-  })
+  return posts.map(toHomePost)
 }
 
 export async function searchPosts(input: PostSearchInput = {}) {
@@ -116,6 +104,19 @@ function jsonDatabaseValue(value: PostInput["draftMetadata"]) {
   return value === null ? Prisma.DbNull : value as Prisma.InputJsonValue
 }
 
+function assertPublicationReview(
+  current: (PublicationContent & { status: string }) | null,
+  next: PublicationContent & { status: string },
+  reviewToken?: string
+) {
+  if (!needsPublicationReview(current, next)) return
+  const review = scanPublicationContent(next)
+  if (review.totalWarnings > 0 && reviewToken !== review.reviewToken) {
+    const first = review.warnings[0]
+    throw new ValidationError(`发布前请检查 ${review.totalWarnings} 处内容提示（首处：第 ${first.line} 行，第 ${first.column} 列）。请在编辑页查看并确认，或修正后重试。`)
+  }
+}
+
 export async function createPost(input: PostCreateInput, database: PostDatabase = prisma) {
   await ensureBlogCategory(input.categoryId, database)
   await ensureSeries(input.seriesId, database)
@@ -124,6 +125,7 @@ export async function createPost(input: PostCreateInput, database: PostDatabase 
   }
   const status = input.status ?? "DRAFT"
   const content = normalizeContent(input.content)
+  assertPublicationReview(null, { ...input, content, status }, input.publicationReviewToken)
   const seriesOrder = input.seriesId
     ? input.seriesOrder ?? await getNextSeriesOrder(input.seriesId, database)
     : null
@@ -133,6 +135,8 @@ export async function createPost(input: PostCreateInput, database: PostDatabase 
       title: input.title,
       content,
       excerpt: input.excerpt ?? null,
+      contentFormat: input.contentFormat ?? null,
+      readHint: input.readHint ?? null,
       slug: await generateUniqueSlug(input.title, database),
       categoryId: input.categoryId ?? null,
       seriesId: input.seriesId ?? null,
@@ -152,16 +156,22 @@ export async function createPost(input: PostCreateInput, database: PostDatabase 
   })
 }
 
-export async function updatePost(id: string, input: PostInput) {
-  const current = await prisma.post.findUnique({ where: { id } })
+export async function updatePost(id: string, input: PostInput, database: PostDatabase = prisma) {
+  const current = await database.post.findUnique({ where: { id } })
   if (!current) throw new NotFoundError("文章不存在")
-  await ensureBlogCategory(input.categoryId)
+  await ensureBlogCategory(input.categoryId, database)
   const nextSeriesId = input.seriesId === undefined ? current.seriesId : input.seriesId
-  await ensureSeries(nextSeriesId)
+  await ensureSeries(nextSeriesId, database)
   if (!nextSeriesId && input.seriesOrder !== undefined && input.seriesOrder !== null) {
     throw new ValidationError("未选择系列时不能设置系列顺序")
   }
   const nextStatus = input.status ?? current.status
+  assertPublicationReview(current, {
+    title: input.title ?? current.title,
+    excerpt: input.excerpt === undefined ? current.excerpt : input.excerpt,
+    content: input.content === undefined ? current.content : normalizeContent(input.content),
+    status: nextStatus,
+  }, input.publicationReviewToken)
   const data: Prisma.PostUncheckedUpdateInput = {}
 
   if (input.title !== undefined) data.title = input.title
@@ -171,16 +181,18 @@ export async function updatePost(id: string, input: PostInput) {
     data.readTime = calculateReadTime(content)
   }
   if (input.excerpt !== undefined) data.excerpt = input.excerpt
+  if (input.contentFormat !== undefined) data.contentFormat = input.contentFormat
+  if (input.readHint !== undefined) data.readHint = input.readHint
   if (input.categoryId !== undefined) data.categoryId = input.categoryId
   if (input.seriesId !== undefined) {
     data.seriesId = input.seriesId
     if (input.seriesId === null) data.seriesOrder = null
     else if (input.seriesId !== current.seriesId && input.seriesOrder === undefined) {
-      data.seriesOrder = await getNextSeriesOrder(input.seriesId)
+      data.seriesOrder = await getNextSeriesOrder(input.seriesId, database)
     }
   }
   if (input.seriesOrder !== undefined && nextSeriesId) {
-    data.seriesOrder = input.seriesOrder ?? await getNextSeriesOrder(nextSeriesId)
+    data.seriesOrder = input.seriesOrder ?? await getNextSeriesOrder(nextSeriesId, database)
   }
   if (input.tags !== undefined) data.tags = input.tags
   if (input.coverImage !== undefined) data.coverImage = input.coverImage
@@ -199,7 +211,7 @@ export async function updatePost(id: string, input: PostInput) {
     })
   }
 
-  return prisma.post.update({ where: { id }, data })
+  return database.post.update({ where: { id }, data })
 }
 
 export async function updateDraftMetadata(

@@ -7,6 +7,7 @@ import type { Category, Post, Project, Todo, TodoSubtask } from "@/lib/generated
 import { apiRequest, jsonRequest } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
 import { CategoryManager } from "./CategoryManager"
+import { reconcileCategoryItems, useCategories } from "./useCategories"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -75,7 +76,8 @@ export function TodoList({
   projects: Project[]
 }) {
   const [todos, setTodos] = useState(initialTodos)
-  const [categories, setCategories] = useState(initialCategories)
+  const categoryMutations = useCategories(initialCategories, "TODO")
+  const { categories } = categoryMutations
   const [newTitle, setNewTitle] = useState("")
   // #29: newCategoryId 由 useSyncExternalStore 派生，hydration 后自动用 localStorage 值
   const rememberedCategory = useSyncExternalStore(
@@ -180,37 +182,18 @@ export function TodoList({
   }
 
   async function createCategory(name: string) {
-    const category = await apiRequest<Category>(
-      "/api/categories",
-      jsonRequest("POST", {
-        name,
-        type: "TODO",
-        sortOrder: (categories.at(-1)?.sortOrder ?? -10) + 10,
-      })
-    )
-    setCategories((current) => [...current, category].sort((a, b) => a.sortOrder - b.sortOrder))
+    const category = await categoryMutations.createCategory(name)
     selectNewCategory(category.id)
   }
 
   async function updateCategory(id: string, input: { name: string; sortOrder: number }) {
-    const category = await apiRequest<Category>(
-      `/api/categories/${id}`,
-      jsonRequest("PATCH", input)
-    )
-    setCategories((current) => current
-      .map((item) => item.id === id ? category : item)
-      .sort((a, b) => a.sortOrder - b.sortOrder))
-    setTodos((current) => current.map((todo) => (
-      todo.categoryId === id ? { ...todo, category } : todo
-    )))
+    const category = await categoryMutations.updateCategory(id, input)
+    setTodos((current) => reconcileCategoryItems(current, id, category))
   }
 
   async function deleteCategory(id: string) {
-    await apiRequest(`/api/categories/${id}`, { method: "DELETE" })
-    setCategories((current) => current.filter((category) => category.id !== id))
-    setTodos((current) => current.map((todo) => (
-      todo.categoryId === id ? { ...todo, categoryId: null, category: null } : todo
-    )))
+    await categoryMutations.deleteCategory(id)
+    setTodos((current) => reconcileCategoryItems(current, id, null))
     if (activeGroupId === id) setActiveGroupId(null)
     if (newCategoryId === id) selectNewCategory("")
   }

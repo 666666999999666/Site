@@ -9,7 +9,7 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs"
-import { tmpdir } from "node:os"
+import { tmpdir, userInfo } from "node:os"
 import path from "node:path"
 import { spawnSync } from "node:child_process"
 import test from "node:test"
@@ -76,11 +76,13 @@ test("unified storage cleanup is a no-op without candidates and backs up exactly
   assert.match(cleanup, /QZSITE_STORAGE_BACKUP_READY="\$backup_set"/)
   assert.ok(cleanup.indexOf('cleanup-uploads.sh" --apply') < cleanup.indexOf('cleanup-study-uploads.sh" --apply'))
 
+  const common = read("ops/common.sh")
+  assert.match(common, /Z-storage-cleanup\$/)
+  assert.match(common, /-uploads\.tar\.gz/)
+  assert.match(common, /-study-uploads\.tar\.gz/)
+  assert.match(common, /\.sha256/)
   for (const wrapper of [read("ops/cleanup-uploads.sh"), read("ops/cleanup-study-uploads.sh")]) {
-    assert.match(wrapper, /Z-storage-cleanup\$/)
-    assert.match(wrapper, /-uploads\.tar\.gz/)
-    assert.match(wrapper, /-study-uploads\.tar\.gz/)
-    assert.match(wrapper, /\.sha256/)
+    assert.match(wrapper, /require_storage_cleanup_backup "\$QZSITE_STORAGE_BACKUP_READY"/)
   }
 })
 
@@ -287,6 +289,7 @@ test(
   "Cron installation preserves external entries and rejects unsafe prior state",
   { skip: process.platform === "win32" ? "requires a POSIX crontab harness" : false },
   () => {
+    const testUser = userInfo()
     const fixture = mkdtempSync(path.join(tmpdir(), "qzsite-cron-install-"))
     const fixtureOps = path.join(fixture, "ops")
     const fakeBin = path.join(fixture, "bin")
@@ -346,8 +349,8 @@ test(
         [
           "#!/usr/bin/env bash",
           "set -euo pipefail",
-          "[[ \"${1:-}\" == passwd && \"${2:-}\" == root ]] || exit 2",
-          "printf 'root:x:0:0:root:%s:/bin/bash\\n' \"$CRON_TEST_HOME\"",
+          "[[ \"${1:-}\" == passwd && \"${2:-}\" == \"$CRON_TEST_USER\" ]] || exit 2",
+          "printf '%s:x:%s:%s:test:%s:/bin/bash\\n' \"$CRON_TEST_USER\" \"$CRON_TEST_UID\" \"$CRON_TEST_GID\" \"$CRON_TEST_HOME\"",
         ].join("\n")
       )
       chmodSync(installer, 0o700)
@@ -368,7 +371,10 @@ test(
           PATH: `${fakeBin}${path.delimiter}${process.env.PATH ?? ""}`,
           CRON_STATE: state,
           CRON_TEST_HOME: fixture,
-          MAINTENANCE_CRON_USER: "root",
+          MAINTENANCE_CRON_USER: testUser.username,
+          CRON_TEST_USER: testUser.username,
+          CRON_TEST_UID: String(testUser.uid),
+          CRON_TEST_GID: String(testUser.gid),
         },
       })
 

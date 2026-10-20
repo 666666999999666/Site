@@ -107,6 +107,8 @@ model Post {
   title             String
   content           String           @db.Text
   excerpt           String?
+  contentFormat     String?
+  readHint          String?
   slug              String           @unique
   categoryId        String?
   category          Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)

@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { publicPageMetadata } from "@/lib/public-metadata"
 import { getTranslations } from "next-intl/server"
 import { prisma } from "@/lib/db"
 import { Container } from "@/components/layout/Container"
@@ -7,24 +8,21 @@ import { BlogBrowseNav } from "@/components/blog/BlogBrowseNav"
 import { JsonLd } from "@/components/seo/JsonLd"
 import { absoluteUrl } from "@/lib/site"
 import { breadcrumbJsonLd } from "@/lib/structured-data"
+import { countPublicTags } from "@/lib/tags"
 
 export const dynamic = "force-dynamic"
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
   title: "博客标签",
   description: "按标签查找 Agent、Python 与 Web 工程文章。",
-  alternates: { canonical: "/zh/blog/tags" },
-  openGraph: { title: "博客标签", description: "按标签查找技术文章。", url: absoluteUrl("/zh/blog/tags"), locale: "zh_CN" },
-}
+  pathname: "/zh/blog/tags",
+  openGraph: { description: "按标签查找技术文章。", url: absoluteUrl("/zh/blog/tags") },
+})
 
 export default async function TagsPage() {
   const t = await getTranslations("blog")
   const posts = await prisma.post.findMany({ where: { status: "PUBLISHED" }, select: { tags: true } })
-  const counts = new Map<string, number>()
-  for (const post of posts) {
-    for (const tag of new Set(post.tags)) counts.set(tag, (counts.get(tag) ?? 0) + 1)
-  }
-  const tags = [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], "zh-CN"))
+  const tags = countPublicTags(posts)
 
   return (
     <section className="py-12 sm:py-16">

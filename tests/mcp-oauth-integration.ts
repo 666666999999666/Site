@@ -5,6 +5,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import path from "node:path"
 import bcrypt from "bcryptjs"
 import { Client as PgClient } from "pg"
+import { requireMcpOAuthTestDatabaseUrl } from "./mcp-oauth-test-database"
 
 const OAUTH_MIGRATION = "20260809030000_better_auth_oauth_mcp"
 const FINAL_MIGRATION = "20260810090000_remote_oauth_markdown_import"
@@ -40,19 +41,6 @@ interface TokenResponse {
 
 function progress(step: string) {
   process.stdout.write(`[oauth-integration] ${step}\n`)
-}
-
-function requireTestDatabaseUrl(): string {
-  const value = process.env.MCP_OAUTH_TEST_DATABASE_URL
-  assert.ok(value, "MCP_OAUTH_TEST_DATABASE_URL is required")
-  const parsed = new URL(value)
-  const database = parsed.pathname.replace(/^\//, "").toLowerCase()
-  assert.match(database, /test/, "OAuth integration database name must contain 'test'")
-  assert.ok(
-    ["127.0.0.1", "localhost"].includes(parsed.hostname),
-    "OAuth integration database must be local"
-  )
-  return value
 }
 
 async function resetDatabase(client: PgClient): Promise<string> {
@@ -215,7 +203,7 @@ async function redirectTarget(response: Response): Promise<string> {
 }
 
 async function main() {
-  const databaseUrl = requireTestDatabaseUrl()
+  const databaseUrl = requireMcpOAuthTestDatabaseUrl(process.env.MCP_OAUTH_TEST_DATABASE_URL)
   const pg = new PgClient({ connectionString: databaseUrl })
   await pg.connect()
   await resetDatabase(pg)

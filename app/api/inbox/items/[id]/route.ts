@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { requireJsonRequest } from "@/lib/api/admin-mutation"
 import { ensureAuthenticated } from "@/lib/api/auth"
-import { handleApiError } from "@/lib/api/handler"
-import { privateNoStore } from "@/lib/api/private-response"
+import { privateNoStore, handlePrivateApiError } from "@/lib/api/private-response"
 import { prisma } from "@/lib/db"
 import { ConfigurationError, NotFoundError } from "@/lib/errors"
 import { isInboxEnabled } from "@/lib/inbox-feature"
@@ -29,7 +28,7 @@ export async function GET(
 
     return privateNoStore(NextResponse.json(serializeInboxItem(item)))
   } catch (error) {
-    return privateNoStore(handleApiError(error))
+    return handlePrivateApiError(error)
   }
 }
 
@@ -46,6 +45,6 @@ export async function DELETE(
     await deleteInboxItem(userId, id)
     return privateNoStore(NextResponse.json({ success: true }))
   } catch (error) {
-    return privateNoStore(handleApiError(error))
+    return handlePrivateApiError(error)
   }
 }

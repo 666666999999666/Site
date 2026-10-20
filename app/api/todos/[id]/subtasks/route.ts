@@ -1,12 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ensureAuthenticated } from "@/lib/api/auth"
 import { requireJsonRequest } from "@/lib/api/admin-mutation"
-import { privateNoStore } from "@/lib/api/private-response"
-import { handleApiError } from "@/lib/api/handler"
+import { privateNoStore, handlePrivateApiError } from "@/lib/api/private-response"
 import { prisma } from "@/lib/db"
 import { NotFoundError } from "@/lib/errors"
 import { readJsonObject, validateTodoSubtaskCreate } from "@/lib/validation"
-import { privateJsonHeaders } from "../../_shared"
 
 export async function GET(
   _req: NextRequest,
@@ -22,9 +20,9 @@ export async function GET(
       where: { todoId: id },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     })
-    return NextResponse.json(subtasks, { headers: privateJsonHeaders })
+    return privateNoStore(NextResponse.json(subtasks))
   } catch (error) {
-    return privateNoStore(handleApiError(error))
+    return handlePrivateApiError(error)
   }
 }
 
@@ -55,8 +53,8 @@ export async function POST(
         sortOrder: input.sortOrder ?? ((lastSubtask?.sortOrder ?? -1) + 1),
       },
     })
-    return NextResponse.json(subtask, { status: 201, headers: privateJsonHeaders })
+    return privateNoStore(NextResponse.json(subtask, { status: 201 }))
   } catch (error) {
-    return privateNoStore(handleApiError(error))
+    return handlePrivateApiError(error)
   }
 }

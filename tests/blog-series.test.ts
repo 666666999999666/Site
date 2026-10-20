@@ -113,7 +113,7 @@ test("related posts rank same series before category and tags, then deduplicate"
   assert.deepEqual(
     rankRelatedPosts(current, [unrelated, sharedTags, sameCategory, sameSeries, sameSeries], 4)
       .map((post) => post.id),
-    ["series", "category", "tags", "unrelated"]
+    ["series", "category", "tags"]
   )
 })
 

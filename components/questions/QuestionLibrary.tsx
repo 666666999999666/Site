@@ -9,6 +9,7 @@ import {
   formatQuestionDateTime,
   markdownSummary,
   ratingLabels,
+  questionRatings,
   stateLabel,
   type QuestionListResponse,
 } from "@/components/questions/types"
@@ -32,10 +33,7 @@ const statusOptions = [
 const ratingOptions = [
   { value: "", label: "全部最近评分" },
   { value: "NONE", label: "尚未评分" },
-  { value: "AGAIN", label: "重来" },
-  { value: "HARD", label: "困难" },
-  { value: "GOOD", label: "良好" },
-  { value: "EASY", label: "简单" },
+  ...questionRatings.map((rating) => ({ value: rating, label: ratingLabels[rating] })),
 ]
 
 const emptyResponse: QuestionListResponse = {

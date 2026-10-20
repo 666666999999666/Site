@@ -14,10 +14,19 @@ export function SearchInput({ value, onChange }: SearchInputProps) {
   const [localValue, setLocalValue] = useState(value)
   const isComposingRef = useRef(false)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const onChangeRef = useRef(onChange)
+  const lastNotifiedValue = useRef<string | null>(null)
+
+  useEffect(() => { onChangeRef.current = onChange }, [onChange])
 
   // 当外部 value 变化且不在组合中时，同步到 localValue
   useEffect(() => {
+    if (lastNotifiedValue.current === value) {
+      lastNotifiedValue.current = null
+      return
+    }
     if (!isComposingRef.current) {
+      if (debounceRef.current) clearTimeout(debounceRef.current)
       setLocalValue(value)
     }
   }, [value])
@@ -32,15 +41,17 @@ export function SearchInput({ value, onChange }: SearchInputProps) {
   const notifyParent = useCallback((newValue: string) => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
-      onChange(newValue)
+      lastNotifiedValue.current = newValue
+      onChangeRef.current(newValue)
     }, 300)
-  }, [onChange])
+  }, [])
 
   return (
     <div className="relative">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
       <input
-        type="text"
+        type="search"
+        autoComplete="off"
         aria-label={t("search")}
         value={localValue}
         onChange={(e) => {
@@ -73,9 +84,11 @@ export function SearchInput({ value, onChange }: SearchInputProps) {
           type="button"
           aria-label={t("clearSearch")}
           onClick={() => {
+            isComposingRef.current = false
             setLocalValue("")
             if (debounceRef.current) clearTimeout(debounceRef.current)
-            onChange("")
+            lastNotifiedValue.current = ""
+            onChangeRef.current("")
           }}
           className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
         >

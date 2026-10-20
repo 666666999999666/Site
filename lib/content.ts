@@ -1,4 +1,6 @@
 import { fromMarkdown } from "mdast-util-from-markdown"
+import { encodeImageTitle } from "./image-presentation"
+import type { Nodes } from "mdast"
 
 export interface ContentHeading {
   id: string
@@ -122,7 +124,9 @@ function renderInline(nodes: TiptapNode[], depth = 0): string {
       const alt = typeof node.attrs?.alt === "string"
         ? node.attrs.alt.replace(/[[\]]/g, "\\$&")
         : ""
-      return src ? `![${alt}](${src})` : ""
+      const title = encodeImageTitle(typeof node.attrs?.title === "string" ? node.attrs.title : undefined, node.attrs?.width)
+      const suffix = title ? ` "${title.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` : ""
+      return src ? `![${alt}](${src}${suffix})` : ""
     }
     return renderInline(childrenOf(node), depth + 1)
   }).join("")
@@ -265,7 +269,29 @@ export function normalizeContent(raw: string): string {
 }
 
 export function normalizeContentForDisplay(raw: string): string {
-  return normalizeContent(raw).replace(/^[\t ]*<br\s*\/?>[\t ]*$/gim, "&nbsp;")
+  const markdown = normalizeContent(raw)
+  const breakPattern = /^[\t ]*<br\s*\/?>[\t ]*$/gim
+  if (!breakPattern.test(markdown)) return markdown
+  // Standalone legacy breaks need a visible blank paragraph, but code is literal.
+  const protectedRanges: { start: number; end: number }[] = []
+  const pending: Nodes[] = [fromMarkdown(markdown)]
+  while (pending.length) {
+    const node = pending.pop()!
+    if ((node.type === "code" || node.type === "inlineCode") && node.position) {
+      const start = node.position.start.offset
+      const end = node.position.end.offset
+      if (typeof start === "number" && typeof end === "number") protectedRanges.push({ start, end })
+    }
+    if ("children" in node) {
+      for (let index = node.children.length - 1; index >= 0; index -= 1) pending.push(node.children[index])
+    }
+  }
+  let rangeIndex = 0
+  return markdown.replace(breakPattern, (match, offset: number) => {
+    while (protectedRanges[rangeIndex] && protectedRanges[rangeIndex].end <= offset) rangeIndex += 1
+    const range = protectedRanges[rangeIndex]
+    return range && offset >= range.start && offset < range.end ? match : "&nbsp;"
+  })
 }
 
 export function slugifyHeading(text: string): string {

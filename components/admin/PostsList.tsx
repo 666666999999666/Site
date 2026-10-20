@@ -6,6 +6,7 @@ import { Pencil, Search, Trash2 } from "lucide-react"
 import type { Category, Post, Series } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
 import { CategoryManager } from "./CategoryManager"
+import { reconcileCategoryItems, useCategories } from "./useCategories"
 import { SeriesManager } from "./SeriesManager"
 import type { SeriesMutationInput } from "./SeriesManager"
 import { Button } from "@/components/ui/button"
@@ -28,7 +29,8 @@ export function PostsList({
 }) {
   const [query, setQuery] = useState("")
   const [posts, setPosts] = useState(initialPosts)
-  const [categories, setCategories] = useState(initialCategories)
+  const categoryMutations = useCategories(initialCategories, "BLOG")
+  const { categories } = categoryMutations
   const [series, setSeries] = useState(initialSeries)
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
@@ -64,36 +66,17 @@ export function PostsList({
   }
 
   async function createCategory(name: string) {
-    const category = await apiRequest<Category>(
-      "/api/categories",
-      jsonRequest("POST", {
-        name,
-        type: "BLOG",
-        sortOrder: (categories.at(-1)?.sortOrder ?? -10) + 10,
-      })
-    )
-    setCategories((current) => [...current, category].sort((a, b) => a.sortOrder - b.sortOrder))
+    await categoryMutations.createCategory(name)
   }
 
   async function updateCategory(id: string, input: { name: string; sortOrder: number }) {
-    const category = await apiRequest<Category>(
-      `/api/categories/${id}`,
-      jsonRequest("PATCH", input)
-    )
-    setCategories((current) => current
-      .map((item) => item.id === id ? category : item)
-      .sort((a, b) => a.sortOrder - b.sortOrder))
-    setPosts((current) => current.map((post) => (
-      post.categoryId === id ? { ...post, category } : post
-    )))
+    const category = await categoryMutations.updateCategory(id, input)
+    setPosts((current) => reconcileCategoryItems(current, id, category))
   }
 
   async function deleteCategory(id: string) {
-    await apiRequest(`/api/categories/${id}`, { method: "DELETE" })
-    setCategories((current) => current.filter((item) => item.id !== id))
-    setPosts((current) => current.map((post) => (
-      post.categoryId === id ? { ...post, categoryId: null, category: null } : post
-    )))
+    await categoryMutations.deleteCategory(id)
+    setPosts((current) => reconcileCategoryItems(current, id, null))
     if (activeGroupId === id) setActiveGroupId(null)
   }
 

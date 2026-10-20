@@ -44,9 +44,10 @@ npm run lint
 npm test
 npx tsc --noEmit
 npx prisma validate
-npm run test:mcp
 npm run build
 ```
+
+`npm test` 已包含 MCP 协议测试；只排查该协议时可单独运行 `npm run test:mcp`。
 
 测试覆盖正文转换、目录 slug、发布时间规则、输入校验、上传文件签名、中文文案包和单语言路由合同。Dockerfile 在镜像构建时也会执行 lint、测试和生产构建。
 

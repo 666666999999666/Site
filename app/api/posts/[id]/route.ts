@@ -1,14 +1,13 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
 import { updatePost } from "@/lib/posts"
-import { handleApiError } from "@/lib/api/handler"
 import { NotFoundError } from "@/lib/errors"
 import { ensureAuthenticated } from "@/lib/api/auth"
 import { readJsonObject, validateEmptyObject, validatePostUpdate } from "@/lib/validation"
 import { extractUploadUrls } from "@/lib/content"
 import { deleteUploadFiles } from "@/lib/uploads-cleanup"
 import { requireJsonRequest } from "@/lib/api/admin-mutation"
-import { privateNoStore } from "@/lib/api/private-response"
+import { privateNoStore, handlePrivateApiError } from "@/lib/api/private-response"
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -18,7 +17,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
     if (!post) throw new NotFoundError("未找到文章")
     return privateNoStore(NextResponse.json(post))
   } catch (e) {
-    return privateNoStore(handleApiError(e))
+    return handlePrivateApiError(e)
   }
 }
 
@@ -31,7 +30,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
     const post = await updatePost(id, input)
     return privateNoStore(NextResponse.json(post))
   } catch (e) {
-    return privateNoStore(handleApiError(e))
+    return handlePrivateApiError(e)
   }
 }
 
@@ -53,6 +52,6 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     }
     return privateNoStore(NextResponse.json({ ok: true }))
   } catch (e) {
-    return privateNoStore(handleApiError(e))
+    return handlePrivateApiError(e)
   }
 }

@@ -6,22 +6,9 @@ import type { Series } from "@/lib/generated/prisma/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
+import { seriesDraft, seriesMutationInput, type SeriesMutationInput, type SeriesDraft } from "./series-form"
 
-export type SeriesMutationInput = {
-  title: string
-  slug?: string
-  description: string
-  coverImage?: string | null
-  sortOrder?: number
-}
-
-function parseSortOrder(value: string) {
-  const parsed = Number(value)
-  if (!Number.isInteger(parsed) || parsed < -10_000 || parsed > 10_000) {
-    throw new Error("系列排序必须是 -10000 到 10000 之间的整数")
-  }
-  return parsed
-}
+export type { SeriesMutationInput } from "./series-form"
 
 export function SeriesManager({
   items,
@@ -36,38 +23,24 @@ export function SeriesManager({
   onUpdate: (id: string, input: SeriesMutationInput) => Promise<void>
   onDelete: (id: string) => Promise<void>
 }) {
-  const [newTitle, setNewTitle] = useState("")
-  const [newSlug, setNewSlug] = useState("")
-  const [newDescription, setNewDescription] = useState("")
-  const [newCoverImage, setNewCoverImage] = useState("")
-  const [newSortOrder, setNewSortOrder] = useState("0")
+  const [newDraft, setNewDraft] = useState(seriesDraft)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [editTitle, setEditTitle] = useState("")
-  const [editSlug, setEditSlug] = useState("")
-  const [editDescription, setEditDescription] = useState("")
-  const [editCoverImage, setEditCoverImage] = useState("")
-  const [editSortOrder, setEditSortOrder] = useState("0")
+  const [editDraft, setEditDraft] = useState(seriesDraft)
   const [error, setError] = useState("")
 
+  function updateNewField(field: keyof SeriesDraft, value: string) {
+    setNewDraft((current) => ({ ...current, [field]: value }))
+  }
+
+  function updateEditField(field: keyof SeriesDraft, value: string) {
+    setEditDraft((current) => ({ ...current, [field]: value }))
+  }
+
   async function create() {
-    if (!newTitle.trim() || !newDescription.trim()) {
-      setError("系列标题和简介均为必填项")
-      return
-    }
     setError("")
     try {
-      await onCreate({
-        title: newTitle.trim(),
-        ...(newSlug.trim() ? { slug: newSlug.trim() } : {}),
-        description: newDescription.trim(),
-        coverImage: newCoverImage.trim() || null,
-        sortOrder: parseSortOrder(newSortOrder),
-      })
-      setNewTitle("")
-      setNewSlug("")
-      setNewDescription("")
-      setNewCoverImage("")
-      setNewSortOrder("0")
+      await onCreate(seriesMutationInput(newDraft, "create"))
+      setNewDraft(seriesDraft())
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "创建系列失败")
     }
@@ -75,27 +48,17 @@ export function SeriesManager({
 
   function startEdit(item: Series) {
     setEditingId(item.id)
-    setEditTitle(item.title)
-    setEditSlug(item.slug)
-    setEditDescription(item.description ?? "")
-    setEditCoverImage(item.coverImage ?? "")
-    setEditSortOrder(String(item.sortOrder))
+    setEditDraft(seriesDraft(item))
   }
 
   async function saveEdit() {
-    if (!editingId || !editTitle.trim() || !editSlug.trim() || !editDescription.trim()) {
+    if (!editingId) {
       setError("系列标题、slug 和简介均为必填项")
       return
     }
     setError("")
     try {
-      await onUpdate(editingId, {
-        title: editTitle.trim(),
-        slug: editSlug.trim(),
-        description: editDescription.trim(),
-        coverImage: editCoverImage.trim() || null,
-        sortOrder: parseSortOrder(editSortOrder),
-      })
+      await onUpdate(editingId, seriesMutationInput(editDraft, "edit"))
       setEditingId(null)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "更新系列失败")
@@ -122,39 +85,39 @@ export function SeriesManager({
           {editingId === item.id ? (
             <div className="space-y-2">
               <Input
-                value={editTitle}
-                onChange={(event) => setEditTitle(event.target.value)}
+                value={editDraft.title}
+                onChange={(event) => updateEditField("title", event.target.value)}
                 aria-label="系列标题"
                 className="h-8 text-sm"
                 maxLength={120}
                 autoFocus
               />
               <Input
-                value={editSlug}
-                onChange={(event) => setEditSlug(event.target.value)}
+                value={editDraft.slug}
+                onChange={(event) => updateEditField("slug", event.target.value)}
                 aria-label="系列 slug"
                 className="h-8 text-sm"
                 maxLength={120}
               />
               <Textarea
-                value={editDescription}
-                onChange={(event) => setEditDescription(event.target.value)}
+                value={editDraft.description}
+                onChange={(event) => updateEditField("description", event.target.value)}
                 aria-label="系列简介"
                 rows={2}
                 maxLength={1000}
                 className="text-sm"
               />
               <Input
-                value={editCoverImage}
-                onChange={(event) => setEditCoverImage(event.target.value)}
+                value={editDraft.coverImage}
+                onChange={(event) => updateEditField("coverImage", event.target.value)}
                 aria-label="系列封面路径"
                 placeholder="/uploads/cover.webp"
                 className="h-8 text-sm"
                 maxLength={255}
               />
               <Input
-                value={editSortOrder}
-                onChange={(event) => setEditSortOrder(event.target.value)}
+                value={editDraft.sortOrder}
+                onChange={(event) => updateEditField("sortOrder", event.target.value)}
                 aria-label="系列排序"
                 type="number"
                 min={-10000}
@@ -188,24 +151,24 @@ export function SeriesManager({
       ))}
       <div className="space-y-1.5 pt-1">
         <Input
-          value={newTitle}
-          onChange={(event) => setNewTitle(event.target.value)}
+          value={newDraft.title}
+          onChange={(event) => updateNewField("title", event.target.value)}
           placeholder="新系列标题"
           aria-label="新系列标题"
           className="h-8 text-sm"
           maxLength={120}
         />
         <Input
-          value={newSlug}
-          onChange={(event) => setNewSlug(event.target.value)}
+          value={newDraft.slug}
+          onChange={(event) => updateNewField("slug", event.target.value)}
           placeholder="slug（可留空）"
           aria-label="新系列 slug"
           className="h-8 text-sm"
           maxLength={120}
         />
         <Textarea
-          value={newDescription}
-          onChange={(event) => setNewDescription(event.target.value)}
+          value={newDraft.description}
+          onChange={(event) => updateNewField("description", event.target.value)}
           placeholder="系列简介（必填）"
           aria-label="新系列简介"
           rows={2}
@@ -214,16 +177,16 @@ export function SeriesManager({
         />
         <div className="grid grid-cols-[minmax(0,1fr)_5rem] gap-1">
           <Input
-            value={newCoverImage}
-            onChange={(event) => setNewCoverImage(event.target.value)}
+            value={newDraft.coverImage}
+            onChange={(event) => updateNewField("coverImage", event.target.value)}
             placeholder="/uploads/封面（可选）"
             aria-label="新系列封面路径"
             className="h-8 text-sm"
             maxLength={255}
           />
           <Input
-            value={newSortOrder}
-            onChange={(event) => setNewSortOrder(event.target.value)}
+            value={newDraft.sortOrder}
+            onChange={(event) => updateNewField("sortOrder", event.target.value)}
             aria-label="新系列排序"
             type="number"
             min={-10000}

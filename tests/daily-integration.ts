@@ -1,11 +1,7 @@
 import assert from "node:assert/strict"
+import { requireDailyIntegrationTestDatabaseUrl } from "./daily-integration-test-database"
 
-const databaseUrl = process.env.DATABASE_URL
-if (!databaseUrl) throw new Error("DATABASE_URL is required")
-const databaseName = new URL(databaseUrl).pathname.slice(1).toLowerCase()
-if (!databaseName.includes("test")) {
-  throw new Error("Daily integration tests require a disposable database whose name contains 'test'")
-}
+requireDailyIntegrationTestDatabaseUrl(process.env.DATABASE_URL)
 
 async function main() {
 const {

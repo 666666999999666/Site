@@ -3,11 +3,9 @@
 import { useTranslations } from "next-intl"
 import { Link } from "@/i18n/navigation"
 import { Container } from "@/components/layout/Container"
-import type { Post, Category, Series } from "@/lib/generated/prisma/client"
+import type { HomePostData } from "@/lib/home-posts"
 
-type PostWithCategory = Post & { category: Category | null; series?: Series | null }
-
-function formatDate(d: Date) {
+function formatDate(d: string) {
   return new Date(d).toLocaleDateString("zh-CN", {
     year: "numeric",
     month: "long",
@@ -16,7 +14,7 @@ function formatDate(d: Date) {
   })
 }
 
-export function RecentPosts({ posts }: { posts: PostWithCategory[] }) {
+export function RecentPosts({ posts }: { posts: HomePostData[] }) {
   const t = useTranslations("home")
 
   if (posts.length === 0) {
@@ -57,7 +55,7 @@ export function RecentPosts({ posts }: { posts: PostWithCategory[] }) {
                   <p className="text-sm text-muted-foreground line-clamp-2 mb-3">{p.excerpt}</p>
                 )}
                 <div className="mt-auto flex items-center gap-2 text-xs text-muted-foreground">
-                  <time>{formatDate(p.publishedAt ?? p.createdAt)}</time>
+                  <time>{formatDate(p.date)}</time>
                   <span>·</span>
                   <span>{t("minuteRead", { count: p.readTime })}</span>
                 </div>

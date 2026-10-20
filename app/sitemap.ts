@@ -1,6 +1,10 @@
 import type { MetadataRoute } from "next"
 import { prisma } from "@/lib/db"
 import { absoluteUrl } from "@/lib/site"
+import { normalizeTags } from "@/lib/tags"
+
+// Database-backed URLs must be resolved at request time, never from the build-safe empty client.
+export const dynamic = "force-dynamic"
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const staticPages: MetadataRoute.Sitemap = [
@@ -28,11 +32,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       }),
       prisma.series.findMany({
         where: { posts: { some: { status: "PUBLISHED" } } },
-        select: { slug: true, updatedAt: true },
+        select: { slug: true, updatedAt: true, posts: { where: { status: "PUBLISHED" }, select: { updatedAt: true } } },
         orderBy: [{ sortOrder: "asc" }, { title: "asc" }],
       }),
     ])
-    const tags = [...new Set(posts.flatMap((post) => post.tags))]
+    const tags = normalizeTags(posts.flatMap((post) => post.tags))
     return [
       ...staticPages,
       ...posts.map((post) => ({
@@ -43,7 +47,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       })),
       ...series.map((item) => ({
         url: absoluteUrl(`/zh/blog/series/${item.slug}`),
-        lastModified: item.updatedAt,
+        lastModified: new Date(Math.max(item.updatedAt.getTime(), ...item.posts.map((post) => post.updatedAt.getTime()))),
         changeFrequency: "monthly" as const,
         priority: 0.7,
       })),

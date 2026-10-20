@@ -4,21 +4,11 @@ import Link from "next/link"
 import { useEffect, useState } from "react"
 import { ArrowRight, BookOpenCheck, Clock3, LoaderCircle } from "lucide-react"
 import { questionApiRequest, questionErrorMessage } from "@/components/questions/api"
-import { formatQuestionTime, type TodayResponse } from "@/components/questions/types"
+import { questionQueueMessage, type TodayResponse } from "@/components/questions/types"
 import { Badge } from "@/components/ui/badge"
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
-function dailyMessage(today: TodayResponse) {
-  if (today.summary.dueOldCount > 0) return `到期旧题 ${today.summary.dueOldCount} 道`
-  if (today.state === "READY" && today.summary.newRemaining > 0) {
-    return `可学习新题 · 剩余额度 ${today.summary.newRemaining}`
-  }
-  if (today.state === "WAITING") {
-    return `暂时完成 · ${formatQuestionTime(today.nextDueAt, false)} 后还有复习`
-  }
-  return "今日已完成"
-}
 export function DailyReviewCard() {
   const [today, setToday] = useState<TodayResponse | null>(null)
   const [error, setError] = useState("")
@@ -46,7 +36,7 @@ export function DailyReviewCard() {
               <h2 id="daily-review-heading" className="flex items-center gap-2 text-lg font-semibold">
                 <BookOpenCheck className="size-5 text-primary" /> 今日复习
               </h2>
-              {today && <Badge variant="outline">{dailyMessage(today)}</Badge>}
+              {today && <Badge variant="outline">{questionQueueMessage(today)}</Badge>}
             </div>
             {!today && !error && (
               <p className="mt-2 flex items-center gap-2 text-sm text-muted-foreground" role="status">

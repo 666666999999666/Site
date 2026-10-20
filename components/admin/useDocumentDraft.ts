@@ -88,7 +88,9 @@ export function useDocumentDraft<T extends DraftFields>({
           (legacyStorageKey ? localStorage.getItem(legacyStorageKey) : null)
         if (!raw) return
         let parsed: unknown = JSON.parse(raw)
-        if (!primary && legacyDefaults && parsed && typeof parsed === "object" &&
+        // Older owner-scoped drafts can also predate newly added fields.
+        // Fill only declared defaults; existing values still undergo strict validation.
+        if (legacyDefaults && parsed && typeof parsed === "object" &&
           "data" in parsed && parsed.data && typeof parsed.data === "object") {
           parsed = { ...parsed, data: { ...legacyDefaults, ...parsed.data } }
         }

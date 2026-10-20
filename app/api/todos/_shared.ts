@@ -10,7 +10,3 @@ export const todoInclude = {
     ],
   },
 } satisfies Prisma.TodoInclude
-
-export const privateJsonHeaders = {
-  "Cache-Control": "private, no-store",
-} as const

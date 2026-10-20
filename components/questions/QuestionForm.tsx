@@ -49,22 +49,26 @@ export function QuestionForm({ mode, questionId }: { mode: "create" | "edit"; qu
   const [promptError, setPromptError] = useState("")
   const [answerError, setAnswerError] = useState("")
 
+  const applyQuestionResponse = useCallback((response: QuestionDetailResponse) => {
+    setQuestion(response.question)
+    setPromptMarkdown(response.question.promptMarkdown)
+    setReferenceAnswerMarkdown(response.question.referenceAnswerMarkdown ?? "")
+    setAttempts(response.attempts)
+    setTimeline(response.timeline)
+    setSchedulePolicy(null)
+  }, [])
+
   const loadQuestion = useCallback(async () => {
     if (!questionId) return
     try {
       const response = await questionApiRequest<QuestionDetailResponse>(`/api/questions/${encodeURIComponent(questionId)}`)
-      setQuestion(response.question)
-      setPromptMarkdown(response.question.promptMarkdown)
-      setReferenceAnswerMarkdown(response.question.referenceAnswerMarkdown ?? "")
-      setAttempts(response.attempts)
-      setTimeline(response.timeline)
-      setSchedulePolicy(null)
+      applyQuestionResponse(response)
     } catch (caught) {
       setError(questionErrorMessage(caught, "题目加载失败"))
     } finally {
       setLoading(false)
     }
-  }, [questionId])
+  }, [applyQuestionResponse, questionId])
 
   useEffect(() => {
     if (!questionId) return
@@ -72,12 +76,7 @@ export function QuestionForm({ mode, questionId }: { mode: "create" | "edit"; qu
     void questionApiRequest<QuestionDetailResponse>(`/api/questions/${encodeURIComponent(questionId)}`)
       .then((response) => {
         if (cancelled) return
-        setQuestion(response.question)
-        setPromptMarkdown(response.question.promptMarkdown)
-        setReferenceAnswerMarkdown(response.question.referenceAnswerMarkdown ?? "")
-        setAttempts(response.attempts)
-        setTimeline(response.timeline)
-        setSchedulePolicy(null)
+        applyQuestionResponse(response)
       })
       .catch((caught) => {
         if (!cancelled) setError(questionErrorMessage(caught, "题目加载失败"))
@@ -88,7 +87,7 @@ export function QuestionForm({ mode, questionId }: { mode: "create" | "edit"; qu
     return () => {
       cancelled = true
     }
-  }, [questionId])
+  }, [applyQuestionResponse, questionId])
 
   const nextReference = normalizedReference(referenceAnswerMarkdown)
   const requiresPolicy = mode === "edit"

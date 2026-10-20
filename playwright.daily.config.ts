@@ -1,7 +1,8 @@
 import { defineConfig } from "@playwright/test"
 
-const databaseUrl = process.env.DATABASE_URL
-if (!databaseUrl) throw new Error("DATABASE_URL is required for Daily browser tests")
+import { requireDailyTestDatabaseUrl } from "./tests/daily-test-database"
+
+const { url: databaseUrl } = requireDailyTestDatabaseUrl(process.env.DAILY_TEST_DATABASE_URL)
 
 export default defineConfig({
   testDir: "./tests/browser",
@@ -27,6 +28,7 @@ export default defineConfig({
     env: {
       ...process.env,
       DATABASE_URL: databaseUrl,
+      DAILY_TEST_DATABASE_URL: databaseUrl,
       SESSION_SECRET: "daily-browser-test-session-secret-2026",
       NEXT_PUBLIC_SITE_URL: "http://127.0.0.1:3230",
       NEXT_DIST_DIR: ".next-daily-test",

@@ -1,20 +1,15 @@
 import assert from "node:assert/strict"
-import { prisma, disconnectDatabase } from "../lib/db"
 import { createInboxRawHash, parseInboxInput } from "../lib/inbox"
-import { captureInboxItem, deleteInboxItem, retryInboxItem } from "../lib/inbox/service"
+import { requireInboxTestDatabaseUrl } from "./inbox-test-database"
 
-function assertDisposableDatabase() {
-  const connectionString = process.env.DATABASE_URL
-  if (!connectionString) throw new Error("DATABASE_URL is required")
-  const url = new URL(connectionString)
-  const databaseName = decodeURIComponent(url.pathname.replace(/^\//, ""))
-  const localHosts = new Set(["127.0.0.1", "localhost", "::1"])
-  if (!localHosts.has(url.hostname) || !/(?:^|[_-])test(?:$|[_-])/i.test(databaseName)) {
-    throw new Error("Inbox integration tests only run against a local database whose name contains 'test'")
-  }
-}
+type TestDatabase = typeof import("../lib/db").prisma
 
-async function createReceivedItem(ownerId: string, requestKey: string, rawInput: string) {
+async function createReceivedItem(
+  prisma: TestDatabase,
+  ownerId: string,
+  requestKey: string,
+  rawInput: string
+) {
   const parsed = parseInboxInput(rawInput)
   return prisma.inboxItem.create({
     data: {
@@ -37,8 +32,8 @@ async function createReceivedItem(ownerId: string, requestKey: string, rawInput:
   })
 }
 
-async function main() {
-  assertDisposableDatabase()
+async function runIntegration(prisma: TestDatabase) {
+  const { captureInboxItem, deleteInboxItem, retryInboxItem } = await import("../lib/inbox/service")
   const suffix = Date.now().toString(36)
   const owner = await prisma.user.create({
     data: {
@@ -120,6 +115,7 @@ async function main() {
   )
 
   const concurrentItem = await createReceivedItem(
+    prisma,
     owner.id,
     `concurrent-${suffix}`,
     "todo：并发重试只创建一个目标"
@@ -133,6 +129,7 @@ async function main() {
   assert.equal(await prisma.todo.count({ where: { sourceInboxItemId: concurrentItem.id } }), 1)
 
   const failedItem = await createReceivedItem(
+    prisma,
     owner.id,
     `failure-${suffix}`,
     "文章：强制目标唯一冲突"
@@ -176,11 +173,18 @@ async function main() {
   console.log("Inbox PostgreSQL integration checks passed")
 }
 
+async function main() {
+  requireInboxTestDatabaseUrl(process.env.DATABASE_URL)
+  const { prisma, disconnectDatabase } = await import("../lib/db")
+  try {
+    await runIntegration(prisma)
+  } finally {
+    await disconnectDatabase()
+  }
+}
+
 main()
   .catch((error) => {
     console.error(error instanceof Error ? error.message : error)
     process.exitCode = 1
-  })
-  .finally(async () => {
-    await disconnectDatabase()
   })

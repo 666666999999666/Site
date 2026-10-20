@@ -1,4 +1,9 @@
 import type { Metadata } from "next"
+import { publicPageMetadata } from "@/lib/public-metadata"
+import { cache } from "react"
+import { Link } from "@/i18n/navigation"
+import { blogCardSelect, toBlogCard } from "@/lib/blog-card"
+import { matchesTagRoute, normalizeTags } from "@/lib/tags"
 import { notFound } from "next/navigation"
 import { getTranslations } from "next-intl/server"
 import { prisma } from "@/lib/db"
@@ -12,16 +17,28 @@ import { decodeRouteSegment } from "@/lib/route-segment"
 
 export const dynamic = "force-dynamic"
 
+// Read only tag metadata across the small corpus, then fetch cards only for matching IDs.
+const getTagPosts = cache(async (tag: string) => {
+  const index = await prisma.post.findMany({ where: { status: "PUBLISHED" }, select: { id: true, tags: true } })
+  const ids = index.filter((post) => matchesTagRoute(post.tags, tag)).map((post) => post.id)
+  if (!ids.length) return []
+  return prisma.post.findMany({
+    where: { status: "PUBLISHED", id: { in: ids } },
+    orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
+    select: blogCardSelect,
+  })
+})
+
 export async function generateMetadata({ params }: { params: Promise<{ tag: string }> }): Promise<Metadata> {
   const { tag: rawTag } = await params
   const tag = decodeRouteSegment(rawTag)
   const pathname = `/zh/blog/tags/${encodeURIComponent(tag)}`
-  return {
+  return publicPageMetadata({
     title: `#${tag}`,
     description: `标签“${tag}”下的博客文章。`,
-    alternates: { canonical: pathname },
-    openGraph: { title: `#${tag}`, description: `标签“${tag}”下的博客文章。`, url: absoluteUrl(pathname), locale: "zh_CN" },
-  }
+    pathname,
+    openGraph: { url: absoluteUrl(pathname) },
+  })
 }
 
 export default async function TagPage({ params }: { params: Promise<{ locale: string; tag: string }> }) {
@@ -29,13 +46,10 @@ export default async function TagPage({ params }: { params: Promise<{ locale: st
   const tag = decodeRouteSegment(rawTag)
   const [t, posts] = await Promise.all([
     getTranslations("blog"),
-    prisma.post.findMany({
-      where: { status: "PUBLISHED", tags: { has: tag } },
-      orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-      include: { category: true },
-    }),
+    getTagPosts(tag),
   ])
   if (posts.length === 0) notFound()
+  const normalizedTags = normalizeTags([tag])
   const pathname = `/zh/blog/tags/${encodeURIComponent(tag)}`
 
   return (
@@ -50,8 +64,14 @@ export default async function TagPage({ params }: { params: Promise<{ locale: st
         <h1 className="mb-2 text-3xl font-bold">{t("taggedWith", { tag })}</h1>
         <p className="mb-8 text-muted-foreground">{t("postsCount", { count: posts.length })}</p>
         <BlogBrowseNav />
+        {normalizedTags.length > 1 && (
+          <div className="mb-6 rounded-lg border border-border/60 p-4 text-sm text-muted-foreground">
+            <p className="mb-2">{t("compositeTagNotice")}</p>
+            <div className="flex flex-wrap gap-3">{normalizedTags.map((item) => <Link key={item} href={`/blog/tags/${encodeURIComponent(item)}`} className="text-primary hover:underline">#{item}</Link>)}</div>
+          </div>
+        )}
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {posts.map((post) => <BlogCard key={post.id} post={post} />)}
+          {posts.map((post) => <BlogCard key={post.id} post={toBlogCard(post)} />)}
         </div>
       </Container>
     </section>

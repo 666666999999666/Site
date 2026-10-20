@@ -2,13 +2,43 @@ import { expect, test, type Page } from "@playwright/test"
 import { ideaTestContent, postTestContent } from "../fixtures/document-content"
 import path from "node:path"
 import { validatePostUpdate } from "../../lib/validation"
+import { scanPublicationContent } from "../../lib/publication-content"
 
 const owner = "document-test-owner"
 const ideaKey = "qz-idea-draft:" + owner + ":document-test-idea"
 const postKey = "qz-post-draft:" + owner + ":document-test-post"
 
+const embeddedPngHeader = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64")
+
+async function mockValidatedPostSave(page: Page, title: string, writes: Record<string, unknown>[]) {
+  await page.route("**/api/posts/**", async (route) => {
+    const body = route.request().postDataJSON() as Record<string, unknown>
+    try { validatePostUpdate(body) } catch (error) {
+      await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: (error as Error).message }) })
+      return
+    }
+    writes.push(body)
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
+      id: "document-test-post", title, content: "", excerpt: "", categoryId: null,
+      seriesId: null, seriesOrder: null, tags: [], publishedAt: null, ...body,
+    }) })
+  })
+}
+
 function acceptDiscard(page: Page) {
   page.once("dialog", (dialog) => dialog.accept())
+}
+
+async function confirmPublicationWarnings(page: Page, waitForEditorCallback = false) {
+  await expect(page.getByRole("heading", { name: /发布前有.*处内容需要确认/ })).toBeVisible()
+  if (waitForEditorCallback) {
+    // Deliberately cross Milkdown's serialization debounce: identical callbacks
+    // after embedded-image URL replacement must not erase the review panel.
+    await page.waitForTimeout(500)
+    await expect(page.getByRole("heading", { name: /发布前有.*处内容需要确认/ })).toBeVisible()
+  }
+  await page.getByRole("checkbox", { name: /我已核对这些提示/ }).check()
+  await page.getByRole("button", { name: "更新发布", exact: true }).click()
 }
 
 async function mockSave(page: Page, kind: "idea" | "post", fail = false) {
@@ -69,7 +99,7 @@ test("Idea saves immediately into reading and keeps unaffected fields out of PAT
   await page.getByRole("button", { name: "保存 Idea" }).click()
   await expect(page.getByRole("article", { name: "Idea 阅读" })).toContainText("已保存正文")
   expect(writes).toEqual([{ content: "已保存正文\n    原始缩进" }])
-  await expect(page.getByRole("status")).not.toContainText("未保存")
+  await expect(page.locator(".document-action-bar").getByRole("status")).not.toContainText("未保存")
   expect(await page.evaluate((key) => localStorage.getItem(key), ideaKey)).toBeNull()
 })
 
@@ -106,7 +136,7 @@ test("refresh and browser back preserve drafts; recovery never automatically app
   await page.reload()
   await expect(page.getByRole("button", { name: "恢复草稿" })).toBeVisible()
   await page.getByRole("button", { name: "丢弃本地草稿" }).click()
-  await expect(page.getByRole("status")).not.toContainText("未保存")
+  await expect(page.locator(".document-action-bar").getByRole("status")).not.toContainText("未保存")
 })
 
 test("return confirmation can be refused without losing content", async ({ page }) => {
@@ -118,23 +148,27 @@ test("return confirmation can be refused without losing content", async ({ page 
   await expect(page.getByRole("textbox", { name: "正文", exact: true })).toHaveValue("不离开")
 })
 
-test("existing article local drafts remain recoverable after the upgrade", async ({ page }) => {
-  await page.addInitScript(() => {
-    localStorage.setItem("qz-post-draft:document-test-post", JSON.stringify({
+for (const storageKey of ["qz-post-draft:document-test-post", postKey]) {
+test(`existing article local drafts remain recoverable after the upgrade (${storageKey})`, async ({ page }) => {
+  await page.addInitScript((key) => {
+    localStorage.setItem(key, JSON.stringify({
       savedAt: Date.now(), data: {
         title: "旧版草稿", content: "保留旧草稿正文", excerpt: "", categoryId: "", tags: "", publishedAt: "",
       },
     }))
-  })
+  }, storageKey)
   await page.goto("/document-workflow?kind=post")
   await page.getByRole("button", { name: "恢复草稿" }).click()
   await expect(page.getByRole("textbox", { name: "标题", exact: true })).toHaveValue("旧版草稿")
   await expect(page.locator(".ProseMirror")).toContainText("保留旧草稿正文")
+  await expect(page.getByLabel("内容形式", { exact: true })).toHaveValue("")
+  await expect(page.getByLabel("阅读提示（可选）", { exact: true })).toHaveValue("")
   acceptDiscard(page)
   await page.getByRole("button", { name: "取消编辑" }).click()
   await expect(page.getByRole("article", { name: "文章阅读" })).toBeVisible()
-  expect(await page.evaluate(() => localStorage.getItem("qz-post-draft:document-test-post"))).toBeNull()
+  expect(await page.evaluate((key) => localStorage.getItem(key), storageKey)).toBeNull()
 })
+}
 
 test("existing post reads first; same-area preview retains final input, caret and undo", async ({ page }) => {
   const writes = await mockSave(page, "post")
@@ -174,9 +208,41 @@ test("post saves its current snapshot and keeps publication actions explicit", a
   await page.getByRole("button", { name: "编辑", exact: true }).click()
   await expect(editor).toBeVisible()
   await page.getByRole("button", { name: "撤回为草稿", exact: true }).click()
-  await expect(page.getByRole("status")).toHaveText("草稿")
+  await expect(page.locator(".document-action-bar").getByRole("status")).toHaveText("草稿")
   expect(writes[1].status).toBe("DRAFT")
   expect(writes[1]).not.toHaveProperty("content")
+})
+
+test("PostForm preserves image width, alt and caption through API save, reading and reopen", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  const writes = await mockSave(page, "post")
+  await page.goto("/document-workflow?kind=post&edit=1")
+  const block = page.locator(".editor-image-block").first()
+  await expect(block).toBeVisible()
+  await block.getByRole("button", { name: "图片设置", exact: true }).click()
+  await block.getByLabel("显示宽度（像素）").fill("600")
+  await block.getByLabel("替代文本", { exact: true }).fill("深蓝背景上的圆形与三条说明线")
+  await block.getByLabel("图片说明", { exact: true }).fill("人工构造的回归测试插图")
+  await block.getByRole("button", { name: "应用图片设置" }).click()
+  await page.getByRole("button", { name: "更新发布", exact: true }).click()
+  const reader = page.getByRole("article", { name: "文章阅读", exact: true })
+  await expect(reader).toBeVisible()
+  expect(writes).toHaveLength(1)
+  expect(writes[0].content).toContain('![深蓝背景上的圆形与三条说明线](/test-document-image.svg "人工构造的回归测试插图 {qz-width=600}")')
+  const image = reader.locator("img")
+  await expect(image).toHaveAttribute("alt", "深蓝背景上的圆形与三条说明线")
+  await expect(image).toHaveAttribute("title", "人工构造的回归测试插图")
+  await expect.poll(() => image.evaluate((element) => element.getBoundingClientRect().width)).toBeCloseTo(600, 0)
+  expect(await page.evaluate((key) => localStorage.getItem(key), postKey)).toBeNull()
+  await page.getByRole("button", { name: "编辑", exact: true }).click()
+  await expect(block.locator("img")).toHaveAttribute("width", "600")
+  await expect(block.locator("img")).toHaveAttribute("alt", "深蓝背景上的圆形与三条说明线")
+  await expect(block.locator("img")).toHaveAttribute("title", "人工构造的回归测试插图")
+  await page.getByRole("tab", { name: "预览", exact: true }).click()
+  const previewImage = page.getByRole("article", { name: "文章预览", exact: true }).locator("img")
+  await expect(previewImage).toHaveAttribute("width", "600")
+  await expect.poll(() => previewImage.evaluate((element) => element.getBoundingClientRect().width)).toBeCloseTo(600, 0)
+  expect(writes).toHaveLength(1)
 })
 
 test("post saves pasted embedded images as uploaded URLs instead of base64", async ({ page }) => {
@@ -203,6 +269,9 @@ test("post saves pasted embedded images as uploaded URLs instead of base64", asy
     element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: clipboard, bubbles: true, cancelable: true }))
   })
   await page.getByRole("button", { name: "更新发布", exact: true }).click()
+  await expect(editor.locator('img[src="/uploads/pasted-image.png"]')).toHaveCount(1)
+  await expect(editor.locator('img[src^="data:"]')).toHaveCount(0)
+  await confirmPublicationWarnings(page, true)
   await expect(page.getByRole("article", { name: "文章阅读" })).toBeVisible()
   expect(uploads).toEqual(["POST"])
   expect(writes[0].content).toContain("/uploads/pasted-image.png")
@@ -215,8 +284,12 @@ test("post saves pasted embedded images as uploaded URLs instead of base64", asy
 })
 
 for (const mime of ["image/png", "application/octet-stream"]) {
-test(`post saves six embedded images restored from a legacy draft (${mime}) without exceeding the body limit`, async ({ page }) => {
-  const header = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64")
+test(`post saves six embedded images restored from a legacy draft (${mime}) without exceeding the body limit`, async ({ page, browserName }) => {
+  // Baseline WebKit in the constrained runner takes ~27s to parse this >2MB
+  // legacy draft. Keep its full payload and a bounded functional wait; this is
+  // not a performance pass and does not loosen the normal Chromium gate.
+  if (browserName === "webkit") test.setTimeout(180_000)
+  const header = embeddedPngHeader
   const content = JSON.stringify({ type: "doc", content: [
     { type: "paragraph", content: [{ type: "text", text: "合成六图草稿" }] },
     ...Array.from({ length: 6 }, (_, index) => ({ type: "image", attrs: {
@@ -235,22 +308,12 @@ test(`post saves six embedded images restored from a legacy draft (${mime}) with
   await page.route("**/api/upload", (route) => route.fulfill({ status: 200, contentType: "application/json",
     body: JSON.stringify({ url: `/uploads/restored-image-${++uploads}.png` }) }))
   await page.route("**/uploads/restored-image-*.png", (route) => route.fulfill({ contentType: "image/png", body: header }))
-  await page.route("**/api/posts/**", async (route) => {
-    const body = route.request().postDataJSON() as Record<string, unknown>
-    try { validatePostUpdate(body) } catch (error) {
-      await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: (error as Error).message }) })
-      return
-    }
-    writes.push(body)
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
-      id: "document-test-post", title: "合成六图草稿", content: "", excerpt: "", categoryId: null,
-      seriesId: null, seriesOrder: null, tags: [], publishedAt: null, ...body,
-    }) })
-  })
+  await mockValidatedPostSave(page, "合成六图草稿", writes)
   await page.goto("/document-workflow?kind=post&edit=1")
   await page.getByRole("button", { name: "恢复草稿", exact: true }).click()
-  await expect(page.locator(".ProseMirror img")).toHaveCount(6)
+  await expect(page.locator(".ProseMirror img")).toHaveCount(6, browserName === "webkit" ? { timeout: 60_000 } : {})
   await page.getByRole("button", { name: "更新发布", exact: true }).click()
+  await confirmPublicationWarnings(page, true)
   await expect(page.getByRole("article", { name: "文章阅读" })).toBeVisible()
   expect(uploads).toBe(6)
   expect(writes).toHaveLength(1)
@@ -264,8 +327,9 @@ test(`post saves six embedded images restored from a legacy draft (${mime}) with
 })
 }
 
-test("post saves six pasted PNG images with generic MIME types without exceeding the body limit", async ({ page }) => {
-  const header = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=", "base64")
+test("post saves six pasted PNG images with generic MIME types without exceeding the body limit", async ({ page, browserName }) => {
+  if (browserName === "webkit") test.setTimeout(180_000)
+  const header = embeddedPngHeader
   const html = Array.from({ length: 6 }, (_, index) => {
     const source = "data:application/octet-stream;base64," + Buffer.concat([header, Buffer.alloc(250_000, index)]).toString("base64")
     return `<p><img src="${source}" alt="图片${index + 1}"></p>`
@@ -276,18 +340,7 @@ test("post saves six pasted PNG images with generic MIME types without exceeding
   await page.route("**/api/upload", (route) => route.fulfill({ status: 200, contentType: "application/json",
     body: JSON.stringify({ url: `/uploads/pasted-generic-${++uploads}.png` }) }))
   await page.route("**/uploads/pasted-generic-*.png", (route) => route.fulfill({ contentType: "image/png", body: header }))
-  await page.route("**/api/posts/**", async (route) => {
-    const body = route.request().postDataJSON() as Record<string, unknown>
-    try { validatePostUpdate(body) } catch (error) {
-      await route.fulfill({ status: 400, contentType: "application/json", body: JSON.stringify({ error: (error as Error).message }) })
-      return
-    }
-    writes.push(body)
-    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({
-      id: "document-test-post", title: "合成粘贴六图", content: "", excerpt: "", categoryId: null,
-      seriesId: null, seriesOrder: null, tags: [], publishedAt: null, ...body,
-    }) })
-  })
+  await mockValidatedPostSave(page, "合成粘贴六图", writes)
   await page.goto("/document-workflow?kind=post&edit=1")
   const editor = page.locator(".ProseMirror")
   await expect(editor).toBeVisible()
@@ -298,8 +351,9 @@ test("post saves six pasted PNG images with generic MIME types without exceeding
     element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: clipboard, bubbles: true, cancelable: true }))
   }, html)
   // Crepe renders an empty placeholder beside each pasted image; count sources.
-  await expect(editor.locator('img[src^="data:application/octet-stream;"]')).toHaveCount(6)
+  await expect(editor.locator('img[src^="data:application/octet-stream;"]')).toHaveCount(6, browserName === "webkit" ? { timeout: 60_000 } : {})
   await page.getByRole("button", { name: "更新发布", exact: true }).click()
+  await confirmPublicationWarnings(page, true)
   await expect(page.getByRole("article", { name: "文章阅读" })).toBeVisible()
   expect(uploads).toBe(6)
   expect(writes).toHaveLength(1)
@@ -314,7 +368,7 @@ test("opening the editor and preview without changes preserves the original Mark
   await page.goto("/document-workflow?kind=post&edit=1")
   await expect(page.locator(".ProseMirror")).toBeVisible()
   await page.getByRole("tab", { name: "预览" }).click()
-  await expect(page.getByRole("status")).toHaveText("已发布")
+  await expect(page.locator(".document-action-bar").getByRole("status")).toHaveText("已发布")
   await page.getByRole("tab", { name: "编辑", exact: true }).click()
   await page.getByRole("textbox", { name: "标题", exact: true }).fill("只改标题")
   await page.getByRole("button", { name: "更新发布", exact: true }).click()
@@ -372,3 +426,43 @@ for (const width of [390, 768, 1440]) {
     })
   }
 }
+
+
+test("publication warnings need explicit review and reset after content metadata changes", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 })
+  const content = "```python\nlabel = 'a\u00a0b'\n```\n\n![1.00](/test-document-image.svg)"
+  await page.addInitScript(({ key, content }) => {
+    localStorage.setItem(key, JSON.stringify({ savedAt: Date.now(), data: {
+      title: "发布复核演示", content, excerpt: "说明不可见字符的有意用法。", categoryId: "", seriesId: "", seriesOrder: "", tags: "", publishedAt: "",
+    } }))
+  }, { key: postKey, content })
+  const writes = await mockSave(page, "post")
+  await page.goto("/document-workflow?kind=post&edit=1")
+  await page.getByRole("button", { name: "恢复草稿", exact: true }).click()
+  await expect(page.locator(".ProseMirror")).toBeVisible()
+  await page.getByLabel("内容形式", { exact: true }).selectOption("STUDY_NOTE")
+  await page.getByLabel("阅读提示（可选）", { exact: true }).fill("约 5 分钟，含代码示例")
+  await page.getByRole("tab", { name: "预览", exact: true }).click()
+  const preview = page.getByRole("region", { name: "发布效果预览", exact: true })
+  await expect(preview).toContainText("说明不可见字符的有意用法。")
+  await expect(preview).toContainText("学习笔记 · 约 5 分钟，含代码示例")
+  await page.getByRole("button", { name: "更新发布", exact: true }).click()
+  await expect(page.getByRole("heading", { name: /发布前有.*处内容需要确认/ })).toBeVisible()
+  await expect(page.locator("#publication-review-title").locator("..")).toContainText("U+00A0")
+  expect(writes).toHaveLength(0)
+  await page.getByRole("checkbox", { name: /我已核对这些提示/ }).check()
+  await page.getByRole("tab", { name: "编辑", exact: true }).click()
+  await page.getByRole("textbox", { name: "标题", exact: true }).fill("更新后的发布复核演示")
+  await page.getByRole("button", { name: "更新发布", exact: true }).click()
+  await expect(page.getByRole("checkbox", { name: /我已核对这些提示/ })).not.toBeChecked()
+  expect(writes).toHaveLength(0)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true)
+  await page.screenshot({ path: path.resolve("backups/document-reading-qa/publication-review-mobile.png") })
+  await confirmPublicationWarnings(page)
+  await expect(page.getByRole("article", { name: "文章阅读" })).toBeVisible()
+  expect(writes).toHaveLength(1)
+  expect(writes[0].contentFormat).toBe("STUDY_NOTE")
+  expect(writes[0].readHint).toBe("约 5 分钟，含代码示例")
+  expect(writes[0].publicationReviewToken).toBe(scanPublicationContent(writes[0]).reviewToken)
+  expect(writes[0].content).toContain("a\u00a0b")
+})

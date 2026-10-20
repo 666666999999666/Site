@@ -2,7 +2,6 @@
 
 source "${QZSITE_OPS_COMMON:-$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/common.sh}"
 
-registry_repository="ccr.ccs.tencentyun.com/lqzzql/web"
 pending_file="$APP_DIR/.deploy-pending"
 state_file="$APP_DIR/.deploy-state"
 history_file="$APP_DIR/.deploy-history"

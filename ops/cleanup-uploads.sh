@@ -18,12 +18,7 @@ case "$mode" in
     ;;
   --apply)
     if [[ -n "${QZSITE_STORAGE_BACKUP_READY:-}" ]]; then
-      [[ "$QZSITE_STORAGE_BACKUP_READY" =~ ^qzsite-[0-9]{8}T[0-9]{6}Z-storage-cleanup$ ]] \
-        || fail "Unified storage backup identifier is invalid"
-      require_file "$BACKUP_DIR/${QZSITE_STORAGE_BACKUP_READY}.dump"
-      require_file "$BACKUP_DIR/${QZSITE_STORAGE_BACKUP_READY}-uploads.tar.gz"
-      require_file "$BACKUP_DIR/${QZSITE_STORAGE_BACKUP_READY}-study-uploads.tar.gz"
-      require_file "$BACKUP_DIR/${QZSITE_STORAGE_BACKUP_READY}.sha256"
+      require_storage_cleanup_backup "$QZSITE_STORAGE_BACKUP_READY"
     else
       bash "$APP_DIR/ops/backup.sh" upload-cleanup
     fi

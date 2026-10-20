@@ -5,13 +5,14 @@ export interface ApiErrorPayload {
 
 export async function apiRequest<T>(
   input: RequestInfo | URL,
-  init?: RequestInit
+  init?: RequestInit,
+  createError: (message: string, status: number, code?: string) => Error = (message) => new Error(message)
 ): Promise<T> {
   const response = await fetch(input, init)
   const payload = await response.json().catch(() => null) as (T & ApiErrorPayload) | null
 
   if (!response.ok) {
-    throw new Error(payload?.error || `请求失败（${response.status}）`)
+    throw createError(payload?.error || `请求失败（${response.status}）`, response.status, payload?.code)
   }
 
   return payload as T

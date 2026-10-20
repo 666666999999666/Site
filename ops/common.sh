@@ -36,6 +36,17 @@ require_file() {
   [[ -f "$1" ]] || fail "Required file is missing: $1"
 }
 
+# Both cleanup entrypoints must validate the complete shared backup before deletion.
+require_storage_cleanup_backup() {
+  local backup_set="$1"
+  [[ "$backup_set" =~ ^qzsite-[0-9]{8}T[0-9]{6}Z-storage-cleanup$ ]] \
+    || fail "Unified storage backup identifier is invalid"
+  require_file "$BACKUP_DIR/${backup_set}.dump"
+  require_file "$BACKUP_DIR/${backup_set}-uploads.tar.gz"
+  require_file "$BACKUP_DIR/${backup_set}-study-uploads.tar.gz"
+  require_file "$BACKUP_DIR/${backup_set}.sha256"
+}
+
 require_exact_directory() {
   local path="$1"
   local expected="$2"

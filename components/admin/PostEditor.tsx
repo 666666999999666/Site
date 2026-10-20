@@ -21,6 +21,8 @@ import { $prose, callCommand, getMarkdown } from "@milkdown/kit/utils"
 import "@milkdown/crepe/theme/common/style.css"
 import "@milkdown/crepe/theme/frame.css"
 import { normalizeContent } from "@/lib/content"
+import { clampEditorSelectionPosition } from "@/lib/editor-selection"
+import { configureImagePresentation, imagePresentationView } from "./editor-image"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -327,6 +329,8 @@ export function PostEditor({
     })
 
     crepe.editor
+      .config(configureImagePresentation)
+      .use(imagePresentationView)
       .config((ctx) => {
         ctx.get(listenerCtx).markdownUpdated(() => {
           const markdown = snapshot()
@@ -386,17 +390,21 @@ export function PostEditor({
         const parser = ctx.get(parserCtx)
         const doc = parser(normalizedValue || "")
         if (!doc) return
-        baselineDocRef.current = doc
         const state = view.state
         const selection = state.selection
         const { from } = selection
         let tr = state.tr
         tr = tr.replace(0, state.doc.content.size, new Slice(doc.content, 0, 0))
-        const docSize = doc.content.size
-        const safeFrom = Math.min(from, docSize - 2)
+        const safeFrom = clampEditorSelectionPosition(from, tr.doc.content.size)
         tr = tr.setSelection(Selection.near(tr.doc.resolve(safeFrom)))
         synchronizingRef.current = true
-        try { view.dispatch(tr) } finally { synchronizingRef.current = false }
+        try {
+          view.dispatch(tr)
+          // Crepe can append a trailing paragraph during dispatch. Preserve the
+          // supplied source against that final document, not the parser's input,
+          // so its delayed listener does not invent a change and clear review.
+          baselineDocRef.current = view.state.doc
+        } finally { synchronizingRef.current = false }
       })
     }
   }, [normalizedValue, value])

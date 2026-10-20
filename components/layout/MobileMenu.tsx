@@ -71,7 +71,7 @@ export function MobileMenu() {
         <div
           ref={menuRef}
           id="mobile-site-navigation"
-          className="absolute left-0 right-0 top-14 space-y-1 border-t border-border/50 bg-background/95 p-4 backdrop-blur-md"
+          className="absolute left-0 right-0 top-14 space-y-1 border-t border-border/50 bg-background p-4"
         >
           {links.map((link) => (
             <Link

@@ -204,8 +204,10 @@ npx tsc --noEmit
 npx prisma validate
 npm run build
 node scripts/source-fingerprint.mjs .
-bash -n ops/*.sh
+for file in ops/*.sh scripts/*.sh; do bash -n "$file" || exit; done
 ```
+
+Daily 浏览器测试只能使用单独的 `DAILY_TEST_DATABASE_URL`：本机、名称包含 `test` 的数据库，以及 `daily_test_` 开头（后缀至少 8 位）的已迁移隔离 schema。URL 只允许一个 `schema` 参数，拒绝连接重定向参数；不要传入日常开发或生产库。该 schema 必须没有用户，测试会创建随机专属账号并核对登录身份，不再读取现有管理员密码。失败遗留的 schema 应人工确认后另行处理；测试不会清理未知账号。真实 PostgreSQL 16 门禁通过前，不把纯解析测试视为完整 Daily 验收。
 
 | 改动类型 | 最低验证 |
 |---|---|
@@ -279,3 +281,10 @@ GitHub 只作为仓库镜像，`.github/workflows/` 当前没有工作流。发�
 7. 需要发布时，Gitee 自动流水线成功且生产健康检查通过。
 8. 临时数据库、测试容器、调试文件和本地服务已清理。
 9. `.deploy-state` 的提交、镜像 digest 和源码指纹与运行容器、OCI revision、`APP_RELEASE_SHA` 及 `/api/health.releaseSha` 一致，且不存在遗留 `.deploy-pending`。
+
+
+## 体验审查回归补充（2026-10-20）
+
+参见 [体验审查修复说明](experience-audit-remediation.md) 与 [博客发现说明](blog-discovery.md)。新增编辑图片、阅读灯箱/复制、搜索筛选与发布警告的合成浏览器用例均包含在 `npm run test:editor`。自带 Chromium 的环境可设置 `PLAYWRIGHT_EXECUTABLE_PATH`；仅在明确复用已有合成测试服务器时设置 `PLAYWRIGHT_REUSE_SERVER=1`。浏览器无法运行必须标未验证，不能用单测冒充界面通过。
+
+离线图片生成工具不在生产容器运行；资源发布前核对原图 hash 和视觉清晰度，并保留高分辨率原件。新增图片展示/摘要/标签逻辑变更时，同时回归旧数据兼容和草稿不公开的边界。

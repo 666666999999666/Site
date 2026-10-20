@@ -1,5 +1,6 @@
 import { Suspense } from "react"
 import type { Metadata } from "next"
+import { publicPageMetadata } from "@/lib/public-metadata"
 import { getTranslations } from "next-intl/server"
 import { prisma } from "@/lib/db"
 import { Container } from "@/components/layout/Container"
@@ -9,6 +10,8 @@ import { BlogBrowseNav } from "@/components/blog/BlogBrowseNav"
 import { JsonLd } from "@/components/seo/JsonLd"
 import { absoluteUrl } from "@/lib/site"
 import { breadcrumbJsonLd } from "@/lib/structured-data"
+import { blogCardSelect, toBlogCard } from "@/lib/blog-card"
+import { literalContainsSearch } from "@/lib/blog-search"
 
 export const dynamic = "force-dynamic"
 
@@ -21,19 +24,11 @@ export async function generateMetadata({
   const t = await getTranslations({ locale, namespace: "blog" })
   const pathname = "/zh/blog"
 
-  return {
+  return publicPageMetadata({
     title: t("metadataTitle"),
     description: t("metadataDescription"),
-    alternates: {
-      canonical: pathname,
-    },
-    openGraph: {
-      title: t("metadataTitle"),
-      description: t("metadataDescription"),
-      url: pathname,
-      locale: "zh_CN",
-    },
-  }
+    pathname,
+  })
 }
 
 export default async function BlogPage({
@@ -41,22 +36,25 @@ export default async function BlogPage({
 }: {
   searchParams: Promise<{ category?: string; search?: string }>
 }) {
-  const { category, search } = await searchParams
+  const { category, search: rawSearch } = await searchParams
+  const search = rawSearch?.trim() ?? ""
   const t = await getTranslations("blog")
 
   const categories = await prisma.category.findMany({
     where: { type: "BLOG" },
     orderBy: { sortOrder: "asc" },
+    select: { id: true, name: true },
   })
 
+  const searchPattern = literalContainsSearch(search)
   const where = {
     status: "PUBLISHED" as const,
     ...(category ? { categoryId: category } : {}),
     ...(search
       ? {
           OR: [
-            { title: { contains: search, mode: "insensitive" as const } },
-            { content: { contains: search, mode: "insensitive" as const } },
+            { title: { contains: searchPattern, mode: "insensitive" as const } },
+            { content: { contains: searchPattern, mode: "insensitive" as const } },
           ],
         }
       : {}),
@@ -65,8 +63,11 @@ export default async function BlogPage({
   const posts = await prisma.post.findMany({
     where,
     orderBy: [{ publishedAt: "desc" }, { createdAt: "desc" }],
-    include: { category: true, series: true },
+    select: blogCardSelect,
   })
+
+  const hasFilters = Boolean(category || search)
+  const categoryName = categories.find((item) => item.id === category)?.name ?? t("unknownCategory")
 
   return (
     <section className="py-16">
@@ -83,12 +84,21 @@ export default async function BlogPage({
         <Suspense>
           <BlogFilters categories={categories} />
         </Suspense>
+        {hasFilters && (
+          <div className="mb-6 space-y-1 text-sm" role="status" aria-live="polite" aria-atomic="true">
+            <p className="font-medium">{t("searchResults", { count: posts.length })}</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1 break-words text-muted-foreground">
+              {search && <span>{t("filterSearch", { search })}</span>}
+              {category && <span>{t("filterCategory", { category: categoryName })}</span>}
+            </div>
+          </div>
+        )}
         {posts.length === 0 ? (
-          <p className="text-center text-muted-foreground py-12">{t("empty")}</p>
+          <p className="text-center text-muted-foreground py-12">{t(hasFilters ? "noMatches" : "empty")}</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {posts.map((p) => (
-              <BlogCard key={p.id} post={p} />
+              <BlogCard key={p.id} post={toBlogCard(p, search)} />
             ))}
           </div>
         )}

@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { handleApiError } from "@/lib/api/handler"
 import { ensureAuthenticated } from "@/lib/api/auth"
 import { requireJsonRequest } from "@/lib/api/admin-mutation"
-import { privateNoStore } from "@/lib/api/private-response"
+import { privateNoStore, handlePrivateApiError } from "@/lib/api/private-response"
 import { ValidationError } from "@/lib/errors"
 import { readJsonObject, validateTodoUpdate } from "@/lib/validation"
-import { privateJsonHeaders, todoInclude } from "../_shared"
+import { todoInclude } from "../_shared"
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -50,9 +49,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       },
       include: todoInclude,
     })
-    return NextResponse.json(todo, { headers: privateJsonHeaders })
+    return privateNoStore(NextResponse.json(todo))
   } catch (e) {
-    return privateNoStore(handleApiError(e))
+    return handlePrivateApiError(e)
   }
 }
 
@@ -62,8 +61,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     requireJsonRequest(req)
     const { id } = await params
     await prisma.todo.delete({ where: { id } })
-    return NextResponse.json({ ok: true }, { headers: privateJsonHeaders })
+    return privateNoStore(NextResponse.json({ ok: true }))
   } catch (e) {
-    return privateNoStore(handleApiError(e))
+    return handlePrivateApiError(e)
   }
 }

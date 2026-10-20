@@ -1,3 +1,5 @@
+import { assertSafeTestDatabaseUrlParameters } from "./test-database-url-parameters"
+
 export function requireDocumentTestDatabaseUrl(value: string | undefined) {
   if (!value) throw new Error("DOCUMENT_TEST_DATABASE_URL is required")
   const url = new URL(value)
@@ -8,5 +10,6 @@ export function requireDocumentTestDatabaseUrl(value: string | undefined) {
     /prod|liaoqizai/i.test(url.pathname + url.searchParams.get("schema"))) {
     throw new Error("Document tests require a local disposable test database and document_test_* schema")
   }
+  assertSafeTestDatabaseUrlParameters(url)
   return value
 }

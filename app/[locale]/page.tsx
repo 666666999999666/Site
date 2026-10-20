@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { publicPageMetadata } from "@/lib/public-metadata"
 import { getTranslations } from "next-intl/server"
 import { HeroSection } from "@/components/home/HeroSection"
 import { RecentPosts } from "@/components/home/RecentPosts"
@@ -12,6 +13,7 @@ import { prisma } from "@/lib/db"
 import { hasPublicProjectEvidence } from "@/lib/public-projects"
 import { FeaturedSeries } from "@/components/home/FeaturedSeries"
 import { HomeAboutContact } from "@/components/home/HomeAboutContact"
+import { seriesPostOrder } from "@/lib/series-order"
 
 export const dynamic = "force-dynamic"
 
@@ -24,19 +26,11 @@ export async function generateMetadata({
   const t = await getTranslations({ locale, namespace: "home" })
   const pathname = "/zh"
 
-  return {
+  return publicPageMetadata({
     title: t("metadataTitle"),
     description: t("metadataDescription"),
-    alternates: {
-      canonical: pathname,
-    },
-    openGraph: {
-      title: t("metadataTitle"),
-      description: t("metadataDescription"),
-      url: pathname,
-      locale: "zh_CN",
-    },
-  }
+    pathname,
+  })
 }
 
 export default async function Home() {
@@ -52,7 +46,7 @@ export default async function Home() {
         _count: { select: { posts: { where: { status: "PUBLISHED" } } } },
         posts: {
           where: { status: "PUBLISHED" },
-          orderBy: [{ seriesOrder: "asc" }, { publishedAt: "asc" }],
+          orderBy: seriesPostOrder,
           take: 1,
           select: { title: true, slug: true },
         },

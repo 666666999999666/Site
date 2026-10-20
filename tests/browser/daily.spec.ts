@@ -1,7 +1,35 @@
 import { expect, test } from "@playwright/test"
 
-const password = process.env.PLAYWRIGHT_DAILY_PASSWORD
-if (!password) throw new Error("PLAYWRIGHT_DAILY_PASSWORD is required")
+import { randomUUID } from "node:crypto"
+import { requireDailyTestDatabaseUrl, requireDailyFixtureLogin, requireEmptyDailyTestAccounts } from "../daily-test-database"
+
+const { url: databaseUrl } = requireDailyTestDatabaseUrl(process.env.DAILY_TEST_DATABASE_URL)
+process.env.DATABASE_URL = databaseUrl
+const fixture = { id: randomUUID(), username: `daily-e2e-${randomUUID()}` }
+const password = `Daily-Test-Only-${randomUUID()}!`
+let fixtureCreated = false
+
+test.beforeAll(async () => {
+  const { prisma } = await import("../../lib/db")
+  const { hashPassword } = await import("../../lib/auth/password")
+  requireEmptyDailyTestAccounts(await prisma.user.count())
+  const passwordHash = await hashPassword(password)
+  await prisma.user.create({ data: {
+    ...fixture, name: "Daily Browser Fixture", email: `${fixture.username}@example.test`, passwordHash,
+    accounts: { create: { accountId: fixture.id, providerId: "credential", password: passwordHash } },
+  } })
+  fixtureCreated = true
+})
+
+test.afterAll(async () => {
+  const { prisma } = await import("../../lib/db")
+  try {
+    // Cascades only this run's account, sessions, plans and task rows.
+    if (fixtureCreated) await prisma.user.deleteMany({ where: fixture })
+  } finally {
+    await prisma.$disconnect()
+  }
+})
 
 test("Daily Top 3 supports the complete admin workflow and responsive layouts", async ({ page, playwright }) => {
   test.setTimeout(360_000)
@@ -32,6 +60,7 @@ test("Daily Top 3 supports the complete admin workflow and responsive layouts", 
     data: { password },
   })
   expect(loginResponse.ok()).toBeTruthy()
+  requireDailyFixtureLogin(await loginResponse.json(), fixture)
 
   const todoResponse = await page.request.post("/api/todos", {
     headers: originHeaders,

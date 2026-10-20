@@ -2,7 +2,7 @@ import { defineConfig, devices } from "@playwright/test"
 
 export default defineConfig({
   testDir: "./tests/browser",
-  testMatch: ["editor.spec.ts", "question-library.spec.ts", "document-workflow.spec.ts", "reader-layout.spec.ts"],
+  testMatch: ["editor.spec.ts", "question-library.spec.ts", "document-workflow.spec.ts", "reader-layout.spec.ts", "editor-images.spec.ts", "reader-interactions.spec.ts", "blog-discovery.spec.ts", "admin-refactor.spec.ts"],
   fullyParallel: false,
   workers: 1,
   outputDir: "./test-results/editor",
@@ -11,7 +11,7 @@ export default defineConfig({
     timeout: 5_000,
   },
   use: {
-    baseURL: "http://localhost:3220",
+    baseURL: "http://127.0.0.1:3220",
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },
@@ -20,14 +20,16 @@ export default defineConfig({
       name: "desktop-chrome",
       use: {
         ...devices["Desktop Chrome"],
-        channel: "chrome",
+        ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH
+          ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } }
+          : { channel: "chrome" }),
       },
     },
   ],
   webServer: {
-    command: "npx next dev tests/editor-harness --webpack -p 3220",
-    url: "http://localhost:3220",
-    reuseExistingServer: false,
+    command: "node node_modules/next/dist/bin/next dev tests/editor-harness --webpack -H 127.0.0.1 -p 3220",
+    url: "http://127.0.0.1:3220",
+    reuseExistingServer: process.env.PLAYWRIGHT_REUSE_SERVER === "1",
     timeout: 120_000,
   },
 })

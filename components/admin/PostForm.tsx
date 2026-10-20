@@ -1,11 +1,14 @@
 "use client"
 
 import dynamic from "next/dynamic"
-import { useCallback, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { flushSync } from "react-dom"
 import { useRouter } from "next/navigation"
 import type { Category, Post, Series } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
 import { uploadEmbeddedPostImages } from "@/lib/post-images"
+import { normalizeTags } from "@/lib/tags"
+import { CONTENT_FORMATS, getContentFormatLabel, needsPublicationReview, scanPublicationContent, type PublicationReview } from "@/lib/publication-content"
 import { ArticlePublicationPreview } from "@/components/admin/ArticlePublicationPreview"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,13 +30,15 @@ type DraftData = {
   title: string
   content: string
   excerpt: string
+  contentFormat: string
+  readHint: string
   categoryId: string
   seriesId: string
   seriesOrder: string
   tags: string
   publishedAt: string
 }
-const LEGACY_DRAFT_DEFAULTS = { seriesId: "", seriesOrder: "" }
+const LEGACY_DRAFT_DEFAULTS = { seriesId: "", seriesOrder: "", contentFormat: "", readHint: "" }
 
 function toLocalDatetimeInput(date: string | Date): string {
   const value = new Date(date)
@@ -46,6 +51,8 @@ function draftFromPost(post?: PostWithRelations): DraftData {
     title: post?.title ?? "",
     content: post?.content ?? "",
     excerpt: post?.excerpt ?? "",
+    contentFormat: post?.contentFormat ?? "",
+    readHint: post?.readHint ?? "",
     categoryId: post?.categoryId ?? "",
     seriesId: post?.seriesId ?? "",
     seriesOrder: post?.seriesOrder == null ? "" : String(post.seriesOrder),
@@ -68,6 +75,12 @@ export function PostForm({
   const [editorCreated, setEditorCreated] = useState(!post || initiallyEditing)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
+  const [publicationReview, setPublicationReview] = useState<PublicationReview | null>(null)
+  const [reviewedToken, setReviewedToken] = useState("")
+  const publicationReviewRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    if (publicationReview) publicationReviewRef.current?.focus()
+  }, [publicationReview])
   const editorRef = useRef<PostEditorHandle>(null)
   const uploadedUrlsRef = useRef(new Set<string>())
   const embeddedUploadsRef = useRef(new Map<string, string>())
@@ -82,11 +95,19 @@ export function PostForm({
     legacyDefaults: LEGACY_DRAFT_DEFAULTS,
     label: "文章",
   })
-  const { title, content, excerpt, categoryId, seriesId, seriesOrder, tags, publishedAt } = draft.data
+  const { title, content, excerpt, contentFormat, readHint, categoryId, seriesId, seriesOrder, tags, publishedAt } = draft.data
   const locked = pending || !draft.ready || !!draft.recovery
 
   function setField(key: keyof DraftData, value: string) {
-    draft.update({ ...draft.current(), [key]: value })
+    const current = draft.current()
+    // The editor also emits a delayed serialization callback after a synchronous
+    // document update. An identical value must not erase a pending review.
+    if (current[key] === value) return
+    if (["title", "content", "excerpt"].includes(key)) {
+      setPublicationReview(null)
+      setReviewedToken("")
+    }
+    draft.update({ ...current, [key]: value })
   }
   const setTitle = (value: string) => setField("title", value)
   const setContent = (value: string) => setField("content", value)
@@ -128,6 +149,8 @@ export function PostForm({
     setPending(true)
     await cleanupNewUploads()
     draft.discard()
+    setPublicationReview(null)
+    setReviewedToken("")
     setEditorCreated(false)
     setError("")
     setPending(false)
@@ -153,7 +176,19 @@ export function PostForm({
       }, embeddedUploadsRef.current)
       if (content !== current.content) {
         current = { ...current, content }
-        draft.update(current)
+        // Commit the controlled editor's replacement before returning to its
+        // debounced Markdown listener. Otherwise a queued callback can read the
+        // old data-URI document and overwrite the uploaded URLs (and review).
+        flushSync(() => draft.update(current))
+      }
+      let publicationReviewToken: string | undefined
+      if (needsPublicationReview(savedPost ?? null, { ...current, status })) {
+        const review = scanPublicationContent(current)
+        if (review.totalWarnings > 0) {
+          setPublicationReview(review)
+          if (reviewedToken !== review.reviewToken) return
+          publicationReviewToken = review.reviewToken
+        }
       }
       let publishIso: string | null = null
       if (current.publishedAt) {
@@ -166,24 +201,29 @@ export function PostForm({
         // 未改正文时不发送 content，避免保存 metadata 顺带规范化旧格式。
         ...(!savedPost || current.content !== draft.baseline.content ? { content: current.content } : {}),
         excerpt: current.excerpt,
+        contentFormat: current.contentFormat || null,
+        readHint: current.readHint || null,
         categoryId: current.categoryId || null,
         seriesId: current.seriesId || null,
         seriesOrder: current.seriesId ? (current.seriesOrder.trim() ? Number(current.seriesOrder) : null) : null,
-        tags: current.tags.split(",").map((tag) => tag.trim()).filter(Boolean),
+        tags: normalizeTags([current.tags]),
         publishedAt: publishIso,
       }
       const body = savedPost ? {
         status,
+        ...(publicationReviewToken ? { publicationReviewToken } : {}),
         ...Object.fromEntries(Object.entries(fields).filter(([key]) => (
           current[key as keyof DraftData] !== draft.baseline[key as keyof DraftData] ||
           key === "seriesOrder" && current.seriesId !== draft.baseline.seriesId
         ))),
-      } : { ...fields, status }
+      } : { ...fields, status, ...(publicationReviewToken ? { publicationReviewToken } : {}) }
       const saved = await apiRequest<PostWithRelations>(
         savedPost ? "/api/posts/" + savedPost.id : "/api/posts",
         jsonRequest(savedPost ? "PUT" : "POST", body)
       )
       setSavedPost(saved)
+      setPublicationReview(null)
+      setReviewedToken("")
       draft.commit(draftFromPost(saved))
       uploadedUrlsRef.current.clear()
       embeddedUploadsRef.current.clear()
@@ -200,7 +240,7 @@ export function PostForm({
   }
 
   const displayTitle = mode === "read" ? savedPost?.title : title
-  const displayTags = mode === "read" ? savedPost?.tags ?? [] : tags.split(",").map((tag) => tag.trim()).filter(Boolean)
+  const displayTags = mode === "read" ? savedPost?.tags ?? [] : normalizeTags([tags])
   const displayCategoryId = mode === "read" ? savedPost?.categoryId : categoryId
   const displayCategory = categories.find((category) => category.id === displayCategoryId)
   const displaySeriesId = mode === "read" ? savedPost?.seriesId : seriesId
@@ -225,6 +265,30 @@ export function PostForm({
         onDiscard={() => { draft.discardRecovery(); setError("") }} />}
       {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
       {draft.storageError && <p role="alert" className="mb-4 text-sm text-destructive">{draft.storageError}</p>}
+      {publicationReview && (
+        <section ref={publicationReviewRef} tabIndex={-1} aria-labelledby="publication-review-title" className="mb-6 rounded-xl border border-amber-500/60 bg-amber-50/40 p-4 dark:bg-amber-950/20">
+          <h2 id="publication-review-title" className="font-semibold">发布前有 {publicationReview.totalWarnings} 处内容需要确认</h2>
+          <p className="mt-2 text-sm text-muted-foreground">这些是人工复核提示，不会自动替换正文。位置按规范化 Markdown 标注；请结合字符串、注释和图片用途判断。</p>
+          <details className="mt-3" open>
+            <summary className="cursor-pointer text-sm font-medium">查看位置和上下文</summary>
+            <ol className="mt-3 max-h-80 space-y-3 overflow-auto pl-5 text-sm">
+              {publicationReview.warnings.map((warning, index) => (
+                <li key={`${warning.code}-${warning.offset}-${index}`} className="list-decimal">
+                  <p>第 {warning.line} 行，第 {warning.column} 列{warning.codeBlock ? ` · 代码块 ${warning.codeBlock}${warning.language ? ` (${warning.language})` : ""}` : ""}：{warning.message}</p>
+                  <pre className="mt-1 whitespace-pre-wrap break-all rounded bg-muted p-2 text-xs">{warning.context}</pre>
+                </li>
+              ))}
+            </ol>
+          </details>
+          {publicationReview.truncated && <p className="mt-2 text-sm">仅显示前 {publicationReview.warnings.length} 处。请先修正后重新检查，或使用只读扫描脚本查看文章问题。</p>}
+          <label className="mt-4 flex items-start gap-2 text-sm">
+            <input type="checkbox" className="mt-1 size-4" disabled={pending}
+              checked={reviewedToken === publicationReview.reviewToken}
+              onChange={(event) => setReviewedToken(event.target.checked ? publicationReview.reviewToken : "")} />
+            <span>我已核对这些提示，确认当前内容可以发布。勾选后再次点击“发布”或“更新发布”。</span>
+          </label>
+        </section>
+      )}
 
       {mode !== "edit" && (
         <article className="mx-auto min-w-0 max-w-3xl" id={mode === "preview" ? "document-preview" : undefined}
@@ -240,6 +304,7 @@ export function PostForm({
           </header>
           <div className="admin-reading">
             <ArticlePublicationPreview content={mode === "read" ? savedPost?.content ?? "" : content}
+              publication={mode === "read" ? savedPost : { title, excerpt, contentFormat, readHint }}
               label={mode === "read" ? "文章正文" : "发布效果预览"} />
           </div>
         </article>
@@ -342,9 +407,29 @@ export function PostForm({
           rows={2}
           maxLength={1000}
           disabled={locked}
+          aria-describedby="excerpt-help"
         />
+        <p id="excerpt-help" className="text-xs text-muted-foreground">独立介绍读者的问题、方法或收获。卡片、RSS 与搜索描述共用此摘要；留空时只提取可读正文，不使用图片 alt 或代码。</p>
       </div>
 
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="contentFormat">内容形式</Label>
+          <select id="contentFormat" value={contentFormat} disabled={locked}
+            onChange={(event) => setField("contentFormat", event.target.value)}
+            className="h-10 w-full rounded-md border border-border/50 bg-background px-3 text-sm">
+            <option value="">自动判断</option>
+            {CONTENT_FORMATS.map((format) => <option key={format} value={format}>{getContentFormatLabel({ contentFormat: format })}</option>)}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="readHint">阅读提示（可选）</Label>
+          <Input id="readHint" value={readHint} disabled={locked} maxLength={120}
+            onChange={(event) => setField("readHint", event.target.value)}
+            placeholder="例如：约 15 分钟，含 6 张图解" aria-describedby="read-hint-help" />
+          <p id="read-hint-help" className="text-xs text-muted-foreground">优先显示此提示。留空时，纯图文章显示图片数量，文字文章显示估计时长。</p>
+        </div>
+      </div>
 
         <div className="space-y-2">
           <Label>正文</Label>

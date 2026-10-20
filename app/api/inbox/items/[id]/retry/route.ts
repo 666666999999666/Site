@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ensureAuthenticated } from "@/lib/api/auth"
-import { handleApiError } from "@/lib/api/handler"
 import { requireJsonRequest } from "@/lib/api/admin-mutation"
-import { privateNoStore } from "@/lib/api/private-response"
+import { privateNoStore, handlePrivateApiError } from "@/lib/api/private-response"
 import { ConfigurationError } from "@/lib/errors"
 import { isInboxEnabled } from "@/lib/inbox-feature"
 import { validateInboxRetryBody } from "@/lib/inbox-request"
@@ -22,6 +21,6 @@ export async function POST(
     const item = await retryInboxItem(userId, id)
     return privateNoStore(NextResponse.json(serializeInboxItem(item)))
   } catch (error) {
-    return privateNoStore(handleApiError(error))
+    return handlePrivateApiError(error)
   }
 }

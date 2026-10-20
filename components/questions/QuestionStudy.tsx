@@ -24,6 +24,8 @@ import { QuestionMarkdown } from "@/components/questions/QuestionMarkdown"
 import { QuestionMarkdownEditor } from "@/components/questions/QuestionMarkdownEditor"
 import {
   formatQuestionTime,
+  questionQueueMessage,
+  questionRatings,
   ratingDescriptions,
   ratingLabels,
   type QuestionPreferences,
@@ -56,18 +58,6 @@ type CompletedReview = {
   revealed: RevealResponse
   directReveal: boolean
   rating: QuestionRating
-}
-
-const ratings: QuestionRating[] = ["AGAIN", "HARD", "GOOD", "EASY"]
-
-function queueMessage(today: TodayResponse | null) {
-  if (!today) return "正在读取今日队列"
-  if (today.summary.dueOldCount > 0) return `到期旧题 ${today.summary.dueOldCount} 道`
-  if (today.state === "READY" && today.summary.newRemaining > 0) {
-    return `可学习新题 · 剩余额度 ${today.summary.newRemaining}`
-  }
-  if (today.state === "WAITING") return `暂时完成 · ${formatQuestionTime(today.nextDueAt, false)} 后还有复习`
-  return "今日已完成"
 }
 
 function bestEffortAdvance(reviewKey: string) {
@@ -339,7 +329,7 @@ export function QuestionStudy() {
             ? "标准答案已揭晓，请完成评分后进入下一题"
             : current
               ? "已进入新的复习题目"
-              : queueMessage(today)}
+              : questionQueueMessage(today)}
       </p>
       <Card>
         <CardHeader className="border-b">
@@ -351,7 +341,7 @@ export function QuestionStudy() {
               <CardDescription className="mt-1">只处理今天应学的题目；旧到期题始终优先。</CardDescription>
             </div>
             <Badge variant={current ? "default" : "outline"} className="h-7 px-3">
-              {starting ? "同步队列中" : queueMessage(today)}
+              {starting ? "同步队列中" : questionQueueMessage(today)}
             </Badge>
           </div>
         </CardHeader>
@@ -381,7 +371,7 @@ export function QuestionStudy() {
 
           <div className="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
             <div className="flex flex-wrap gap-2" aria-label="今日评分分布">
-              {ratings.map((rating) => (
+              {questionRatings.map((rating) => (
                 <Badge key={rating} variant="outline" className="h-7 px-3">
                   {ratingLabels[rating]} {today?.summary.ratings[rating] ?? 0}
                 </Badge>
@@ -507,7 +497,7 @@ export function QuestionStudy() {
                   <fieldset className="space-y-3">
                     <legend className="font-medium">这次回忆得怎么样？</legend>
                     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                      {ratings.map((rating) => (
+                      {questionRatings.map((rating) => (
                         <button
                           key={rating}
                           type="button"

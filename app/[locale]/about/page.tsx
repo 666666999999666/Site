@@ -1,4 +1,5 @@
 import type { Metadata } from "next"
+import { publicPageMetadata } from "@/lib/public-metadata"
 import { Mail } from "lucide-react"
 import { getTranslations } from "next-intl/server"
 import { Container } from "@/components/layout/Container"
@@ -16,19 +17,11 @@ export async function generateMetadata({
   const t = await getTranslations({ locale, namespace: "about" })
   const pathname = "/zh/about"
 
-  return {
+  return publicPageMetadata({
     title: t("metadataTitle"),
     description: t("metadataDescription"),
-    alternates: {
-      canonical: pathname,
-    },
-    openGraph: {
-      title: t("metadataTitle"),
-      description: t("metadataDescription"),
-      url: pathname,
-      locale: "zh_CN",
-    },
-  }
+    pathname,
+  })
 }
 
 export default async function AboutPage() {

@@ -9,6 +9,7 @@ import {
   type ReactNode,
   useEffect,
   useId,
+  useRef,
   useState,
 } from "react"
 import { useTranslations } from "next-intl"
@@ -21,6 +22,10 @@ import { extractHeadings, normalizeContentForDisplay, slugifyHeading } from "@/l
 import { useTheme } from "@/components/theme/ThemeProvider"
 import { Lightbox } from "./Lightbox"
 import { MarkdownTable } from "./MarkdownTable"
+import { CodeBlock } from "./CodeBlock"
+import { codeBlockSource, rehypeCodeSource, remarkCodeSource } from "@/lib/rehype-code-source"
+import { decodeImageTitle } from "@/lib/image-presentation"
+import type { ResponsiveImage } from "@/lib/responsive-image"
 
 function MermaidBlock({ code }: { code: string }) {
   const [svg, setSvg] = useState("")
@@ -85,26 +90,17 @@ function nodeText(node: ReactNode): string {
 }
 
 const baseComponents: Components = {
-  code({ className, children, ...props }) {
-    const language = /language-(\w+)/.exec(className || "")?.[1] || ""
-    const text = String(children).replace(/\n$/, "")
-    if (language === "mermaid") return <MermaidBlock code={text} />
-    if (!className && !text.includes("\n")) {
-      return (
-        <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-sm" {...props}>
-          {children}
-        </code>
-      )
-    }
-    return <code className={className} {...props}>{children}</code>
-  },
-  pre({ children }) {
-    if (isValidElement(children) && children.type === MermaidBlock) return children
+  code({ className, children, node, ...props }) {
     return (
-      <pre className="my-4 overflow-x-auto rounded-lg bg-zinc-950 p-4 font-mono text-sm leading-6 dark:bg-zinc-900">
+      <code className={node?.data?.readerCodeBlock ? className : "rounded bg-muted px-1.5 py-0.5 font-mono text-sm"} {...props}>
         {children}
-      </pre>
+      </code>
     )
+  },
+  pre({ children, node }) {
+    const block = codeBlockSource(node)
+    if (block?.language === "mermaid") return <MermaidBlock code={block.source} />
+    return <CodeBlock source={block?.source ?? nodeText(children)} language={block?.language ?? ""}>{children}</CodeBlock>
   },
   a({ href, children }) {
     const external = Boolean(href && !href.startsWith("/") && !href.startsWith("#"))
@@ -117,19 +113,6 @@ const baseComponents: Components = {
       >
         {children}
       </a>
-    )
-  },
-  img({ src, alt }) {
-    return (
-      <img
-        src={typeof src === "string" ? src : ""}
-        alt={alt || ""}
-        data-lightbox-image
-        role="button"
-        tabIndex={0}
-        className="mx-auto my-4 h-auto max-w-full cursor-zoom-in rounded-lg"
-        loading="lazy"
-      />
     )
   },
   table({ children }) {
@@ -157,7 +140,12 @@ const baseComponents: Components = {
   },
 }
 
-export const PostContent = memo(function PostContent({ content }: { content: string }) {
+export const PostContent = memo(function PostContent({ content, imageMetadata = {} }: {
+  content: string
+  imageMetadata?: Record<string, ResponsiveImage>
+}) {
+  const t = useTranslations("content")
+  const containerRef = useRef<HTMLDivElement>(null)
   const normalized = normalizeContentForDisplay(content)
   const headingIds = new Map(
     extractHeadings(normalized).flatMap((heading) => (
@@ -169,6 +157,33 @@ export const PostContent = memo(function PostContent({ content }: { content: str
   )
   const components: Components = {
     ...baseComponents,
+    img({ src, alt, title }) {
+      const original = typeof src === "string" ? src : ""
+      const presentation = decodeImageTitle(title)
+      const metadata = Object.hasOwn(imageMetadata, original) ? imageMetadata[original] : undefined
+      const displayWidth = presentation.width ?? 768
+      return (
+        <img
+          src={original}
+          srcSet={metadata?.variants.length ? metadata.variants.map((variant) => `${variant.url} ${variant.width}w`).join(", ") : undefined}
+          sizes={metadata?.variants.length ? `(max-width: ${displayWidth + 48}px) calc(100vw - 48px), ${displayWidth}px` : undefined}
+          alt={alt || ""}
+          title={presentation.title}
+          width={metadata?.width ?? presentation.width}
+          height={metadata?.height}
+          style={{ width: presentation.width, maxWidth: "100%", height: "auto" }}
+          data-original-src={original}
+          data-original-width={metadata?.width}
+          data-lightbox-image
+          role="button"
+          aria-label={alt?.trim() ? undefined : t("imagePreview")}
+          tabIndex={0}
+          className="mx-auto my-4 h-auto max-w-full cursor-zoom-in rounded-lg"
+          loading="lazy"
+          decoding="async"
+        />
+      )
+    },
     h2({ children, node }) {
       return <h2 id={headingId(2, node?.position?.start.line, children)}>{children}</h2>
     },
@@ -183,6 +198,7 @@ export const PostContent = memo(function PostContent({ content }: { content: str
   return (
     <>
       <div
+        ref={containerRef}
         className="markdown-reading prose prose-neutral min-w-0 max-w-none dark:prose-invert
           prose-headings:font-sans prose-headings:text-foreground
           prose-h1:mt-8 prose-h1:mb-4 prose-h1:text-3xl
@@ -198,8 +214,9 @@ export const PostContent = memo(function PostContent({ content }: { content: str
           prose-img:rounded-lg"
       >
         <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkMath]}
+          remarkPlugins={[remarkGfm, remarkMath, remarkCodeSource]}
           rehypePlugins={[
+            rehypeCodeSource,
             rehypeKatex,
             [rehypeHighlight, { detect: true, ignoreMissing: true }],
           ]}
@@ -208,7 +225,7 @@ export const PostContent = memo(function PostContent({ content }: { content: str
           {normalized}
         </ReactMarkdown>
       </div>
-      <Lightbox />
+      <Lightbox containerRef={containerRef} />
     </>
   )
 })

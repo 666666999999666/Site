@@ -4,6 +4,7 @@ import test from "node:test"
 import { hasNoUploadReferences } from "../lib/upload-reference-policy"
 import { detectImageExtension, uploadFilePath } from "../lib/uploads"
 import { collectReferencedUploadNames } from "../scripts/upload-references"
+import { imageDerivativeNames } from "../lib/responsive-image"
 
 test("detects image signatures instead of trusting MIME metadata", () => {
   assert.equal(detectImageExtension(Buffer.from([0xff, 0xd8, 0xff, 0x00])), "jpg")
@@ -36,7 +37,8 @@ test("series covers are included in orphan upload reference collection", async (
     [{ coverImage: "/uploads/series.png" }]
   )
 
-  assert.deepEqual([...referenced].sort(), ["body.png", "post.png", "project.png", "series.png"])
+  const originals = ["body.png", "post.png", "project.png", "series.png"]
+  assert.deepEqual([...referenced].sort(), originals.flatMap((name) => [name, ...imageDerivativeNames(name)]).sort())
 
   const cleanupScript = await readFile(new URL("../scripts/cleanup-uploads.ts", import.meta.url), "utf8")
   assert.match(cleanupScript, /SELECT "coverImage" FROM "Series"/)

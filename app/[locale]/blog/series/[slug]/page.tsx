@@ -1,8 +1,12 @@
 import type { Metadata } from "next"
+import { publicPageMetadata } from "@/lib/public-metadata"
 import { cache } from "react"
 import { notFound } from "next/navigation"
 import { getTranslations } from "next-intl/server"
 import { prisma } from "@/lib/db"
+import { Link } from "@/i18n/navigation"
+import { blogCardSelect, toBlogCard } from "@/lib/blog-card"
+import { seriesDisplayPosition, seriesPostOrder } from "@/lib/series-order"
 import { Container } from "@/components/layout/Container"
 import { BlogCard } from "@/components/blog/BlogCard"
 import { BlogBrowseNav } from "@/components/blog/BlogBrowseNav"
@@ -18,8 +22,8 @@ const getSeries = cache((slug: string) => prisma.series.findUnique({
   include: {
     posts: {
       where: { status: "PUBLISHED" },
-      orderBy: [{ seriesOrder: "asc" }, { publishedAt: "desc" }, { createdAt: "desc" }],
-      include: { category: true },
+      orderBy: seriesPostOrder,
+      select: blogCardSelect,
     },
   },
 }))
@@ -30,24 +34,21 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   if (!series) return {}
   const description = series.description || `“${series.title}”系列文章目录。`
   const pathname = `/zh/blog/series/${series.slug}`
-  return {
+  return publicPageMetadata({
     title: series.title,
     description,
-    alternates: { canonical: pathname },
+    pathname,
     openGraph: {
-      title: series.title,
-      description,
       url: absoluteUrl(pathname),
-      locale: "zh_CN",
       ...(series.coverImage ? { images: [absoluteUrl(series.coverImage)] } : {}),
     },
-  }
+  })
 }
 
 export default async function SeriesPage({ params }: { params: Promise<{ locale: string; slug: string }> }) {
   const { slug } = await params
   const series = await getSeries(slug)
-  if (!series || series.posts.length === 0) notFound()
+  if (!series) notFound()
   const t = await getTranslations("blog")
 
   return (
@@ -63,9 +64,17 @@ export default async function SeriesPage({ params }: { params: Promise<{ locale:
         <h1 className="mb-3 text-3xl font-bold">{series.title}</h1>
         {series.description && <p className="mb-8 max-w-3xl whitespace-pre-line text-muted-foreground">{series.description}</p>}
         <BlogBrowseNav />
-        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-          {series.posts.map((post) => <BlogCard key={post.id} post={post} />)}
-        </div>
+        {series.posts.length > 0 ? (
+          <>
+            <div className="mb-6 flex flex-wrap items-center gap-4">
+              <Link href={`/blog/${series.posts[0].slug}`} className="inline-flex rounded-lg bg-foreground px-4 py-2 text-sm font-medium text-background">{t("startSeries")}</Link>
+              <p className="text-sm text-muted-foreground">{t("seriesOrderDescription")}</p>
+            </div>
+            <ol className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {series.posts.map((post, index) => <li key={post.id}><BlogCard post={toBlogCard(post)} chapter={seriesDisplayPosition(index)} /></li>)}
+            </ol>
+          </>
+        ) : <p className="py-12 text-center text-muted-foreground">{t("seriesEmpty")}</p>}
       </Container>
     </section>
   )

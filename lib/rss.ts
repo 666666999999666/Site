@@ -1,3 +1,5 @@
+import { normalizeTags } from "./tags"
+
 export interface RssItem {
   title: string
   url: string
@@ -31,7 +33,7 @@ export function buildRssFeed(input: RssFeedInput): string {
     `      <guid isPermaLink="true">${escapeXml(item.url)}</guid>`,
     `      <pubDate>${item.publishedAt.toUTCString()}</pubDate>`,
     `      <description>${escapeXml(item.description)}</description>`,
-    ...item.tags.map((tag) => `      <category>${escapeXml(tag)}</category>`),
+    ...normalizeTags(item.tags).map((tag) => `      <category>${escapeXml(tag)}</category>`),
     "    </item>",
   ].join("\n")).join("\n")
 

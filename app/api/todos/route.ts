@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
 import { prisma } from "@/lib/db"
-import { handleApiError } from "@/lib/api/handler"
 import { ensureAuthenticated } from "@/lib/api/auth"
 import { requireJsonRequest } from "@/lib/api/admin-mutation"
-import { privateNoStore } from "@/lib/api/private-response"
+import { privateNoStore, handlePrivateApiError } from "@/lib/api/private-response"
 import { readJsonObject, validateTodoCreate } from "@/lib/validation"
-import { privateJsonHeaders, todoInclude } from "./_shared"
+import { todoInclude } from "./_shared"
 
 export async function GET() {
   try {
@@ -17,9 +16,9 @@ export async function GET() {
       ],
       include: todoInclude,
     })
-    return NextResponse.json(todos, { headers: privateJsonHeaders })
+    return privateNoStore(NextResponse.json(todos))
   } catch (e) {
-    return privateNoStore(handleApiError(e))
+    return handlePrivateApiError(e)
   }
 }
 
@@ -50,8 +49,8 @@ export async function POST(req: NextRequest) {
       },
       include: todoInclude,
     })
-    return NextResponse.json(todo, { status: 201, headers: privateJsonHeaders })
+    return privateNoStore(NextResponse.json(todo, { status: 201 }))
   } catch (e) {
-    return privateNoStore(handleApiError(e))
+    return handlePrivateApiError(e)
   }
 }

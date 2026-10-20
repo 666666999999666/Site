@@ -371,6 +371,10 @@ test("drag source and drop indicator remain visible in both themes", async ({ pa
     await page.mouse.move(handleBox!.x + handleBox!.width / 2, handleBox!.y + handleBox!.height / 2)
     await page.mouse.down()
     await page.mouse.move(headingBox!.x + 80, headingBox!.y + headingBox!.height + 8, { steps: 12 })
+    // WebKit can end the initial movement with child dragenter/dragleave.
+    // Move over the final target again so a trusted dragover reaches the editor.
+    await page.mouse.move(headingBox!.x + 81, headingBox!.y + headingBox!.height + 8)
+    await page.mouse.move(headingBox!.x + 80, headingBox!.y + headingBox!.height + 8)
     await page.waitForTimeout(250)
 
     await expect(page.locator(".ProseMirror")).toHaveAttribute("data-dragging", "true")

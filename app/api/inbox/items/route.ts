@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { ensureAuthenticated } from "@/lib/api/auth"
-import { handleApiError } from "@/lib/api/handler"
 import { requireJsonRequest } from "@/lib/api/admin-mutation"
-import { privateNoStore } from "@/lib/api/private-response"
+import { privateNoStore, handlePrivateApiError } from "@/lib/api/private-response"
 import { prisma } from "@/lib/db"
 import { ConfigurationError } from "@/lib/errors"
 import { isInboxEnabled } from "@/lib/inbox-feature"
@@ -22,7 +21,7 @@ function inboxErrorResponse(error: unknown) {
       { status: 422 }
     ))
   }
-  return privateNoStore(handleApiError(error))
+  return handlePrivateApiError(error)
 }
 
 export async function GET(request: NextRequest) {
