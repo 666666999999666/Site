@@ -42,7 +42,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "node node_modules/next/dist/bin/next dev --webpack -p 3250",
+    command: "node node_modules/next/dist/bin/next dev --webpack -H 127.0.0.1 -p 3250",
     url: "http://127.0.0.1:3250/admin/questions",
     reuseExistingServer: false,
     timeout: 300_000,

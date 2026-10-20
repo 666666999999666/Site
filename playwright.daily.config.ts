@@ -21,7 +21,7 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    command: "npx next dev -p 3230",
+    command: "node node_modules/next/dist/bin/next dev --webpack -H 127.0.0.1 -p 3230",
     url: "http://127.0.0.1:3230/zh",
     reuseExistingServer: false,
     timeout: 300_000,
