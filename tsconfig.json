@@ -40,7 +40,9 @@
     ".next-document-tests/types/**/*.ts",
     ".next-document-tests/dev/types/**/*.ts",
     ".next-document-build/types/**/*.ts",
-    ".next-document-build/dev/types/**/*.ts"
+    ".next-document-build/dev/types/**/*.ts",
+    ".next-daily-test/types/**/*.ts",
+    ".next-daily-test/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

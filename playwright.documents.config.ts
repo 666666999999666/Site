@@ -19,10 +19,12 @@ export default defineConfig({
       : { channel: "chrome" }),
   } }],
   webServer: {
-    command: "node node_modules/next/dist/bin/next dev --webpack -H 127.0.0.1 -p 3255",
+    command: process.env.PLAYWRIGHT_FULL_APP_PRODUCTION === "1"
+      ? "node node_modules/next/dist/bin/next build --webpack && node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3255"
+      : "node node_modules/next/dist/bin/next dev --webpack -H 127.0.0.1 -p 3255",
     url: baseURL,
     reuseExistingServer: false,
-    timeout: 120_000,
+    timeout: 300_000,
     env: {
       DATABASE_URL: database,
       SESSION_SECRET: "document-test-session-secret-disposable-only-2026",

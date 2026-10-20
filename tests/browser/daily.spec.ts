@@ -1,33 +1,54 @@
 import { expect, test } from "@playwright/test"
 
 import { randomUUID } from "node:crypto"
+import { Client } from "pg"
+import { hashPassword } from "../../lib/auth/password"
 import { requireDailyTestDatabaseUrl, requireDailyFixtureLogin, requireEmptyDailyTestAccounts } from "../daily-test-database"
 
-const { url: databaseUrl } = requireDailyTestDatabaseUrl(process.env.DAILY_TEST_DATABASE_URL)
+const { url: databaseUrl, schema } = requireDailyTestDatabaseUrl(process.env.DAILY_TEST_DATABASE_URL)
 process.env.DATABASE_URL = databaseUrl
 const fixture = { id: randomUUID(), username: `daily-e2e-${randomUUID()}` }
 const password = `Daily-Test-Only-${randomUUID()}!`
 let fixtureCreated = false
+let database: Client | undefined
 
 test.beforeAll(async () => {
-  const { prisma } = await import("../../lib/db")
-  const { hashPassword } = await import("../../lib/auth/password")
-  requireEmptyDailyTestAccounts(await prisma.user.count())
+  // Playwright's CommonJS transform cannot import the generated Prisma client's
+  // import.meta. Use the same direct fixture connection as the Questions suite.
+  database = new Client({ connectionString: databaseUrl })
+  await database.connect()
+  await database.query(`SET search_path TO "${schema}"`)
+  const count = await database.query<{ count: number }>('SELECT COUNT(*)::int AS count FROM "User"')
+  requireEmptyDailyTestAccounts(count.rows[0].count)
   const passwordHash = await hashPassword(password)
-  await prisma.user.create({ data: {
-    ...fixture, name: "Daily Browser Fixture", email: `${fixture.username}@example.test`, passwordHash,
-    accounts: { create: { accountId: fixture.id, providerId: "credential", password: passwordHash } },
-  } })
-  fixtureCreated = true
+  await database.query("BEGIN")
+  try {
+    await database.query(
+      `INSERT INTO "User" ("id", "username", "passwordHash", "name", "email", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, NOW())`,
+      [fixture.id, fixture.username, passwordHash, "Daily Browser Fixture", `${fixture.username}@example.test`]
+    )
+    await database.query(
+      `INSERT INTO "Account" ("id", "accountId", "providerId", "userId", "password", "updatedAt")
+       VALUES ($1, $2, 'credential', $2, $3, NOW())`,
+      [randomUUID(), fixture.id, passwordHash]
+    )
+    await database.query("COMMIT")
+    fixtureCreated = true
+  } catch (error) {
+    await database.query("ROLLBACK")
+    throw error
+  }
 })
 
 test.afterAll(async () => {
-  const { prisma } = await import("../../lib/db")
   try {
     // Cascades only this run's account, sessions, plans and task rows.
-    if (fixtureCreated) await prisma.user.deleteMany({ where: fixture })
+    if (fixtureCreated) {
+      await database?.query('DELETE FROM "User" WHERE "id" = $1 AND "username" = $2', [fixture.id, fixture.username])
+    }
   } finally {
-    await prisma.$disconnect()
+    await database?.end()
   }
 })
 

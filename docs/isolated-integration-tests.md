@@ -48,3 +48,20 @@ It exports `DOCUMENT_TEST_DATABASE_URL`, `QUESTION_TEST_DATABASE_URL`, and
 browser workflows require migration deployment against their respective URL
 before Playwright starts. Browser installation is a separate prerequisite.
 Do not substitute a production URL to work around a missing prerequisite.
+
+Set `PLAYWRIGHT_FULL_APP_PRODUCTION=1` for Documents, Questions, or Daily to
+build before starting the browser-test server. This avoids development-server
+recompilation and manifest races during acceptance tests. Run these full-app
+builds sequentially. `PLAYWRIGHT_EXECUTABLE_PATH` optionally selects an installed
+Chromium executable for Documents and Questions without requiring branded Chrome.
+
+If the execution environment does not support Unix-domain sockets, run TypeScript
+entrypoints with `node --import tsx` rather than the `tsx` CLI (which creates an
+IPC socket). For example, the Documents command can be expanded as:
+
+```sh
+PG_BIN_DIR=/path/to/postgres16/bin PLAYWRIGHT_FULL_APP_PRODUCTION=1 \
+  bash scripts/with-isolated-postgres.sh bash -c \
+  'node --import tsx tests/prepare-document-workflow.ts &&
+   node node_modules/@playwright/test/cli.js test --config=playwright.documents.config.ts'
+```

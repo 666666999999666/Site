@@ -42,7 +42,9 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: "node node_modules/next/dist/bin/next dev --webpack -H 127.0.0.1 -p 3250",
+    command: process.env.PLAYWRIGHT_FULL_APP_PRODUCTION === "1"
+      ? "node node_modules/next/dist/bin/next build --webpack && node node_modules/next/dist/bin/next start -H 127.0.0.1 -p 3250"
+      : "node node_modules/next/dist/bin/next dev --webpack -H 127.0.0.1 -p 3250",
     url: "http://127.0.0.1:3250/admin/questions",
     reuseExistingServer: false,
     timeout: 300_000,
