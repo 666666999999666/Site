@@ -141,6 +141,32 @@ function taskViews(tasks: PlanRecord["tasks"]): DailyTaskView[] {
   })
 }
 
+// Persisted plans own their quote snapshot, even if the source quote is edited
+// or deleted. Both current-day and history responses use this projection.
+function planQuoteView(plan: {
+  quoteId: number | null
+  quoteText: string
+  quoteCategory: string
+  quoteAuthor: string | null
+  quoteSource: string | null
+  quoteSourceDetail: string | null
+}): DailyQuoteView {
+  return {
+    id: plan.quoteId ?? 0,
+    quote: plan.quoteText,
+    category: plan.quoteCategory,
+    author: plan.quoteAuthor,
+    source: plan.quoteSource,
+    sourceDetail: plan.quoteSourceDetail,
+  }
+}
+
+function dayView(date: string, quote: DailyQuoteView, records: PlanRecord["tasks"]): DailyDayView {
+  const tasks = taskViews(records)
+  const completedCount = tasks.filter((task) => task.completed).length
+  return { date, quote, tasks, completedCount, progress: progressFor(completedCount) }
+}
+
 async function getDailyDayWithDatabase(
   userId: string,
   date: string,
@@ -151,19 +177,8 @@ async function getDailyDayWithDatabase(
     include: planInclude,
   })
 
-  const quote = plan
-    ? {
-        id: plan.quoteId ?? 0,
-        quote: plan.quoteText,
-        category: plan.quoteCategory,
-        author: plan.quoteAuthor,
-        source: plan.quoteSource,
-        sourceDetail: plan.quoteSourceDetail,
-      }
-    : await getQuoteForDate(date, database)
-  const tasks = taskViews(plan?.tasks ?? [])
-  const completedCount = tasks.filter((task) => task.completed).length
-  return { date, quote, tasks, completedCount, progress: progressFor(completedCount) }
+  const quote = plan ? planQuoteView(plan) : await getQuoteForDate(date, database)
+  return dayView(date, quote, plan?.tasks ?? [])
 }
 
 export async function getDailyDay(userId: string, date: string): Promise<DailyDayView> {
@@ -270,24 +285,11 @@ export async function getDailyHistory(userId: string, month: string, now = new D
   return {
     month,
     stats: buildStats(plans, today, month),
-    days: history.map((plan) => {
-      const tasks = taskViews(plan.tasks)
-      const completedCount = tasks.filter((task) => task.completed).length
-      return {
-        date: databaseDateToKey(plan.planDate),
-        quote: {
-          id: plan.quoteId ?? 0,
-          quote: plan.quoteText,
-          category: plan.quoteCategory,
-          author: plan.quoteAuthor,
-          source: plan.quoteSource,
-          sourceDetail: plan.quoteSourceDetail,
-        },
-        tasks,
-        completedCount,
-        progress: progressFor(completedCount),
-      } satisfies DailyDayView
-    }),
+    days: history.map((plan) => dayView(
+      databaseDateToKey(plan.planDate),
+      planQuoteView(plan),
+      plan.tasks
+    )),
   }
 }
 
@@ -464,6 +466,21 @@ async function getReplacement(
   return replacement
 }
 
+async function replaceAssignedQuote(
+  transaction: Prisma.TransactionClient,
+  current: { id: number; usedDate: Date },
+  replacementQuoteId: number | null | undefined
+) {
+  await getReplacement(transaction, replacementQuoteId, current.id)
+  // Free the unique date before assigning it to the validated replacement.
+  // Keep these writes in the caller's transaction with its final mutation.
+  await transaction.dailyQuote.update({ where: { id: current.id }, data: { usedDate: null } })
+  await transaction.dailyQuote.update({
+    where: { id: replacementQuoteId! },
+    data: { usedDate: current.usedDate },
+  })
+}
+
 export async function updateDailyQuote(id: number, input: DailyQuoteUpdateInput) {
   const { replacementQuoteId, ...fields } = input
   try {
@@ -472,12 +489,7 @@ export async function updateDailyQuote(id: number, input: DailyQuoteUpdateInput)
       if (!current) throw new NotFoundError("提醒语不存在")
 
       if (fields.status === false && current.usedDate) {
-        await getReplacement(transaction, replacementQuoteId, id)
-        await transaction.dailyQuote.update({ where: { id }, data: { usedDate: null } })
-        await transaction.dailyQuote.update({
-          where: { id: replacementQuoteId! },
-          data: { usedDate: current.usedDate },
-        })
+        await replaceAssignedQuote(transaction, { id, usedDate: current.usedDate }, replacementQuoteId)
       }
 
       const updated = await transaction.dailyQuote.update({
@@ -513,12 +525,7 @@ export async function deleteDailyQuote(id: number, replacementQuoteId?: number |
     const current = await transaction.dailyQuote.findUnique({ where: { id } })
     if (!current) throw new NotFoundError("提醒语不存在")
     if (current.usedDate) {
-      await getReplacement(transaction, replacementQuoteId, id)
-      await transaction.dailyQuote.update({ where: { id }, data: { usedDate: null } })
-      await transaction.dailyQuote.update({
-        where: { id: replacementQuoteId! },
-        data: { usedDate: current.usedDate },
-      })
+      await replaceAssignedQuote(transaction, { id, usedDate: current.usedDate }, replacementQuoteId)
     }
     await transaction.dailyQuote.delete({ where: { id } })
   })

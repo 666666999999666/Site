@@ -29,19 +29,8 @@ function isReady(question: { enabled: boolean; referenceAnswerMarkdown: string |
 
 export function questionView(question: NonNullable<QuestionRow>) {
   return {
-    id: question.id,
-    promptMarkdown: question.promptMarkdown,
+    ...questionListView(question),
     referenceAnswerMarkdown: question.referenceAnswerMarkdown,
-    enabled: question.enabled,
-    ready: isReady(question),
-    state: question.state,
-    dueAt: question.dueAt.toISOString(),
-    newQueueAt: question.newQueueAt?.toISOString() ?? null,
-    latestRating: question.latestRating,
-    contentVersion: question.contentVersion,
-    scheduleVersion: question.scheduleVersion,
-    createdAt: question.createdAt.toISOString(),
-    updatedAt: question.updatedAt.toISOString(),
   }
 }
 

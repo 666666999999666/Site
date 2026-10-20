@@ -123,3 +123,58 @@ for (const mode of ["new", "replay", "transaction-replay", "mismatched-tool", "w
     }
   })
 }
+
+for (const outcome of ["committed", "rolled-back", "unknown"] as const) {
+  test(`MCP staged-import failure reconciles ${outcome} commit without premature image deletion`, async () => {
+    const calls: string[] = []
+    const result = { postId: "post", title: "draft", status: "DRAFT", importedImageCount: 1 }
+    let failed = false
+    const approval = {
+      id: "approval", toolName: "import", status: "PENDING_APPROVAL", credentialId: "credential",
+      requiredScope: "draft:import", expiresAt: new Date(Date.now() + 60_000), credential: { revokedAt: null },
+      payload: { kind: "create_draft_from_staged_markdown", bundleId: "10000000-0000-4000-8000-000000000001" },
+    }
+    const transaction = {
+      mcpExecution: { findUnique: async () => null, create: async () => { calls.push("execution") } },
+      mcpApproval: { update: async () => { calls.push("approve") } },
+    }
+    const prisma = {
+      mcpApproval: {
+        findUnique: async () => approval,
+        findUniqueOrThrow: async () => ({ ...approval, status: "APPROVED", resultSummary: result }),
+        updateMany: async () => ({ count: 1 }),
+      },
+      mcpExecution: { findUnique: async () => {
+        if (!failed) return null
+        calls.push("reconcile")
+        if (outcome === "unknown") throw new Error("database unavailable")
+        return outcome === "committed" ? { toolName: "import", resultSummary: result } : null
+      } },
+      $transaction: async (run: (tx: unknown) => unknown) => {
+        await run(transaction)
+        failed = true
+        throw new Error("commit response lost")
+      },
+    }
+    const service = loadRoute<typeof import("../lib/mcp/approval-service")>(path.join(root, "lib/mcp/approval-service.ts"), {
+      "zod/v3": { z }, "../db": { prisma }, "../errors": errors, "../categories": {}, "../todos": {},
+      "../posts": { createPost: async (_input: unknown, tx: unknown) => {
+        assert.equal(tx, transaction); calls.push("post"); return { id: "post", title: "draft", status: "DRAFT" }
+      } },
+      "../validation": {}, "./deletion-policy": {},
+      "./audit-service": { recordMcpAudit: async () => {}, errorDetails: (error: Error) => ({ message: error.message }) },
+      "./credential-service": { MCP_SCOPES: ["draft:import"], requireMcpScope: () => {} },
+      "./import-staging-service": {
+        materializeStagedMarkdownImport: async () => ({ input: {}, importedImages: ["/uploads/new.png"], cleanup: async () => { calls.push("delete-images") } }),
+        cleanupStagedImportBundle: async (_id: string, consumed: boolean) => { assert.equal(consumed, true); calls.push("consume-bundle") },
+      },
+    })
+    if (outcome === "committed") {
+      await service.approveMcpApproval("approval")
+      assert.deepEqual(calls, ["post", "execution", "approve", "reconcile", "consume-bundle"])
+    } else {
+      await assert.rejects(() => service.approveMcpApproval("approval"), /commit response lost/)
+      assert.deepEqual(calls, ["post", "execution", "approve", "reconcile", ...(outcome === "rolled-back" ? ["delete-images"] : [])])
+    }
+  })
+}
