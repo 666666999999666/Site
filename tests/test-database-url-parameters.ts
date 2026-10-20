@@ -11,6 +11,9 @@ export function assertSafeTestDatabaseUrlParameters(
     message = "Test database URLs must not contain connection overrides, duplicate schema parameters or fragments",
   }: TestDatabaseParameterPolicy = {}
 ) {
+  if (!["postgres:", "postgresql:"].includes(parsed.protocol)) {
+    throw new Error("Test database URLs must use postgres:// or postgresql://")
+  }
   // URLSearchParams decodes keys, so encoded aliases and duplicates cannot evade the allowlist.
   const keys = [...parsed.searchParams.keys()]
   if (parsed.href.includes("#") ||

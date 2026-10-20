@@ -4,6 +4,9 @@ import { requireQuestionTestDatabaseUrl } from "./tests/question-test-database"
 const { url: databaseUrl } = requireQuestionTestDatabaseUrl(
   process.env.QUESTION_TEST_DATABASE_URL
 )
+const browserLaunch = process.env.PLAYWRIGHT_EXECUTABLE_PATH
+  ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } }
+  : { channel: "chrome" }
 
 export default defineConfig({
   testDir: "./tests/browser",
@@ -23,19 +26,19 @@ export default defineConfig({
   projects: [
     {
       name: "desktop-light",
-      use: { ...devices["Desktop Chrome"], channel: "chrome", colorScheme: "light" },
+      use: { ...devices["Desktop Chrome"], ...browserLaunch, colorScheme: "light" },
     },
     {
       name: "desktop-dark",
-      use: { ...devices["Desktop Chrome"], channel: "chrome", colorScheme: "dark" },
+      use: { ...devices["Desktop Chrome"], ...browserLaunch, colorScheme: "dark" },
     },
     {
       name: "mobile-light",
-      use: { ...devices["Pixel 7"], channel: "chrome", colorScheme: "light" },
+      use: { ...devices["Pixel 7"], ...browserLaunch, colorScheme: "light" },
     },
     {
       name: "mobile-dark",
-      use: { ...devices["Pixel 7"], channel: "chrome", colorScheme: "dark" },
+      use: { ...devices["Pixel 7"], ...browserLaunch, colorScheme: "dark" },
     },
   ],
   webServer: {

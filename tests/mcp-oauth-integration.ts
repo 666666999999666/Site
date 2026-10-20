@@ -125,6 +125,12 @@ async function resetDatabase(client: PgClient): Promise<string> {
   assert.equal(migrated.rows[0].email, ADMIN_EMAIL)
   assert.equal(migrated.rows[0].name, "admin")
   assert.equal(migrated.rows[0].accountPassword, oldHash)
+  // Keep legacy migration assertions above, then bring the fixture up to the
+  // current Prisma schema before exercising current application services.
+  for (const directory of directories.filter((name) => name > BETTER_AUTH_1_7_MIGRATION)) {
+    const sql = await readFile(path.join(migrationsRoot, directory, "migration.sql"), "utf8")
+    await client.query(sql)
+  }
   return oldHash
 }
 

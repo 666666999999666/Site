@@ -45,6 +45,12 @@ for (const guard of guards) {
   const valid = guard.schema ? `${base}?schema=${guard.schema}` : base
   const addQuery = (query: string) => `${valid}${guard.schema ? "&" : "?"}${query}`
 
+  test(`${guard.name} guard rejects non-PostgreSQL protocols before connecting`, () => {
+    for (const protocol of ["http:", "https:", "file:", "mysql:"]) {
+      assert.throws(() => guard.validate(valid.replace("postgresql:", protocol)))
+    }
+  })
+
   test(`${guard.name} guard preserves its supported schema usage`, () => {
     assert.doesNotThrow(() => guard.validate(valid))
     if (guard.schema) {

@@ -12,7 +12,12 @@ export default defineConfig({
   outputDir: "./test-results/documents",
   expect: { timeout: 10_000 },
   use: { baseURL, screenshot: "only-on-failure", trace: "retain-on-failure" },
-  projects: [{ name: "documents-full-app", use: { ...devices["Desktop Chrome"], channel: "chrome" } }],
+  projects: [{ name: "documents-full-app", use: {
+    ...devices["Desktop Chrome"],
+    ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH
+      ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } }
+      : { channel: "chrome" }),
+  } }],
   webServer: {
     command: "node node_modules/next/dist/bin/next dev --webpack -H 127.0.0.1 -p 3255",
     url: baseURL,

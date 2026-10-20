@@ -86,4 +86,5 @@ test("integration entrypoints validate before importing database-backed code or 
   assert.match(inbox, /requireInboxTestDatabaseUrl\(process\.env\.DATABASE_URL\)\s+const \{ prisma, disconnectDatabase \} = await import\("\.\.\/lib\/db"\)/)
   assert.doesNotMatch(inbox, /^import .* from ["']\.\.\/lib\/(?:db|inbox\/service)["']/m)
   assert.match(oauth, /requireMcpOAuthTestDatabaseUrl\(process\.env\.MCP_OAUTH_TEST_DATABASE_URL\)\s+const pg = new PgClient[\s\S]*await pg\.connect\(\)/)
+  assert.match(oauth, /assert\.equal\(migrated\.rows\[0\]\.accountPassword, oldHash\)[\s\S]*directories\.filter\(\(name\) => name > BETTER_AUTH_1_7_MIGRATION\)[\s\S]*await client\.query\(sql\)/)
 })
