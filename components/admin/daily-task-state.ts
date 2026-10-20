@@ -30,4 +30,3 @@ export function selectTaskTodo(task: DailyTaskView, todo?: Pick<DailyTodoOption,
     completedAt: null,
   }
 }
-
