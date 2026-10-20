@@ -32,7 +32,6 @@ import {
   type QuestionRating,
   type RatingResponse,
   type RevealResponse,
-  type TodayQuestion,
   type TodayResponse,
   type TodayTransitionResponse,
 } from "@/components/questions/types"
@@ -40,25 +39,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { revealReview, ratingRequest, reviewSnapshot, type CurrentReview, type CompletedReview } from "./study-state"
 import { cn } from "@/lib/utils"
-
-type CurrentReview = {
-  question: TodayQuestion
-  answerMarkdown: string
-  revealed: RevealResponse | null
-  directReveal: boolean
-  rating: QuestionRating | null
-  reviewRevision: number | null
-}
-
-type CompletedReview = {
-  key: string
-  promptMarkdown: string
-  answerMarkdown: string
-  revealed: RevealResponse
-  directReveal: boolean
-  rating: QuestionRating
-}
 
 function bestEffortAdvance(reviewKey: string) {
   void fetch(`/api/questions/reviews/${encodeURIComponent(reviewKey)}/advance`, {
@@ -205,17 +187,10 @@ export function QuestionStudy() {
           }),
         }
       )
-      const directReveal = response.directReveal ?? !current.answerMarkdown.trim()
-      const next: CurrentReview = {
-        ...current,
-        revealed: response,
-        directReveal,
-        rating: directReveal ? response.rating ?? "AGAIN" : null,
-        reviewRevision: directReveal ? response.reviewRevision ?? null : null,
-      }
+      const next = revealReview(current, response)
       pendingFocusRef.current = "revealed"
       replaceCurrent(next)
-      if (directReveal) void refreshSummary()
+      if (next.directReveal) void refreshSummary()
     } catch (caught) {
       await recoverFromActionError(caught)
     } finally {
@@ -229,19 +204,7 @@ export function QuestionStudy() {
     setError("")
     setNotice("")
     try {
-      const request = current.reviewRevision === null
-        ? {
-            operation: "CREATE" as const,
-            answerMarkdown: current.answerMarkdown,
-            rating,
-            expectedContentVersion: current.question.contentVersion,
-            expectedScheduleVersion: current.question.scheduleVersion,
-          }
-        : {
-            operation: "REVISE" as const,
-            rating,
-            expectedReviewRevision: current.reviewRevision,
-          }
+      const request = ratingRequest(current, rating)
       const response = await questionApiRequest<RatingResponse>(
         `/api/questions/reviews/${encodeURIComponent(current.question.reviewKey)}/rating`,
         { ...questionJsonRequest("PUT", request) }
@@ -270,14 +233,7 @@ export function QuestionStudy() {
         `/api/questions/reviews/${encodeURIComponent(current.question.reviewKey)}/advance`,
         { ...questionJsonRequest("POST", {}) }
       )
-      const finished: CompletedReview = {
-        key: current.question.reviewKey,
-        promptMarkdown: current.question.promptMarkdown,
-        answerMarkdown: current.answerMarkdown,
-        revealed: current.revealed,
-        directReveal: current.directReveal,
-        rating: current.rating,
-      }
+      const finished = reviewSnapshot(current, current.revealed, current.rating)
       setCompleted((items) => [...items, finished])
       pendingFocusRef.current = "question"
       applyTransition(response)
@@ -478,14 +434,7 @@ export function QuestionStudy() {
                   aria-label="已揭晓的答案"
                   className="focus:outline-none"
                 >
-                  <RevealedAnswer review={{
-                    key: current.question.reviewKey,
-                    promptMarkdown: current.question.promptMarkdown,
-                    answerMarkdown: current.answerMarkdown,
-                    revealed: current.revealed,
-                    directReveal: current.directReveal,
-                    rating: current.rating ?? "AGAIN",
-                  }} />
+                  <RevealedAnswer review={reviewSnapshot(current, current.revealed, current.rating ?? "AGAIN")} />
                 </div>
 
                 {current.directReveal ? (

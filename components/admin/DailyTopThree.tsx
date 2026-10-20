@@ -14,7 +14,6 @@ import {
 } from "lucide-react"
 import type {
   DailyDashboardView,
-  DailyDayView,
   DailyMutationView,
   DailyTaskView,
 } from "@/lib/daily"
@@ -24,19 +23,9 @@ import { cn } from "@/lib/utils"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DailyReviewCard } from "@/components/questions/DailyReviewCard"
+import { withTask, changeTaskTitle, selectTaskTodo } from "./daily-task-state"
 
 type SaveState = "idle" | "pending" | "saving" | "saved" | "error"
-
-function withTask(day: DailyDayView, nextTask: DailyTaskView): DailyDayView {
-  const tasks = day.tasks.map((task) => task.slot === nextTask.slot ? nextTask : task)
-  const completedCount = tasks.filter((task) => task.completed).length
-  return {
-    ...day,
-    tasks,
-    completedCount,
-    progress: Math.round((completedCount / 3) * 100),
-  }
-}
 
 function feedback(progress: number): string {
   if (progress === 100) return "今天的重要事情已经全部完成。"
@@ -75,6 +64,14 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
     setSaveStates((current) => ({ ...current, [slot]: state }))
   }
 
+  // Call only after the operation's own stale-revision guard has passed.
+  function applySavedTask(result: DailyMutationView, slot: DailyTaskView["slot"]) {
+    const savedTask = result.day.tasks.find((item) => item.slot === slot)
+    if (savedTask) applyTask(savedTask)
+    setStats(result.stats)
+    setSaveState(slot, "saved")
+  }
+
   function persist(slot: 1 | 2 | 3, task: DailyTaskView, revision: number) {
     const operation = async () => {
       if (revision !== revisions.current[slot]) return
@@ -94,10 +91,7 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
           }
         )
         if (revision !== revisions.current[slot]) return
-        const savedTask = result.day.tasks.find((item) => item.slot === slot)
-        if (savedTask) applyTask(savedTask)
-        setStats(result.stats)
-        setSaveState(slot, "saved")
+        applySavedTask(result, slot)
       } catch (caught) {
         if (revision !== revisions.current[slot]) return
         setSaveState(slot, "error")
@@ -134,26 +128,14 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
 
   function changeTitle(task: DailyTaskView, title: string) {
     const source = initialDashboard.todoOptions.find((todo) => todo.id === task.sourceTodoId)
-    const nextTask: DailyTaskView = {
-      ...task,
-      title,
-      completed: title ? task.completed : false,
-      completedAt: title ? task.completedAt : null,
-      sourceTodoId: source?.title === title ? task.sourceTodoId : null,
-    }
+    const nextTask = changeTaskTitle(task, title, source)
     applyTask(nextTask)
     scheduleSave(nextTask)
   }
 
   function chooseTodo(task: DailyTaskView, todoId: string) {
     const todo = initialDashboard.todoOptions.find((item) => item.id === todoId)
-    const nextTask: DailyTaskView = {
-      ...task,
-      title: todo?.title ?? task.title,
-      sourceTodoId: todo?.id ?? null,
-      completed: false,
-      completedAt: null,
-    }
+    const nextTask = selectTaskTodo(task, todo)
     applyTask(nextTask)
     scheduleSave(nextTask, true)
   }
@@ -192,10 +174,7 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
           { method: "DELETE", keepalive: true }
         )
         if (revision !== revisions.current[slot]) return
-        const savedTask = result.day.tasks.find((item) => item.slot === slot)
-        if (savedTask) applyTask(savedTask)
-        setStats(result.stats)
-        setSaveState(slot, "saved")
+        applySavedTask(result, slot)
       } catch (caught) {
         if (revision !== revisions.current[slot]) return
         setSaveState(slot, "error")
