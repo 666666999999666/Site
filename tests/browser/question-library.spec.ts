@@ -84,7 +84,11 @@ for (const theme of ["light", "dark"] as const) {
       await status.focus()
       await status.press("ArrowDown")
       await expect(page.getByRole("listbox")).toBeVisible()
+      // Opening the popup and moving focus into it are separate Base UI
+      // transitions. Do not send navigation into the still-focused trigger.
+      await expect(page.getByRole("listbox").getByRole("option", { name: "待补答案", exact: true })).toBeFocused()
       await page.keyboard.press("End")
+      await expect(page.getByRole("listbox").getByRole("option", { name: "已停用", exact: true })).toBeFocused()
       await page.keyboard.press("Enter")
       await expect(status).toContainText("已停用")
       await expect.poll(() => queries.at(-1)?.get("status")).toBe("DISABLED")
