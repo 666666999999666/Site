@@ -14,6 +14,8 @@ import { hasPublicProjectEvidence } from "@/lib/public-projects"
 import { FeaturedSeries } from "@/components/home/FeaturedSeries"
 import { HomeAboutContact } from "@/components/home/HomeAboutContact"
 import { seriesPostOrder } from "@/lib/series-order"
+import { FeaturedPosts } from "@/components/home/FeaturedPosts"
+import { getFeaturedPosts } from "@/lib/featured-posts-store"
 
 export const dynamic = "force-dynamic"
 
@@ -34,7 +36,7 @@ export async function generateMetadata({
 }
 
 export default async function Home() {
-  const [posts, dbProjects, settings, featuredSeries] = await Promise.all([
+  const [posts, dbProjects, settings, featuredSeries, featuredPosts] = await Promise.all([
     getRecentPosts(6),
     getRecentProjects(8),
     getPublicSettings(),
@@ -52,6 +54,7 @@ export default async function Home() {
         },
       },
     }),
+    getFeaturedPosts(),
   ])
 
   const projects: Project[] = dbProjects
@@ -82,6 +85,7 @@ export default async function Home() {
         role={settings.home_role}
         description={settings.home_tagline}
       />
+      <FeaturedPosts posts={featuredPosts} />
       <FeaturedSeries items={featuredSeries.map((item) => ({
         id: item.id,
         title: item.title,

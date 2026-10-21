@@ -168,6 +168,15 @@ export const PostContent = memo(function PostContent({ content, imageMetadata = 
           src={original}
           srcSet={metadata?.variants.length ? metadata.variants.map((variant) => `${variant.url} ${variant.width}w`).join(", ") : undefined}
           sizes={metadata?.variants.length ? `(max-width: ${displayWidth + 48}px) calc(100vw - 48px), ${displayWidth}px` : undefined}
+          onError={(event) => {
+            const image = event.currentTarget
+            // A resource can disappear after server metadata validation.
+            // Retry the durable original once; never retry a broken original.
+            if (!image.hasAttribute("srcset")) return
+            image.removeAttribute("srcset")
+            image.removeAttribute("sizes")
+            image.src = original
+          }}
           alt={alt || ""}
           title={presentation.title}
           width={metadata?.width ?? presentation.width}
