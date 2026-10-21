@@ -1,14 +1,21 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter, useSearchParams } from "next/navigation"
+import { Suspense } from "react"
 import { BookOpenCheck, Library, Plus } from "lucide-react"
 import { QuestionLibrary } from "@/components/questions/QuestionLibrary"
 import { QuestionStudy } from "@/components/questions/QuestionStudy"
 import { buttonVariants } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
+import { questionNewURL, questionPageURL, readQuestionNavigation, type QuestionNavigation } from "@/lib/questions/navigation"
 
-export function QuestionSchool() {
+function QuestionSchoolContent() {
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const navigation = readQuestionNavigation(searchParams)
+  const navigate = (next: QuestionNavigation) => router.push(questionPageURL(next), { scroll: false })
   return (
     <div className="animate-in fade-in space-y-7 duration-300">
       <header className="flex flex-col gap-5 border-b border-border/60 pb-7 sm:flex-row sm:items-end sm:justify-between">
@@ -16,12 +23,12 @@ export function QuestionSchool() {
           <p className="mb-2 text-sm text-muted-foreground">自己出题 · 自己审核 · 按记忆节奏复习</p>
           <h1 className="text-3xl font-semibold">问题中学</h1>
         </div>
-        <Link href="/admin/questions/new" className={cn(buttonVariants(), "h-10 gap-1.5 px-4")}>
+        <Link href={questionNewURL(questionPageURL(navigation))} className={cn(buttonVariants(), "h-10 gap-1.5 px-4")}>
           <Plus className="size-4" /> 新建题目
         </Link>
       </header>
 
-      <Tabs defaultValue="today" className="gap-6">
+      <Tabs value={navigation.tab} onValueChange={value => navigate({ ...navigation, tab: value === "library" ? "library" : "today" })} className="gap-6">
         <TabsList className="h-10 w-full justify-start sm:w-fit" aria-label="问题中学页面">
           <TabsTrigger value="today" className="h-full px-4">
             <BookOpenCheck /> 今日复习
@@ -34,9 +41,13 @@ export function QuestionSchool() {
           <QuestionStudy />
         </TabsContent>
         <TabsContent value="library">
-          <QuestionLibrary />
+          <QuestionLibrary navigation={navigation} onNavigate={navigate} />
         </TabsContent>
       </Tabs>
     </div>
   )
+}
+
+export function QuestionSchool() {
+  return <Suspense fallback={<p role="status">正在读取问题中学页面…</p>}><QuestionSchoolContent /></Suspense>
 }

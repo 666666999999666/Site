@@ -6,18 +6,25 @@ import { Container } from "@/components/layout/Container"
 import { IdeasList } from "@/components/admin/IdeasList"
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { searchIdeas } from "@/lib/ideas"
+import { ideaDocumentHref, ideaListHref, readIdeaListFilters } from "@/lib/idea-list-navigation"
 
 export const dynamic = "force-dynamic"
 
-export default async function IdeasPage() {
+export default async function IdeasPage({ searchParams }: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const { userId } = await ensureAuthenticated()
-  const [ideas, projects] = await Promise.all([
+  const query = await searchParams
+  const filters = readIdeaListFilters({ get: (key) => typeof query[key] === "string" ? query[key] as string : null })
+  const listHref = ideaListHref(filters)
+  const [ideas, projects, tagRows] = await Promise.all([
+    searchIdeas(userId, filters),
+    prisma.project.findMany({ orderBy: { sortOrder: "asc" } }),
     prisma.idea.findMany({
       where: { ownerId: userId },
-      include: { projects: { orderBy: { sortOrder: "asc" } } },
-      orderBy: { updatedAt: "desc" },
+      select: { tags: true },
     }),
-    prisma.project.findMany({ orderBy: { sortOrder: "asc" } }),
   ])
 
   return (
@@ -27,11 +34,12 @@ export default async function IdeasPage() {
           <h1 className="text-3xl font-semibold">Idea</h1>
           <p className="mt-2 text-sm text-muted-foreground">私人想法、随笔和下一步实验。</p>
         </div>
-        <Link href="/admin/ideas/new" className={cn(buttonVariants(), "shrink-0 gap-1.5")}>
+        <Link href={ideaDocumentHref("new", listHref)} className={cn(buttonVariants(), "shrink-0 gap-1.5")}>
           <Plus className="size-4" /> 新建 Idea
         </Link>
       </div>
-      <IdeasList initialIdeas={ideas} projects={projects} />
+      <IdeasList key={listHref} initialIdeas={ideas} projects={projects} initialFilters={filters}
+        knownTags={tagRows.flatMap((row) => row.tags)} ownerId={userId} />
     </Container>
   )
 }

@@ -1,6 +1,8 @@
 import { fromMarkdown } from "mdast-util-from-markdown"
 import { gfmFromMarkdown } from "mdast-util-gfm"
+import { mathFromMarkdown } from "mdast-util-math"
 import { gfm } from "micromark-extension-gfm"
+import { math } from "micromark-extension-math"
 import { normalizeContent } from "./content"
 
 export const CONTENT_FORMATS = ["ARTICLE", "DIAGRAM", "PRACTICE", "STUDY_NOTE", "ESSAY"] as const
@@ -33,10 +35,15 @@ const FORMAT_LABELS: Record<ContentFormat, string> = {
   ARTICLE: "文章", DIAGRAM: "图解", PRACTICE: "实践复盘", STUDY_NOTE: "学习笔记", ESSAY: "随笔",
 }
 
-function parseMarkdown(content: string) {
-  return fromMarkdown(normalizeContent(content), {
-    extensions: [gfm()], mdastExtensions: [gfmFromMarkdown()],
+function parseNormalizedMarkdown(content: string, recognizeMath = false) {
+  return fromMarkdown(content, {
+    extensions: recognizeMath ? [gfm(), math()] : [gfm()],
+    mdastExtensions: recognizeMath ? [gfmFromMarkdown(), mathFromMarkdown()] : [gfmFromMarkdown()],
   }) as MarkdownNode
+}
+
+function parseMarkdown(content: string) {
+  return parseNormalizedMarkdown(normalizeContent(content))
 }
 
 function visit(node: MarkdownNode, callback: (node: MarkdownNode) => void, depth = 0) {
@@ -58,6 +65,7 @@ function meaningfulText(text: string) {
 
 function inlineText(node: MarkdownNode, depth = 0): string {
   if (depth > MAX_DEPTH) return ""
+  if (node.type === "math" || node.type === "inlineMath") return " "
   if (["image", "imageReference", "code", "html", "definition", "footnoteReference"].includes(node.type)) return ""
   if (node.type === "text" || node.type === "inlineCode") return node.value ?? ""
   if (node.type === "break") return " "
@@ -105,7 +113,8 @@ function summaryWithRoot(post: PublicationContent, maxLength: number, getRoot: (
 }
 
 export function getPostSummary(post: PublicationContent, maxLength = 160) {
-  return summaryWithRoot(post, maxLength, () => parseMarkdown(post.content ?? ""))
+  const content = normalizeContent(post.content ?? "")
+  return summaryWithRoot(post, maxLength, () => parseNormalizedMarkdown(content, content.includes("$")))
 }
 
 function imageProfile(post: PublicationContent, root = parseMarkdown(post.content ?? "")) {
@@ -140,12 +149,17 @@ export function getReadingLabel(post: PublicationContent): string {
   return readingLabelWithRoot(post, () => parseMarkdown(post.content ?? ""))
 }
 
-/** Derive all public card fields with at most one body parse, then discard the source body. */
+/** Reuse the ordinary body parse; only automatic summaries need a math-aware tree. */
 export function getPostPresentation(post: PublicationContent, maxLength = 160) {
+  const content = normalizeContent(post.content ?? "")
   let root: MarkdownNode | undefined
-  const getRoot = () => root ??= parseMarkdown(post.content ?? "")
+  let summaryRoot: MarkdownNode | undefined
+  const getRoot = () => root ??= parseNormalizedMarkdown(content)
+  const getSummaryRoot = () => content.includes("$")
+    ? summaryRoot ??= parseNormalizedMarkdown(content, true)
+    : getRoot()
   return {
-    summary: summaryWithRoot(post, maxLength, getRoot),
+    summary: summaryWithRoot(post, maxLength, getSummaryRoot),
     readingLabel: readingLabelWithRoot(post, getRoot),
     contentFormatLabel: formatLabelWithRoot(post, getRoot),
   }

@@ -22,6 +22,7 @@ import { DocumentActionBar } from "./DocumentActionBar"
 import { DraftRecoveryNotice } from "./DraftRecoveryNotice"
 import { useDocumentDraft } from "./useDocumentDraft"
 import { clearDocumentEditQuery, useDocumentPosition } from "./useDocumentPosition"
+import { postDocumentHref, safePostReturnHref } from "@/lib/post-list-navigation"
 
 const PostEditor = dynamic(
   () => import("./PostEditor").then((mod) => mod.PostEditor),
@@ -32,15 +33,17 @@ type PostWithRelations = Post & { category: Category | null; series: Series | nu
 const LEGACY_DRAFT_DEFAULTS = { seriesId: "", seriesOrder: "", contentFormat: "", readHint: "" }
 
 export function PostForm({
-  post, categories, series, ownerId, initiallyEditing = false,
+  post, categories, series, ownerId, initiallyEditing = false, returnTo,
 }: {
   post?: PostWithRelations
   categories: Category[]
   series: Series[]
   ownerId?: string
   initiallyEditing?: boolean
+  returnTo?: string
 }) {
   const router = useRouter()
+  const listHref = safePostReturnHref(returnTo)
   const [savedPost, setSavedPost] = useState(post)
   const [editorCreated, setEditorCreated] = useState(!post || initiallyEditing)
   const [pending, setPending] = useState(false)
@@ -151,7 +154,7 @@ export function PostForm({
     clearUploadWarnings()
     setPending(false)
     if (savedPost) { switchMode("read"); clearDocumentEditQuery() }
-    else router.push("/admin/posts")
+    else router.push(listHref)
   }
 
   async function save(status: "DRAFT" | "PUBLISHED") {
@@ -209,7 +212,7 @@ export function PostForm({
           // Storage restrictions must not silently hide a processing failure.
           window.alert("文章已保存。\n" + warnings.join("\n"))
         }
-        router.replace("/admin/posts/" + saved.id)
+        router.replace(postDocumentHref(saved.id, listHref))
       }
       else clearDocumentEditQuery()
       router.refresh()
@@ -232,7 +235,7 @@ export function PostForm({
     <div className="admin-document min-w-0">
       <DocumentActionBar mode={mode} dirty={draft.dirty} pending={pending} ready={draft.ready}
         status={savedPost?.status === "PUBLISHED" ? "已发布" : "草稿"}
-        onBack={() => { if (draft.confirmLeave()) router.push("/admin/posts") }}
+        onBack={() => { if (draft.confirmLeave()) router.push(listHref) }}
         onEdit={beginEditing} onModeChange={changeSurface} onCancel={() => { void cancel() }}>
         <Button type="button" size="sm" variant="outline" onClick={() => save("DRAFT")} disabled={locked}>
           {savedPost?.status === "PUBLISHED" ? "撤回为草稿" : "存为草稿"}

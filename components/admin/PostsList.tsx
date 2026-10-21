@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import Link from "next/link"
 import { Pencil, Search, Trash2 } from "lucide-react"
 import type { Category, Post, Series } from "@/lib/generated/prisma/client"
@@ -11,6 +11,10 @@ import { SeriesManager } from "./SeriesManager"
 import type { SeriesMutationInput } from "./SeriesManager"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  EMPTY_POST_LIST_FILTERS, postDocumentHref, postListHref, postListPositionKey,
+  readPostListFilters, readPostListPosition, type PostListFilters,
+} from "@/lib/post-list-navigation"
 
 type PostWithRelations = Post & { category: Category | null; series: Series | null }
 
@@ -22,32 +26,108 @@ export function PostsList({
   initialPosts,
   categories: initialCategories,
   series: initialSeries,
+  initialFilters = EMPTY_POST_LIST_FILTERS,
+  ownerId = "local",
 }: {
   initialPosts: PostWithRelations[]
   categories: Category[]
   series: Series[]
+  initialFilters?: PostListFilters
+  ownerId?: string
 }) {
-  const [query, setQuery] = useState("")
+  const [query, setQuery] = useState(initialFilters.q)
+  const [appliedQuery, setAppliedQuery] = useState(initialFilters.q)
+  const appliedQueryRef = useRef(initialFilters.q)
+  const searchSequence = useRef(0)
   const [posts, setPosts] = useState(initialPosts)
   const categoryMutations = useCategories(initialCategories, "BLOG")
   const { categories } = categoryMutations
   const [series, setSeries] = useState(initialSeries)
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(null)
+  const [activeGroupId, setActiveGroupId] = useState<string | null>(initialFilters.categoryId || null)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
+  const listHref = postListHref({ q: appliedQuery, categoryId: activeGroupId ?? "" })
+  const positionKey = postListPositionKey(ownerId, listHref)
+
+  function rememberPosition() {
+    if (location.pathname !== "/admin/posts" || postListHref(readPostListFilters(new URLSearchParams(location.search))) !== listHref) return
+    try { sessionStorage.setItem(positionKey, String(window.scrollY)) } catch { /* Filters remain in the URL without browser storage. */ }
+  }
+
+  function updateLocation(filters: PostListFilters) {
+    const query = new URL(postListHref(filters), location.origin).search
+    const href = location.pathname + query
+    if (href !== location.pathname + location.search) window.history.pushState(null, "", href)
+  }
+
+  function selectCategory(id: string | null) {
+    rememberPosition()
+    setActiveGroupId(id)
+    updateLocation({ q: appliedQueryRef.current, categoryId: id ?? "" })
+  }
+
+  useLayoutEffect(() => {
+    let position = 0
+    try { position = readPostListPosition(sessionStorage.getItem(positionKey)) } catch { /* Browser storage may be disabled. */ }
+    const frame = requestAnimationFrame(() => window.scrollTo({ top: position, behavior: "instant" }))
+    const remember = () => {
+      if (location.pathname !== "/admin/posts" || postListHref(readPostListFilters(new URLSearchParams(location.search))) !== listHref) return
+      try { sessionStorage.setItem(positionKey, String(window.scrollY)) } catch { /* Keep navigation usable without storage. */ }
+    }
+    window.addEventListener("scroll", remember, { passive: true })
+    return () => { cancelAnimationFrame(frame); window.removeEventListener("scroll", remember) }
+  }, [listHref, positionKey])
+
+  useEffect(() => {
+    const pathname = location.pathname
+    const restore = async () => {
+      if (location.pathname !== pathname) return
+      const filters = readPostListFilters(new URLSearchParams(location.search))
+      const sequence = ++searchSequence.current
+      setQuery(filters.q)
+      setActiveGroupId(filters.categoryId || null)
+      if (filters.q === appliedQueryRef.current) { setPending(false); return }
+      setPending(true)
+      setError("")
+      try {
+        const data = await apiRequest<PostWithRelations[]>(`/api/posts?q=${encodeURIComponent(filters.q)}`)
+        if (sequence !== searchSequence.current) return
+        appliedQueryRef.current = filters.q
+        setAppliedQuery(filters.q)
+        setPosts(data)
+      } catch (caught) {
+        if (sequence === searchSequence.current) setError(caught instanceof Error ? caught.message : "搜索失败")
+      } finally {
+        if (sequence === searchSequence.current) setPending(false)
+      }
+    }
+    // Native history may restore a cached server tree before this component
+    // mounts. The current URL must win even when its popstate was already sent.
+    const frame = requestAnimationFrame(() => { void restore() })
+    window.addEventListener("popstate", restore)
+    return () => { cancelAnimationFrame(frame); window.removeEventListener("popstate", restore); searchSequence.current += 1 }
+  }, [])
 
   async function search() {
+    if (pending) return
+    const sequence = ++searchSequence.current
     setPending(true)
     setError("")
     try {
+      const nextQuery = query.trim()
       const data = await apiRequest<PostWithRelations[]>(
-        `/api/posts?q=${encodeURIComponent(query)}`
+        `/api/posts?q=${encodeURIComponent(nextQuery)}`
       )
+      if (sequence !== searchSequence.current) return
+      rememberPosition()
+      appliedQueryRef.current = nextQuery
+      setAppliedQuery(nextQuery)
       setPosts(data)
+      updateLocation({ q: nextQuery, categoryId: activeGroupId ?? "" })
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "搜索失败")
+      if (sequence === searchSequence.current) setError(caught instanceof Error ? caught.message : "搜索失败")
     } finally {
-      setPending(false)
+      if (sequence === searchSequence.current) setPending(false)
     }
   }
 
@@ -77,7 +157,7 @@ export function PostsList({
   async function deleteCategory(id: string) {
     await categoryMutations.deleteCategory(id)
     setPosts((current) => reconcileCategoryItems(current, id, null))
-    if (activeGroupId === id) setActiveGroupId(null)
+    if (activeGroupId === id) selectCategory(null)
   }
 
   function sortSeries(items: Series[]) {
@@ -124,7 +204,7 @@ export function PostsList({
             activeGroupId={activeGroupId}
             itemLabel="文章"
             disabled={pending}
-            onSelect={setActiveGroupId}
+            onSelect={selectCategory}
             onCreate={createCategory}
             onUpdate={updateCategory}
             onDelete={deleteCategory}
@@ -181,7 +261,8 @@ export function PostsList({
               <li key={post.id} className="flex min-w-0 items-start gap-3 p-4">
                 <div className="min-w-0 flex-1">
                   <Link
-                    href={`/admin/posts/${post.id}`}
+                    href={postDocumentHref(post.id, listHref)}
+                    onClick={rememberPosition}
                     className="block break-words font-medium hover:underline"
                   >
                     {post.title}
@@ -194,7 +275,8 @@ export function PostsList({
                   </div>
                 </div>
                 <Link
-                  href={`/admin/posts/${post.id}?edit=1`}
+                  href={postDocumentHref(post.id, listHref, true)}
+                  onClick={rememberPosition}
                   aria-label={`编辑文章 ${post.title}`}
                   className="inline-flex size-9 shrink-0 items-center justify-center rounded-md hover:bg-muted"
                 >
@@ -236,7 +318,7 @@ export function PostsList({
               ) : filteredPosts.map((post) => (
                 <tr key={post.id} className="border-t border-border/50 transition-colors hover:bg-muted/30">
                   <td className="p-3">
-                    <Link href={`/admin/posts/${post.id}`} className="font-medium hover:underline">
+                    <Link href={postDocumentHref(post.id, listHref)} onClick={rememberPosition} className="font-medium hover:underline">
                       {post.title}
                     </Link>
                   </td>
@@ -256,7 +338,7 @@ export function PostsList({
                   <td className="p-3 text-muted-foreground">{formatDate(post.updatedAt)}</td>
                   <td className="p-3">
                     <div className="flex items-center gap-1">
-                    <Link href={`/admin/posts/${post.id}?edit=1`}
+                    <Link href={postDocumentHref(post.id, listHref, true)} onClick={rememberPosition}
                       aria-label={`编辑文章 ${post.title}`}
                       className="inline-flex size-9 shrink-0 items-center justify-center rounded-md hover:bg-muted">
                       <Pencil className="size-4" />

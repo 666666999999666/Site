@@ -1,7 +1,8 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useLayoutEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { Pencil, Search, Trash2 } from "lucide-react"
 import type { Project } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
@@ -9,6 +10,10 @@ import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { cn } from "@/lib/utils"
 import { ideaSummary } from "@/lib/idea-summary"
+import {
+  EMPTY_IDEA_LIST_FILTERS, ideaDocumentHref, ideaListHref, ideaListPositionKey,
+  readIdeaListFilters, readIdeaListPosition, type IdeaListFilters,
+} from "@/lib/idea-list-navigation"
 
 export interface IdeaListItem {
   id: string
@@ -36,50 +41,69 @@ function IdeaPreview({ content }: { content: string }) {
 export function IdeasList({
   initialIdeas,
   projects,
+  initialFilters = EMPTY_IDEA_LIST_FILTERS,
+  knownTags: allTags,
+  ownerId = "local",
 }: {
   initialIdeas: IdeaListItem[]
   projects: Project[]
+  initialFilters?: IdeaListFilters
+  knownTags?: string[]
+  ownerId?: string
 }) {
-  const [ideas, setIdeas] = useState(initialIdeas)
-  const [query, setQuery] = useState("")
-  const [tag, setTag] = useState("")
-  const [projectId, setProjectId] = useState("")
-  const [pending, setPending] = useState(false)
+  const router = useRouter()
+  const [removedIds, setRemovedIds] = useState<string[]>([])
+  const ideas = initialIdeas.filter((idea) => !removedIds.includes(idea.id))
+  const [query, setQuery] = useState(initialFilters.q)
+  const [tag, setTag] = useState(initialFilters.tag)
+  const [projectId, setProjectId] = useState(initialFilters.projectId)
+  const [mutating, setMutating] = useState(false)
+  const [navigating, startTransition] = useTransition()
+  const pending = mutating || navigating
   const [error, setError] = useState("")
+  const listHref = ideaListHref(initialFilters)
+  const positionKey = ideaListPositionKey(ownerId, listHref)
+
+  function rememberPosition() {
+    if (location.pathname !== "/admin/ideas" || ideaListHref(readIdeaListFilters(new URLSearchParams(location.search))) !== listHref) return
+    try { sessionStorage.setItem(positionKey, String(window.scrollY)) } catch { /* URL state still works when storage is unavailable. */ }
+  }
+
+  useLayoutEffect(() => {
+    let position = 0
+    try { position = readIdeaListPosition(sessionStorage.getItem(positionKey)) } catch { /* Browser storage may be disabled. */ }
+    const frame = requestAnimationFrame(() => window.scrollTo({ top: position, behavior: "instant" }))
+    const remember = () => {
+      if (location.pathname !== "/admin/ideas" || ideaListHref(readIdeaListFilters(new URLSearchParams(location.search))) !== listHref) return
+      try { sessionStorage.setItem(positionKey, String(window.scrollY)) } catch { /* Keep navigation usable without storage. */ }
+    }
+    window.addEventListener("scroll", remember, { passive: true })
+    return () => { cancelAnimationFrame(frame); window.removeEventListener("scroll", remember) }
+  }, [listHref, positionKey])
 
   const knownTags = useMemo(
-    () => [...new Set(initialIdeas.flatMap((idea) => idea.tags))].sort((a, b) => a.localeCompare(b, "zh-CN")),
-    [initialIdeas]
+    () => [...new Set(allTags ?? initialIdeas.flatMap((idea) => idea.tags))].sort((a, b) => a.localeCompare(b, "zh-CN")),
+    [allTags, initialIdeas]
   )
 
-  async function search() {
-    setPending(true)
+  function search() {
+    if (pending) return
     setError("")
-    try {
-      const params = new URLSearchParams()
-      if (query.trim()) params.set("q", query.trim())
-      if (tag) params.set("tag", tag)
-      if (projectId) params.set("projectId", projectId)
-      const data = await apiRequest<IdeaListItem[]>(`/api/ideas?${params.toString()}`)
-      setIdeas(data)
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "搜索 Idea 失败")
-    } finally {
-      setPending(false)
-    }
+    rememberPosition()
+    startTransition(() => router.push(ideaListHref({ q: query, tag, projectId })))
   }
 
   async function remove(idea: IdeaListItem) {
     if (!window.confirm(`删除“${idea.title}”？此操作不可撤销。`)) return
-    setPending(true)
+    setMutating(true)
     setError("")
     try {
       await apiRequest(`/api/ideas/${idea.id}`, jsonRequest("DELETE", {}))
-      setIdeas((current) => current.filter((item) => item.id !== idea.id))
+      setRemovedIds((current) => [...current, idea.id])
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "删除 Idea 失败")
     } finally {
-      setPending(false)
+      setMutating(false)
     }
   }
 
@@ -129,7 +153,7 @@ export function IdeasList({
       {ideas.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-10 text-center">
           <p className="text-sm text-muted-foreground">没有符合条件的 Idea。</p>
-          <Link href="/admin/ideas/new" className={cn(buttonVariants({ variant: "outline" }), "mt-4")}>
+          <Link href={ideaDocumentHref("new", listHref)} onClick={rememberPosition} className={cn(buttonVariants({ variant: "outline" }), "mt-4")}>
             手工创建 Idea
           </Link>
         </div>
@@ -139,13 +163,14 @@ export function IdeasList({
             <li key={idea.id} className="rounded-xl border border-border/60 bg-card p-5">
               <div className="flex items-start gap-3">
                 <div className="min-w-0 flex-1">
-                  <Link href={`/admin/ideas/${idea.id}`} className="font-medium hover:underline">
+                  <Link href={ideaDocumentHref(idea.id, listHref)} onClick={rememberPosition} className="font-medium hover:underline">
                     {idea.title}
                   </Link>
                   <IdeaPreview content={idea.content} />
                 </div>
                 <Link
-                  href={`/admin/ideas/${idea.id}?edit=1`}
+                  href={ideaDocumentHref(idea.id, listHref, true)}
+                  onClick={rememberPosition}
                   className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "shrink-0")}
                   aria-label={`编辑 Idea ${idea.title}`}
                 >

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Archive, ArchiveRestore, Clock3, LoaderCircle, Pencil, Plus, Search } from "lucide-react"
 import { questionApiRequest, questionErrorMessage, questionJsonRequest } from "@/components/questions/api"
 import {
@@ -19,6 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
+import { EMPTY_QUESTION_NAVIGATION, questionEditorURL, questionNewURL, questionPageURL, type QuestionNavigation } from "@/lib/questions/navigation"
 
 const statusOptions = [
   { value: "", label: "可复习（默认）" },
@@ -44,17 +45,24 @@ const emptyResponse: QuestionListResponse = {
   pendingCount: 0,
 }
 
-export function QuestionLibrary() {
-  const [draftQuery, setDraftQuery] = useState("")
-  const [query, setQuery] = useState("")
-  const [status, setStatus] = useState("")
-  const [rating, setRating] = useState("")
-  const [page, setPage] = useState(1)
+export function QuestionLibrary({ navigation, onNavigate }: {
+  navigation?: QuestionNavigation
+  onNavigate?: (next: QuestionNavigation) => void
+} = {}) {
+  const [localNavigation, setLocalNavigation] = useState<QuestionNavigation>({ ...EMPTY_QUESTION_NAVIGATION, tab: "library" })
+  const current = navigation ?? localNavigation
+  const { query, status, rating, page } = current
+  const queryInput = useRef<HTMLInputElement>(null)
   const [refreshKey, setRefreshKey] = useState(0)
   const [response, setResponse] = useState<QuestionListResponse>(emptyResponse)
-  const [loading, setLoading] = useState(true)
+  const [pending, setLoading] = useState(true)
+  const [loadedRequest, setLoadedRequest] = useState("")
   const [error, setError] = useState("")
   const [changingId, setChangingId] = useState<string | null>(null)
+  const restoredLocation = useRef("")
+  const requestKey = JSON.stringify([page, query, status, rating])
+  const loading = pending || loadedRequest !== requestKey
+  const listURL = questionPageURL({ ...current, tab: "library" })
 
   useEffect(() => {
     let cancelled = false
@@ -74,19 +82,48 @@ export function QuestionLibrary() {
         if (!cancelled) setError(questionErrorMessage(caught, "题库加载失败"))
       })
       .finally(() => {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) {
+          setLoadedRequest(requestKey)
+          setLoading(false)
+        }
       })
 
     return () => {
       cancelled = true
     }
-  }, [page, query, rating, refreshKey, status])
+  }, [page, query, rating, refreshKey, requestKey, status])
 
-  function updateFilter(update: () => void) {
+  useEffect(() => {
+    if (loading || error || window.location.pathname !== "/admin/questions") return
+    const location = window.location.pathname + window.location.search + window.location.hash
+    if (restoredLocation.current === location) return
+    restoredLocation.current = location
+    const remembered = window.history.state?.qzQuestionLibraryScroll
+    const frame = requestAnimationFrame(() => {
+      if (/^#question-[A-Za-z0-9_-]{1,128}$/.test(window.location.hash)) {
+        document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: "center" })
+      } else if (remembered?.url === listURL && Number.isFinite(remembered.y) && remembered.y >= 0) {
+        window.scrollTo(0, remembered.y)
+      }
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [error, listURL, loading])
+
+  function rememberPosition() {
+    if (window.location.pathname !== "/admin/questions") return
+    window.history.replaceState({ ...window.history.state, qzQuestionLibraryScroll: { url: listURL, y: window.scrollY } }, "")
+  }
+
+  function navigate(next: QuestionNavigation) {
     setLoading(true)
     setError("")
-    setPage(1)
-    update()
+    if (questionPageURL(next) === questionPageURL(current)) setRefreshKey(value => value + 1)
+    if (onNavigate) onNavigate(next)
+    else setLocalNavigation(next)
+  }
+
+  function updateFilter(update: Partial<QuestionNavigation>) {
+    navigate({ ...current, ...update, page: 1 })
   }
 
   async function toggleEnabled(id: string, enabled: boolean) {
@@ -118,7 +155,7 @@ export function QuestionLibrary() {
                 默认显示已启用且答案就绪的题目；列表不会展示标准答案。
               </CardDescription>
             </div>
-            <Link href="/admin/questions/new" className={cn(buttonVariants(), "h-9 gap-1.5 px-3")}>
+            <Link href={questionNewURL(listURL)} onClick={rememberPosition} className={cn(buttonVariants(), "h-9 gap-1.5 px-3")}>
               <Plus className="size-4" /> 新建题目
             </Link>
           </div>
@@ -128,15 +165,16 @@ export function QuestionLibrary() {
             className="grid gap-3 lg:grid-cols-[minmax(15rem,1fr)_12rem_12rem_auto]"
             onSubmit={(event) => {
               event.preventDefault()
-              updateFilter(() => setQuery(draftQuery.trim()))
+              updateFilter({ query: queryInput.current?.value.trim() ?? "" })
             }}
           >
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                value={draftQuery}
+                key={query}
+                ref={queryInput}
+                defaultValue={query}
                 maxLength={200}
-                onChange={(event) => setDraftQuery(event.target.value)}
                 className="h-10 pl-9"
                 placeholder="搜索题目或当前标准答案"
                 aria-label="搜索题库"
@@ -145,7 +183,7 @@ export function QuestionLibrary() {
             <Select
               items={statusOptions}
               value={status}
-              onValueChange={(value) => updateFilter(() => setStatus(value ?? ""))}
+              onValueChange={(value) => updateFilter({ status: value ?? "" })}
             >
               <SelectTrigger className="w-full bg-background px-3 text-foreground data-[size=default]:h-10" aria-label="按题目状态筛选">
                 <SelectValue />
@@ -161,7 +199,7 @@ export function QuestionLibrary() {
             <Select
               items={ratingOptions}
               value={rating}
-              onValueChange={(value) => updateFilter(() => setRating(value ?? ""))}
+              onValueChange={(value) => updateFilter({ rating: value ?? "" })}
             >
               <SelectTrigger className="w-full bg-background px-3 text-foreground data-[size=default]:h-10" aria-label="按最近评分筛选">
                 <SelectValue />
@@ -205,7 +243,7 @@ export function QuestionLibrary() {
           <CardContent className="flex min-h-48 flex-col items-center justify-center text-center">
             <p className="text-base font-medium">没有找到匹配的题目</p>
             <p className="mt-2 text-sm text-muted-foreground">可以调整筛选条件，或手工新建一道题。</p>
-            <Link href="/admin/questions/new" className={cn(buttonVariants(), "mt-5 gap-1.5")}>
+            <Link href={questionNewURL(listURL)} onClick={rememberPosition} className={cn(buttonVariants(), "mt-5 gap-1.5")}>
               <Plus className="size-4" /> 新建题目
             </Link>
           </CardContent>
@@ -213,7 +251,7 @@ export function QuestionLibrary() {
       ) : (
         <div className="space-y-3" aria-label="题目列表">
           {response.items.map((item) => (
-            <article key={item.id} className="rounded-xl border border-border/70 bg-card p-4 shadow-sm sm:p-5">
+            <article key={item.id} id={`question-${item.id}`} className="rounded-xl border border-border/70 bg-card p-4 shadow-sm sm:p-5">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -237,7 +275,8 @@ export function QuestionLibrary() {
 
                 <div className="flex shrink-0 flex-wrap gap-2">
                   <Link
-                    href={`/admin/questions/${encodeURIComponent(item.id)}`}
+                    href={questionEditorURL(item.id, listURL + `#question-${item.id}`)}
+                    onClick={rememberPosition}
                     className={cn(buttonVariants({ variant: "outline" }), "gap-1.5")}
                   >
                     <Pencil className="size-4" /> 编辑
@@ -267,8 +306,7 @@ export function QuestionLibrary() {
             variant="outline"
             disabled={page <= 1}
             onClick={() => {
-              setLoading(true)
-              setPage((current) => current - 1)
+              navigate({ ...current, page: page - 1 })
             }}
           >
             上一页
@@ -282,8 +320,7 @@ export function QuestionLibrary() {
             variant="outline"
             disabled={page >= totalPages}
             onClick={() => {
-              setLoading(true)
-              setPage((current) => current + 1)
+              navigate({ ...current, page: page + 1 })
             }}
           >
             下一页

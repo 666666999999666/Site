@@ -16,6 +16,7 @@ import { DocumentActionBar } from "./DocumentActionBar"
 import { DraftRecoveryNotice } from "./DraftRecoveryNotice"
 import { useDocumentDraft } from "./useDocumentDraft"
 import { clearDocumentEditQuery, useDocumentPosition } from "./useDocumentPosition"
+import { ideaDocumentHref, safeIdeaReturnHref } from "@/lib/idea-list-navigation"
 
 interface EditableIdea {
   id: string
@@ -28,14 +29,16 @@ interface EditableIdea {
 }
 
 export function IdeaForm({
-  idea, projects, ownerId, initiallyEditing = false,
+  idea, projects, ownerId, initiallyEditing = false, returnTo,
 }: {
   idea?: EditableIdea
   projects: Project[]
   ownerId?: string
   initiallyEditing?: boolean
+  returnTo?: string
 }) {
   const router = useRouter()
+  const listHref = safeIdeaReturnHref(returnTo)
   const [savedIdea, setSavedIdea] = useState(idea)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
@@ -66,7 +69,7 @@ export function IdeaForm({
     draft.discard()
     setError("")
     if (savedIdea) { switchMode("read"); clearDocumentEditQuery() }
-    else router.push("/admin/ideas")
+    else router.push(listHref)
   }
 
   async function save() {
@@ -86,7 +89,7 @@ export function IdeaForm({
       setSavedIdea(saved)
       draft.commit(draftFromIdea(saved))
       switchMode("read")
-      if (!idea) router.replace("/admin/ideas/" + saved.id)
+      if (!idea) router.replace(ideaDocumentHref(saved.id, listHref))
       else clearDocumentEditQuery()
       router.refresh()
     } catch (caught) {
@@ -103,7 +106,7 @@ export function IdeaForm({
     try {
       await apiRequest("/api/ideas/" + savedIdea.id, jsonRequest("DELETE", {}))
       draft.discard()
-      router.push("/admin/ideas")
+      router.push(listHref)
       router.refresh()
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "删除 Idea 失败")
@@ -115,7 +118,7 @@ export function IdeaForm({
   return (
     <div className="admin-document min-w-0 max-w-4xl">
       <DocumentActionBar mode={mode} dirty={draft.dirty} pending={pending} ready={draft.ready} status="私人 Idea"
-        onBack={() => { if (draft.confirmLeave()) router.push("/admin/ideas") }}
+        onBack={() => { if (draft.confirmLeave()) router.push(listHref) }}
         onEdit={beginEditing} onModeChange={switchMode} onCancel={cancel}>
         <Button type="button" size="sm" onClick={save} disabled={locked || !draft.dirty}>保存 Idea</Button>
       </DocumentActionBar>

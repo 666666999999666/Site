@@ -26,6 +26,7 @@ import { CodeBlock } from "./CodeBlock"
 import { codeBlockSource, rehypeCodeSource, remarkCodeSource } from "@/lib/rehype-code-source"
 import { decodeImageTitle } from "@/lib/image-presentation"
 import type { ResponsiveImage } from "@/lib/responsive-image"
+import { remarkEmptyTableCells } from "@/lib/remark-empty-table-cells"
 
 function MermaidBlock({ code }: { code: string }) {
   const [svg, setSvg] = useState("")
@@ -214,7 +215,7 @@ export const PostContent = memo(function PostContent({ content, imageMetadata = 
           prose-img:rounded-lg"
       >
         <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkMath, remarkCodeSource]}
+          remarkPlugins={[remarkGfm, remarkEmptyTableCells, remarkMath, remarkCodeSource]}
           rehypePlugins={[
             rehypeCodeSource,
             rehypeKatex,

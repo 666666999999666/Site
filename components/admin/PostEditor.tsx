@@ -16,12 +16,13 @@ import { commandsCtx, editorViewCtx, parserCtx } from "@milkdown/kit/core"
 import { Slice, type Node as ProseNode } from "@milkdown/kit/prose/model"
 import { Plugin, Selection } from "@milkdown/kit/prose/state"
 import { clearTextInCurrentBlockCommand } from "@milkdown/kit/preset/commonmark"
-import { insertTableCommand } from "@milkdown/kit/preset/gfm"
+import { insertTableCommand, tableCellSchema, tableHeaderSchema } from "@milkdown/kit/preset/gfm"
 import { $prose, callCommand, getMarkdown } from "@milkdown/kit/utils"
 import "@milkdown/crepe/theme/common/style.css"
 import "@milkdown/crepe/theme/frame.css"
 import { normalizeContent } from "@/lib/content"
 import { clampEditorSelectionPosition } from "@/lib/editor-selection"
+import { emptyTableCellSchema } from "@/lib/editor-table-schema"
 import { EditorImageUploads } from "@/lib/editor-image-uploads"
 import { imageUploadWarning, type ImageUploadResponse } from "@/lib/image-upload-response"
 import { configureImagePresentation, imagePresentationView } from "./editor-image"
@@ -381,6 +382,11 @@ export function PostEditor({
 
     crepe.editor
       .config(configureImagePresentation)
+      .config((ctx) => {
+        for (const cell of [tableCellSchema, tableHeaderSchema]) {
+          ctx.update(cell.key, (previous) => (context) => emptyTableCellSchema(previous(context)))
+        }
+      })
       .use(imagePresentationView)
       .config((ctx) => {
         ctx.get(listenerCtx).markdownUpdated(() => {

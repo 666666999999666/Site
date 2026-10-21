@@ -17,6 +17,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { questionEditorURL, questionReturnTo } from "@/lib/questions/navigation"
 
 type SchedulePolicy = "KEEP" | "RESET"
 
@@ -28,8 +29,9 @@ function validLength(value: string) {
   return Array.from(value).length <= 100_000
 }
 
-export function QuestionForm({ mode, questionId }: { mode: "create" | "edit"; questionId?: string }) {
+export function QuestionForm({ mode, questionId, returnTo }: { mode: "create" | "edit"; questionId?: string; returnTo?: string }) {
   const router = useRouter()
+  const backHref = questionReturnTo(returnTo)
   const [question, setQuestion] = useState<QuestionDetail | null>(null)
   const [promptMarkdown, setPromptMarkdown] = useState("")
   const [referenceAnswerMarkdown, setReferenceAnswerMarkdown] = useState("")
@@ -134,7 +136,7 @@ export function QuestionForm({ mode, questionId }: { mode: "create" | "edit"; qu
           }),
         })
         const id = response.question?.id ?? response.id
-        router.push(id ? `/admin/questions/${encodeURIComponent(id)}` : "/admin/questions")
+        router.push(id ? questionEditorURL(id, backHref) : backHref)
         router.refresh()
         return
       }
@@ -209,7 +211,7 @@ export function QuestionForm({ mode, questionId }: { mode: "create" | "edit"; qu
           <CardDescription>{error || "题目不存在或当前账号无权访问。"}</CardDescription>
         </CardHeader>
         <CardContent>
-          <Link href="/admin/questions" className={buttonVariants({ variant: "outline" })}>返回问题中学</Link>
+          <Link href={backHref} className={buttonVariants({ variant: "outline" })}>返回问题中学</Link>
         </CardContent>
       </Card>
     )
@@ -219,7 +221,7 @@ export function QuestionForm({ mode, questionId }: { mode: "create" | "edit"; qu
     <div className="space-y-8">
       <header className="flex flex-col gap-4 border-b border-border/60 pb-6 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <Link href="/admin/questions" className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
+          <Link href={backHref} className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
             <ArrowLeft className="size-4" /> 返回问题中学
           </Link>
           <div className="flex flex-wrap items-center gap-3">
