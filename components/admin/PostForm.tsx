@@ -8,6 +8,7 @@ import type { Category, Post, Series } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
 import { uploadEmbeddedPostImages } from "@/lib/post-images"
 import { imageUploadWarning, type ImageUploadResponse } from "@/lib/image-upload-response"
+import { consumePostImageWarnings, rememberPostImageWarnings } from "@/lib/post-image-warning-notice"
 import { normalizeTags } from "@/lib/tags"
 import { CONTENT_FORMATS, getContentFormatLabel, needsPublicationReview, scanPublicationContent, type PublicationReview } from "@/lib/publication-content"
 import { ArticlePublicationPreview } from "@/components/admin/ArticlePublicationPreview"
@@ -46,9 +47,28 @@ export function PostForm({
   const savingRef = useRef(false)
   const [error, setError] = useState("")
   const [uploadWarnings, setUploadWarnings] = useState<string[]>([])
+  const uploadWarningsRef = useRef<string[]>([])
   const reportUploadWarning = useCallback((warning: string) => {
-    setUploadWarnings((previous) => previous.includes(warning) ? previous : [...previous, warning])
+    if (uploadWarningsRef.current.includes(warning)) return
+    uploadWarningsRef.current = [...uploadWarningsRef.current, warning]
+    setUploadWarnings(uploadWarningsRef.current)
   }, [])
+  const postId = post?.id
+  useEffect(() => {
+    if (!postId) return
+    let cancelled = false
+    queueMicrotask(() => {
+      // Consume after setup, so StrictMode's discarded first effect cannot
+      // remove the notice before the mounted form can display it.
+      if (cancelled) return
+      for (const warning of consumePostImageWarnings(postId, ownerId)) reportUploadWarning(warning)
+    })
+    return () => { cancelled = true }
+  }, [ownerId, postId, reportUploadWarning])
+  function clearUploadWarnings() {
+    uploadWarningsRef.current = []
+    setUploadWarnings([])
+  }
   const [publicationReview, setPublicationReview] = useState<PublicationReview | null>(null)
   const [reviewedToken, setReviewedToken] = useState("")
   const publicationReviewRef = useRef<HTMLElement>(null)
@@ -98,7 +118,7 @@ export function PostForm({
       return
     }
     setError("")
-    setUploadWarnings([])
+    clearUploadWarnings()
     setEditorCreated(true)
     switchMode("edit")
   }
@@ -128,7 +148,7 @@ export function PostForm({
     setReviewedToken("")
     setEditorCreated(false)
     setError("")
-    setUploadWarnings([])
+    clearUploadWarnings()
     setPending(false)
     if (savedPost) { switchMode("read"); clearDocumentEditQuery() }
     else router.push("/admin/posts")
@@ -183,7 +203,14 @@ export function PostForm({
       embeddedUploadsRef.current.clear()
       setEditorCreated(false)
       switchMode("read")
-      if (!post) router.replace("/admin/posts/" + saved.id)
+      if (!post) {
+        const warnings = uploadWarningsRef.current
+        if (warnings.length && !rememberPostImageWarnings(saved.id, warnings, ownerId)) {
+          // Storage restrictions must not silently hide a processing failure.
+          window.alert("文章已保存。\n" + warnings.join("\n"))
+        }
+        router.replace("/admin/posts/" + saved.id)
+      }
       else clearDocumentEditQuery()
       router.refresh()
     } catch (caught) {

@@ -84,6 +84,7 @@ COPY --from=builder /app/lib/generated/ ./lib/generated/
 COPY --from=prisma-cli /prisma/node_modules/ /prisma/node_modules/
 COPY --from=builder /app/scripts/ /prisma/tools/scripts/
 COPY --from=builder /app/lib/content.ts /app/lib/image-presentation.ts /app/lib/responsive-image.ts /app/lib/image-variants.ts /prisma/tools/lib/
+RUN ln -s /app/node_modules /prisma/tools/node_modules
 
 RUN mkdir -p /app/public/uploads /app/data/study-uploads \
     && chown -R node:node /app/public/uploads /app/data/study-uploads
