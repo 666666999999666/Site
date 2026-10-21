@@ -12,7 +12,11 @@ requested_image="${2:-}"
   || fail "Deployment image must use the exact target Git SHA tag"
 
 prepare_operation_lock
-exec 9>>"$OPERATION_LOCK_PATH"
+# Reuse the bootstrap's open file description; reopening the same path here
+# would make this child wait on the lock held by its own parent.
+if [[ ! /proc/self/fd/9 -ef "$OPERATION_LOCK_PATH" ]]; then
+  exec 9>>"$OPERATION_LOCK_PATH"
+fi
 flock -w "${QZSITE_DEPLOY_LOCK_WAIT_SECONDS:-30}" 9 \
   || fail "Another deployment or recovery operation is still running"
 [[ -d "$APP_DIR/.git" ]] || fail "$APP_DIR is not a Git worktree"

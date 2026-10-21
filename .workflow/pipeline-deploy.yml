@@ -70,6 +70,17 @@ stages:
         echo "Gitee image output does not match the pipeline commit" >&2
         exit 1
       }
+      # Use the existing checkout's lock preparation so the first upgrade is
+      # protected before fetching the new entrypoint. Keep FD 9 in this shell.
+      QZSITE_APP_DIR_OVERRIDE="$(pwd -P)" bash -c 'source ops/common.sh; prepare_operation_lock'
+      operation_lock_path="/tmp/qzsite-operation.lock"
+      if [ ! /proc/self/fd/9 -ef "$operation_lock_path" ]; then
+        exec 9>>"$operation_lock_path"
+      fi
+      flock -w "${QZSITE_DEPLOY_LOCK_WAIT_SECONDS:-30}" 9 || {
+        echo "Another deployment or recovery operation is still running" >&2
+        exit 1
+      }
       docker_config="$(mktemp -d /dev/shm/qzsite-docker-config.XXXXXX)"
       bootstrap=""
       cleanup() {

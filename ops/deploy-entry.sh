@@ -24,6 +24,17 @@ app_dir="$(pwd -P)"
 [[ -d "$app_dir/ops" && ! -L "$app_dir/ops" ]] \
   || fail "The deployment ops path must be a real directory"
 
+# The current checkout already knows the lock's ownership contract. Prepare
+# it in a child shell without replacing this bootstrap's functions or cwd.
+QZSITE_APP_DIR_OVERRIDE="$app_dir" \
+  bash -c 'source "$1/ops/common.sh"; prepare_operation_lock' _ "$app_dir"
+operation_lock_path="/tmp/qzsite-operation.lock"
+if [[ ! /proc/self/fd/9 -ef "$operation_lock_path" ]]; then
+  exec 9>>"$operation_lock_path"
+fi
+flock -w "${QZSITE_DEPLOY_LOCK_WAIT_SECONDS:-30}" 9 \
+  || fail "Another deployment or recovery operation is still running"
+
 log "Fetching the target deployment entrypoint"
 production_git_url="https://gitee.com/lqzzql/Site.git"
 production_ref="refs/remotes/gitee-production/main"

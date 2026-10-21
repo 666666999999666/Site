@@ -40,7 +40,11 @@ PostgreSQL 和 Nginx 镜像只在版本变更或新机器恢复时拉取，不�
 
 ## 3. 自动部署
 
-Gitee Agent 先从目标提交提取 `deploy-entry.sh`，再由入口把同一提交的部署、公共函数、完整备份和私有目录准备脚本暂存到旧工作区中执行。这样首次从旧版脚本升级、失败后重试时，也不会在 checkout 前退回旧版两文件备份。等价的日常入口为：
+Gitee Agent 先从目标提交提取 `deploy-entry.sh`，再由入口把同一提交的部署、公共函数、完整备份和私有目录准备脚本暂存到旧工作区中执行。这样首次从旧版脚本升级、失败后重试时，也不会在 checkout 前退回旧版两文件备份。
+
+流水线在第一次 `git fetch` 前取得 `/tmp/qzsite-operation.lock`，直接调用 `deploy-entry.sh` 时也先取锁。入口与内层部署只复用指向该锁文件的 FD 9，并仍执行 `flock`；锁覆盖拉取、切换、回滚和退出清理，最后一个持有者退出后自动释放。等待超时会失败且不会拉取代码，默认等待 30 秒，可通过既有 `QZSITE_DEPLOY_LOCK_WAIT_SECONDS` 调整。不通过环境标志跳过锁，也不要删除锁文件或显式解开外层持有的锁。
+
+等价的日常入口为：
 
 ```bash
 bash ops/deploy-entry.sh <40位GitSHA> ccr.ccs.tencentyun.com/lqzzql/web:<同一GitSHA>

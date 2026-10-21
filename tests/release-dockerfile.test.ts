@@ -49,7 +49,7 @@ test("release Dockerfile pins the validated Git SHA without changing the source 
     assert.match(rendered, /mirrors\.cloud\.tencent\.com mirrors\.aliyun\.com dl-cdn\.alpinelinux\.org/)
     assert.match(rendered, /"https:\/\/\$\{mirror\}\/alpine\/\$\{alpine_branch\}\/main"/)
     assert.match(rendered, /"https:\/\/\$\{mirror\}\/alpine\/\$\{alpine_branch\}\/community"/)
-    assert.match(rendered, /if apk add --no-cache bash coreutils git tar postgresql16 postgresql16-client su-exec; then/)
+    assert.match(rendered, /if apk add --no-cache bash coreutils git tar postgresql16 postgresql16-client su-exec flock; then/)
     assert.match(rendered, /FROM system-deps AS builder/)
     assert.match(rendered, /RUN bash scripts\/run-build-db-gate\.sh/)
     assert.match(rendered, /--mount=type=cache,target=\/app\/\.cache\/eslint/)
