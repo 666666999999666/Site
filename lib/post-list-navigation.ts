@@ -17,6 +17,11 @@ export function postListHref(filters: PostListFilters): string {
   return "/admin/posts" + (params.size ? "?" + params : "")
 }
 
+/** Only stale cached server state needs a mount-time replay of the URL. */
+export function shouldRestorePostListOnMount(initialFilters: PostListFilters, params: Pick<URLSearchParams, "get">): boolean {
+  return postListHref(initialFilters) !== postListHref(readPostListFilters(params))
+}
+
 export function safePostReturnHref(value: unknown): string {
   if (typeof value !== "string" || value.length > 2048) return "/admin/posts"
   try {

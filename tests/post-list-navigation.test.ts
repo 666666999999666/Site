@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 import {
   postDocumentHref, postListHref, postListPositionKey, readPostListFilters,
-  readPostListPosition, safePostReturnHref,
+  readPostListPosition, safePostReturnHref, shouldRestorePostListOnMount,
 } from "../lib/post-list-navigation"
 
 test("Article search and existing category state survive read/direct-edit return links", () => {
@@ -36,4 +36,18 @@ test("Article scroll storage separates owners and filters and rejects invalid of
   assert.notEqual(postListPositionKey("a", "/admin/posts?q=BIM"), postListPositionKey("a", "/admin/posts?q=Cloud"))
   assert.equal(readPostListPosition("582"), 582)
   for (const value of [null, "NaN", "Infinity", "-1", "10000001", "{}"]) assert.equal(readPostListPosition(value), 0)
+})
+
+test("Already-resolved initial article filters must not replay the URL over newly typed search text", () => {
+  assert.equal(shouldRestorePostListOnMount({ q: "", categoryId: "" }, new URLSearchParams()), false)
+  assert.equal(shouldRestorePostListOnMount(
+    { q: "Cloud2BIM", categoryId: "category-a" },
+    new URLSearchParams("categoryId=category-a&q=Cloud2BIM"),
+  ), false)
+})
+
+test("Cached article server props still restore URL state when history changed before mount", () => {
+  assert.equal(shouldRestorePostListOnMount({ q: "", categoryId: "" }, new URLSearchParams("q=Cloud2BIM")), true)
+  assert.equal(shouldRestorePostListOnMount({ q: "Cloud2BIM", categoryId: "" }, new URLSearchParams("q=Cloud2BIM&categoryId=a")), true)
+  assert.equal(shouldRestorePostListOnMount({ q: "Cloud2BIM", categoryId: "a" }, new URLSearchParams()), true)
 })

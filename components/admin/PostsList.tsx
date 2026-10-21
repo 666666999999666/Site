@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   EMPTY_POST_LIST_FILTERS, postDocumentHref, postListHref, postListPositionKey,
-  readPostListFilters, readPostListPosition, type PostListFilters,
+  readPostListFilters, readPostListPosition, shouldRestorePostListOnMount, type PostListFilters,
 } from "@/lib/post-list-navigation"
 
 type PostWithRelations = Post & { category: Category | null; series: Series | null }
@@ -37,6 +37,7 @@ export function PostsList({
 }) {
   const [query, setQuery] = useState(initialFilters.q)
   const [appliedQuery, setAppliedQuery] = useState(initialFilters.q)
+  const initialFiltersRef = useRef(initialFilters)
   const appliedQueryRef = useRef(initialFilters.q)
   const searchSequence = useRef(0)
   const [posts, setPosts] = useState(initialPosts)
@@ -101,11 +102,13 @@ export function PostsList({
         if (sequence === searchSequence.current) setPending(false)
       }
     }
-    // Native history may restore a cached server tree before this component
-    // mounts. The current URL must win even when its popstate was already sent.
-    const frame = requestAnimationFrame(() => { void restore() })
+    // A cached tree may miss popstate before mounting. Restore only that mismatch:
+    // replaying an already-resolved URL can erase text typed before this frame.
+    const frame = shouldRestorePostListOnMount(initialFiltersRef.current, new URLSearchParams(location.search))
+      ? requestAnimationFrame(() => { void restore() })
+      : null
     window.addEventListener("popstate", restore)
-    return () => { cancelAnimationFrame(frame); window.removeEventListener("popstate", restore); searchSequence.current += 1 }
+    return () => { if (frame !== null) cancelAnimationFrame(frame); window.removeEventListener("popstate", restore); searchSequence.current += 1 }
   }, [])
 
   async function search() {
