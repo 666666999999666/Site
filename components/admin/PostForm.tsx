@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation"
 import type { Category, Post, Series } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
 import { uploadEmbeddedPostImages } from "@/lib/post-images"
+import { imageUploadWarning, type ImageUploadResponse } from "@/lib/image-upload-response"
 import { normalizeTags } from "@/lib/tags"
 import { CONTENT_FORMATS, getContentFormatLabel, needsPublicationReview, scanPublicationContent, type PublicationReview } from "@/lib/publication-content"
 import { ArticlePublicationPreview } from "@/components/admin/ArticlePublicationPreview"
@@ -44,6 +45,10 @@ export function PostForm({
   const [pending, setPending] = useState(false)
   const savingRef = useRef(false)
   const [error, setError] = useState("")
+  const [uploadWarnings, setUploadWarnings] = useState<string[]>([])
+  const reportUploadWarning = useCallback((warning: string) => {
+    setUploadWarnings((previous) => previous.includes(warning) ? previous : [...previous, warning])
+  }, [])
   const [publicationReview, setPublicationReview] = useState<PublicationReview | null>(null)
   const [reviewedToken, setReviewedToken] = useState("")
   const publicationReviewRef = useRef<HTMLElement>(null)
@@ -93,6 +98,7 @@ export function PostForm({
       return
     }
     setError("")
+    setUploadWarnings([])
     setEditorCreated(true)
     switchMode("edit")
   }
@@ -122,6 +128,7 @@ export function PostForm({
     setReviewedToken("")
     setEditorCreated(false)
     setError("")
+    setUploadWarnings([])
     setPending(false)
     if (savedPost) { switchMode("read"); clearDocumentEditQuery() }
     else router.push("/admin/posts")
@@ -140,9 +147,11 @@ export function PostForm({
       const content = await uploadEmbeddedPostImages(current.content, async (file) => {
         const form = new FormData()
         form.append("file", file)
-        const uploaded = await apiRequest<{ url: string }>("/api/upload", { method: "POST", body: form })
+        const uploaded = await apiRequest<ImageUploadResponse>("/api/upload", { method: "POST", body: form })
         if (!uploaded?.url) throw new Error("图片上传失败")
         uploadedUrlsRef.current.add(uploaded.url)
+        const warning = imageUploadWarning(uploaded)
+        if (warning) reportUploadWarning(warning)
         return uploaded.url
       }, embeddedUploadsRef.current)
       if (content !== current.content) {
@@ -210,6 +219,9 @@ export function PostForm({
         onRestore={() => { draft.restore(); setEditorCreated(true); setError(""); switchMode("edit") }}
         onDiscard={() => { draft.discardRecovery(); setError("") }} />}
       {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
+      {uploadWarnings.length > 0 && <div role="status" aria-label="图片处理提示" className="mb-4 space-y-1 text-sm text-amber-700 dark:text-amber-300">
+        {uploadWarnings.map((warning) => <p key={warning}>{warning}</p>)}
+      </div>}
       {draft.storageError && <p role="alert" className="mb-4 text-sm text-destructive">{draft.storageError}</p>}
       {publicationReview && (
         <section ref={publicationReviewRef} tabIndex={-1} aria-labelledby="publication-review-title" className="mb-6 rounded-xl border border-amber-500/60 bg-amber-50/40 p-4 dark:bg-amber-950/20">
@@ -381,7 +393,7 @@ export function PostForm({
           <Label>正文</Label>
           {editorCreated && <PostEditor value={content} onChange={setContent}
             onDocumentChange={setContent} controlRef={editorRef}
-            onUpload={(url) => uploadedUrlsRef.current.add(url)} />}
+            onUpload={(url) => uploadedUrlsRef.current.add(url)} onUploadWarning={reportUploadWarning} />}
         </div>
         {savedPost?.status === "PUBLISHED" && (
           <p className="text-sm text-muted-foreground">“撤回为草稿”会取消公开发布；“更新发布”保留发布状态。预览不会执行这些操作。</p>

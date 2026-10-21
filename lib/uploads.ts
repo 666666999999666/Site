@@ -1,8 +1,10 @@
 import path from "path"
-import { mkdir, writeFile } from "fs/promises"
+import { mkdir, rm, unlink, writeFile } from "fs/promises"
 import { randomUUID } from "crypto"
 import { ValidationError } from "./errors"
 import { detectImageExtension } from "./image-signature"
+import { prepareImageVariants, type ImageVariantResult } from "./image-variants"
+import { imageDerivativeNames } from "./responsive-image"
 
 export { detectImageExtension } from "./image-signature"
 
@@ -20,7 +22,12 @@ export function uploadFilePath(url: string): string | null {
   return path.join(uploadDirectory(), match[1])
 }
 
-export async function storeImageBuffer(buffer: Buffer): Promise<string> {
+export interface StoredImageResult {
+  url: string
+  processing: ImageVariantResult
+}
+
+export async function storeImageBufferWithResult(buffer: Buffer): Promise<StoredImageResult> {
   if (buffer.length <= 0) throw new ValidationError("图片为空")
   if (buffer.length > MAX_UPLOAD_BYTES) {
     throw new ValidationError("图片过大（限 5MB）")
@@ -33,6 +40,29 @@ export async function storeImageBuffer(buffer: Buffer): Promise<string> {
   const filename = `${Date.now()}-${randomUUID().slice(0, 8)}.${extension}`
   const uploadDir = uploadDirectory()
   await mkdir(uploadDir, { recursive: true })
-  await writeFile(path.join(uploadDir, filename), buffer, { flag: "wx" })
-  return `/uploads/${filename}`
+  const file = path.join(uploadDir, filename)
+  await writeFile(file, buffer, { flag: "wx" })
+  const processing = await prepareImageVariants(file)
+  return { url: `/uploads/${filename}`, processing }
+}
+
+/** Compatibility for callers that need only the durable original URL. */
+export async function storeImageBuffer(buffer: Buffer): Promise<string> {
+  return (await storeImageBufferWithResult(buffer)).url
+}
+
+/** Delete only this public original's finite family; caller owns reference checks. */
+export async function removeUploadFiles(url: string): Promise<boolean> {
+  const file = uploadFilePath(url)
+  if (!file) throw new ValidationError("图片路径无效")
+  let existed = true
+  try { await unlink(file) }
+  catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
+    existed = false
+  }
+  for (const derivative of imageDerivativeNames(path.basename(file))) {
+    await rm(path.join(path.dirname(file), derivative), { force: true })
+  }
+  return existed
 }

@@ -23,6 +23,7 @@ import "@milkdown/crepe/theme/frame.css"
 import { normalizeContent } from "@/lib/content"
 import { clampEditorSelectionPosition } from "@/lib/editor-selection"
 import { EditorImageUploads } from "@/lib/editor-image-uploads"
+import { imageUploadWarning, type ImageUploadResponse } from "@/lib/image-upload-response"
 import { configureImagePresentation, imagePresentationView } from "./editor-image"
 import { Button } from "@/components/ui/button"
 import {
@@ -190,12 +191,14 @@ export function PostEditor({
   value,
   onChange,
   onUpload,
+  onUploadWarning,
   controlRef,
   onDocumentChange,
 }: {
   value: string
   onChange: (value: string) => void
   onUpload?: (url: string) => void
+  onUploadWarning?: (warning: string) => void
   controlRef?: Ref<PostEditorHandle>
   onDocumentChange?: (value: string) => void
 }) {
@@ -203,6 +206,7 @@ export function PostEditor({
   const crepeRef = useRef<Crepe | null>(null)
   const onChangeRef = useRef(onChange)
   const onUploadRef = useRef(onUpload)
+  const onUploadWarningRef = useRef(onUploadWarning)
   const onDocumentChangeRef = useRef(onDocumentChange)
   const rawBaselineRef = useRef(value)
   const baselineDocRef = useRef<ProseNode | null>(null)
@@ -211,6 +215,7 @@ export function PostEditor({
   const imageUploadsRef = useRef<EditorImageUploads | null>(null)
   const tableDialogTimerRef = useRef<number | null>(null)
   const [tableDialogOpen, setTableDialogOpen] = useState(false)
+  const [imageWarning, setImageWarning] = useState("")
 
   function requestTableInsertion() {
     if (tableDialogTimerRef.current !== null) window.clearTimeout(tableDialogTimerRef.current)
@@ -273,8 +278,9 @@ export function PostEditor({
   useEffect(() => {
     onChangeRef.current = onChange
     onUploadRef.current = onUpload
+    onUploadWarningRef.current = onUploadWarning
     onDocumentChangeRef.current = onDocumentChange
-  }, [onChange, onDocumentChange, onUpload])
+  }, [onChange, onDocumentChange, onUpload, onUploadWarning])
 
   // 初始化 Crepe 编辑器（仅运行一次）
   useLayoutEffect(() => {
@@ -316,13 +322,18 @@ export function PostEditor({
                 body: fd,
                 signal: controller.signal,
               })
-              const payload = await res.json().catch(() => ({})) as { url?: string; error?: string }
+              const payload = await res.json().catch(() => ({})) as Partial<ImageUploadResponse> & { error?: string }
               if (!res.ok || !payload.url) throw new Error(payload.error || "图片上传失败")
               const url = payload.url
               onUploadRef.current?.(url)
               if (input && !input.isConnected) {
                 upload.cancel()
                 return ""
+              }
+              const warning = imageUploadWarning(payload)
+              if (warning) {
+                setImageWarning(warning)
+                onUploadWarningRef.current?.(warning)
               }
               // Return first: Crepe writes this URL in its .then callback. The
               // document plugin below acknowledges that actual transaction.
@@ -488,6 +499,7 @@ export function PostEditor({
 
   return (
     <>
+      {!onUploadWarning && imageWarning && <p role="status" aria-label="图片处理提示" className="mb-3 text-sm text-amber-700 dark:text-amber-300">{imageWarning}</p>}
       <div
         className="post-editor-shell rounded-lg border border-border/50 bg-card"
         onKeyDownCapture={interceptTableKeyboard}

@@ -306,6 +306,10 @@ async function dispatchApproval(
             title: post.title,
             status: post.status,
             importedImageCount: materialized.importedImages.length,
+            ...(materialized.imageProcessing.some((image) => image.processing.warning) ? {
+              imageProcessingWarnings: materialized.imageProcessing.flatMap((image) => image.processing.warning
+                ? [{ url: image.url, warning: image.processing.warning }] : []),
+            } : {}),
           }
         })
         if (execution.reused) await materialized.cleanup()

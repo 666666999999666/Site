@@ -74,8 +74,8 @@ COPY --from=builder /app/source-manifest.json ./.source-manifest.json
 RUN node -e 'const manifest = JSON.parse(require("node:fs").readFileSync("/app/.source-manifest.json", "utf8")); if (manifest.release_sha !== process.env.APP_RELEASE_SHA) process.exit(1)' \
     && chmod 0444 /app/.source-fingerprint /app/.source-manifest.json
 
-# Images bypass the Next optimizer, so the runtime omits libvips/sharp.
-RUN rm -rf /app/node_modules/sharp /app/node_modules/@img
+# Uploads create a finite static variant set using the pinned Sharp runtime.
+# The reader still bypasses the Next optimizer.
 
 COPY --from=builder /app/prisma/ ./prisma/
 COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
@@ -83,7 +83,7 @@ COPY --from=builder /app/lib/generated/ ./lib/generated/
 
 COPY --from=prisma-cli /prisma/node_modules/ /prisma/node_modules/
 COPY --from=builder /app/scripts/ /prisma/tools/scripts/
-COPY --from=builder /app/lib/content.ts /app/lib/image-presentation.ts /app/lib/responsive-image.ts /prisma/tools/lib/
+COPY --from=builder /app/lib/content.ts /app/lib/image-presentation.ts /app/lib/responsive-image.ts /app/lib/image-variants.ts /prisma/tools/lib/
 
 RUN mkdir -p /app/public/uploads /app/data/study-uploads \
     && chown -R node:node /app/public/uploads /app/data/study-uploads

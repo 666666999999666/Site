@@ -1,7 +1,6 @@
-import fs from "fs/promises"
 import { prisma } from "@/lib/db"
 import { hasNoUploadReferences } from "@/lib/upload-reference-policy"
-import { uploadFilePath } from "@/lib/uploads"
+import { removeUploadFiles, uploadFilePath } from "@/lib/uploads"
 
 /**
  * #30: 删除上传文件，仅删除不被其他记录引用的文件，防误删共享图片。
@@ -38,7 +37,7 @@ export async function deleteUploadFiles(urls: string[], excludeId?: string): Pro
     // 没有其他记录引用时才删除文件
     if (hasNoUploadReferences({ postCount, projectCount, seriesCount })) {
       try {
-        await fs.unlink(filePath)
+        await removeUploadFiles(url)
       } catch {
         // 文件不存在则忽略
       }

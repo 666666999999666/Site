@@ -29,10 +29,9 @@ const nextConfig: NextConfig = {
       "./node_modules/uncrypto/**/*",
       "./node_modules/@prisma/adapter-pg/**/*",
       "./node_modules/pg/**/*",
+      "./node_modules/sharp/**/*",
+      "./node_modules/@img/**/*",
     ],
-  },
-  outputFileTracingExcludes: {
-    "/*": ["./node_modules/sharp/**/*", "./node_modules/@img/**/*"],
   },
   images: {
     unoptimized: true,

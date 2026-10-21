@@ -6,6 +6,7 @@ import { ImagePlus, Trash2 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import type { Project } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
+import { imageUploadWarning, type ImageUploadResponse } from "@/lib/image-upload-response"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -22,6 +23,7 @@ export function ProjectForm({ project }: { project?: Project }) {
   const [sortOrder, setSortOrder] = useState(project?.sortOrder ?? 0)
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
+  const [uploadWarning, setUploadWarning] = useState("")
   const unsavedCoverRef = useRef<string | null>(null)
 
   async function removeUnsavedCover() {
@@ -34,16 +36,18 @@ export function ProjectForm({ project }: { project?: Project }) {
   async function uploadCover(file: File) {
     setPending(true)
     setError("")
+    setUploadWarning("")
     try {
       await removeUnsavedCover()
       const form = new FormData()
       form.append("file", file)
-      const payload = await apiRequest<{ url: string }>("/api/upload", {
+      const payload = await apiRequest<ImageUploadResponse>("/api/upload", {
         method: "POST",
         body: form,
       })
       unsavedCoverRef.current = payload.url
       setCoverImage(payload.url)
+      setUploadWarning(imageUploadWarning(payload) ?? "")
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "封面上传失败")
     } finally {
@@ -171,6 +175,7 @@ export function ProjectForm({ project }: { project?: Project }) {
               onClick={async () => {
                 await removeUnsavedCover()
                 setCoverImage("")
+                setUploadWarning("")
               }}
               disabled={pending}
             >
@@ -223,6 +228,7 @@ export function ProjectForm({ project }: { project?: Project }) {
       </div>
 
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+      {uploadWarning && <p role="status" aria-label="图片处理提示" className="text-sm text-amber-700 dark:text-amber-300">{uploadWarning}</p>}
 
       <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-between">
         {project ? (

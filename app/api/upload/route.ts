@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server"
 import { handleApiError } from "@/lib/api/handler"
 import { NotFoundError, ValidationError } from "@/lib/errors"
-import { unlink } from "fs/promises"
 import { ensureAuthenticated } from "@/lib/api/auth"
 import { readJsonObject } from "@/lib/validation"
 import {
   MAX_UPLOAD_BYTES,
-  storeImageBuffer,
+  storeImageBufferWithResult,
+  removeUploadFiles,
   uploadFilePath,
 } from "@/lib/uploads"
 
@@ -26,8 +26,8 @@ export async function POST(req: NextRequest) {
     }
 
     const buf = Buffer.from(await file.arrayBuffer())
-    const url = await storeImageBuffer(buf)
-    return NextResponse.json({ url })
+    const uploaded = await storeImageBufferWithResult(buf)
+    return NextResponse.json(uploaded)
   } catch (e) {
     return handleApiError(e)
   }
@@ -41,14 +41,7 @@ export async function DELETE(req: NextRequest) {
     const filePath = uploadFilePath(body.url)
     if (!filePath) throw new ValidationError("图片路径无效")
 
-    try {
-      await unlink(filePath)
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        throw new NotFoundError("图片不存在")
-      }
-      throw error
-    }
+    if (!await removeUploadFiles(body.url)) throw new NotFoundError("图片不存在")
     return NextResponse.json({ ok: true })
   } catch (e) {
     return handleApiError(e)

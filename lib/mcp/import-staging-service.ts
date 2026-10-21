@@ -13,7 +13,7 @@ import {
   parseMarkdownDraft,
   rewriteMarkdownImageReferences,
 } from "../markdown-import"
-import { detectImageExtension, storeImageBuffer, uploadDirectory, uploadFilePath } from "../uploads"
+import { detectImageExtension, storeImageBufferWithResult, removeUploadFiles, uploadDirectory, type StoredImageResult } from "../uploads"
 import { validatePostCreate } from "../validation"
 import { createMcpApproval } from "./approval-service"
 import type { McpSecurityConfig } from "./config"
@@ -341,11 +341,9 @@ export async function materializeStagedMarkdownImport(bundleId: string) {
 
   const replacements = new Map<string, string>()
   const createdUrls: string[] = []
+  const imageProcessing: StoredImageResult[] = []
   const cleanup = async () => {
-    await Promise.allSettled(createdUrls.map(async (url) => {
-      const file = uploadFilePath(url)
-      if (file) await rm(file, { force: true })
-    }))
+    await Promise.allSettled(createdUrls.map((url) => removeUploadFiles(url)))
   }
   try {
     for (const image of manifest.images) {
@@ -353,7 +351,9 @@ export async function materializeStagedMarkdownImport(bundleId: string) {
       if (buffer.length !== image.size || sha256(buffer) !== image.digest) {
         throw new ValidationError(`暂存图片发生变化：${image.reference}`)
       }
-      const url = await storeImageBuffer(buffer)
+      const stored = await storeImageBufferWithResult(buffer)
+      const { url } = stored
+      imageProcessing.push(stored)
       createdUrls.push(url)
       replacements.set(image.reference, url)
     }
@@ -371,7 +371,7 @@ export async function materializeStagedMarkdownImport(bundleId: string) {
       status: "DRAFT",
       publishedAt: null,
     })
-    return { input, importedImages: createdUrls, cleanup }
+    return { input, importedImages: createdUrls, imageProcessing, cleanup }
   } catch (error) {
     await cleanup()
     throw error
