@@ -141,6 +141,14 @@ const baseComponents: Components = {
   },
 }
 
+function fallbackArticleImage(image: HTMLImageElement) {
+  const original = image.dataset.originalSrc
+  if (!original || !image.hasAttribute("srcset")) return
+  image.removeAttribute("srcset")
+  image.removeAttribute("sizes")
+  image.src = original
+}
+
 export const PostContent = memo(function PostContent({ content, imageMetadata = {} }: {
   content: string
   imageMetadata?: Record<string, ResponsiveImage>
@@ -148,6 +156,14 @@ export const PostContent = memo(function PostContent({ content, imageMetadata = 
   const t = useTranslations("content")
   const containerRef = useRef<HTMLDivElement>(null)
   const normalized = normalizeContentForDisplay(content)
+  useEffect(() => {
+    // A lazy image may fail before hydration attaches its error handler.
+    // Recover that completed failure once; later failures use onError below.
+    const images = containerRef.current?.querySelectorAll<HTMLImageElement>("img[data-lightbox-image][srcset]")
+    images?.forEach((image) => {
+      if (image.complete && image.naturalWidth === 0) fallbackArticleImage(image)
+    })
+  }, [normalized, imageMetadata])
   const headingIds = new Map(
     extractHeadings(normalized).flatMap((heading) => (
       heading.line ? [[`${heading.level}:${heading.line}`, heading.id] as const] : []
@@ -169,13 +185,8 @@ export const PostContent = memo(function PostContent({ content, imageMetadata = 
           srcSet={metadata?.variants.length ? metadata.variants.map((variant) => `${variant.url} ${variant.width}w`).join(", ") : undefined}
           sizes={metadata?.variants.length ? `(max-width: ${displayWidth + 48}px) calc(100vw - 48px), ${displayWidth}px` : undefined}
           onError={(event) => {
-            const image = event.currentTarget
-            // A resource can disappear after server metadata validation.
-            // Retry the durable original once; never retry a broken original.
-            if (!image.hasAttribute("srcset")) return
-            image.removeAttribute("srcset")
-            image.removeAttribute("sizes")
-            image.src = original
+            // Never retry a broken original: the first fallback removes srcset.
+            fallbackArticleImage(event.currentTarget)
           }}
           alt={alt || ""}
           title={presentation.title}
