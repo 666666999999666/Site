@@ -75,7 +75,7 @@ function fixture() {
   const pipelineFile = path.join(root, "pipeline.sh")
   writeFileSync(pipelineFile, pipeline)
 
-  const setupEnv: NodeJS.ProcessEnv = { PATH: process.env.PATH, HOME: root, LANG: "C", LC_ALL: "C", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_ALLOW_PROTOCOL: "file", GIT_TERMINAL_PROMPT: "0" }
+  const setupEnv: NodeJS.ProcessEnv = { NODE_ENV: "test", PATH: process.env.PATH, HOME: root, LANG: "C", LC_ALL: "C", GIT_CONFIG_NOSYSTEM: "1", GIT_CONFIG_GLOBAL: "/dev/null", GIT_ALLOW_PROTOCOL: "file", GIT_TERMINAL_PROMPT: "0" }
   const realGit = (args: string[]) => execFileSync(git, ["-C", app, ...args], { env: setupEnv, stdio: "pipe", encoding: "utf8" })
   realGit(["init", "--initial-branch=main"])
   realGit(["config", "user.name", "Isolated Deployment Lock Test"])
@@ -184,7 +184,7 @@ esac
     QZSITE_DEPLOY_LOCK_WAIT_SECONDS: "5",
   }
   const children: Running[] = []
-  function start(job: string, kind: "pipeline" | "entry" | "deploy" | "holder" = "pipeline", extra: NodeJS.ProcessEnv = {}, descriptor: "closed" | "wrong" | "same-unlocked" = "closed") {
+  function start(job: string, kind: "pipeline" | "entry" | "deploy" | "holder" = "pipeline", extra: Partial<NodeJS.ProcessEnv> = {}, descriptor: "closed" | "wrong" | "same-unlocked" = "closed") {
     const command = kind === "pipeline" ? ["sh", pipelineFile]
       : kind === "entry" ? ["bash", path.join(app, "ops", "deploy-entry.sh"), sha, `${registry}:${sha}`]
         : kind === "deploy" ? ["bash", path.join(app, "ops", "deploy-prefix.sh"), sha, `${registry}:${sha}`]
