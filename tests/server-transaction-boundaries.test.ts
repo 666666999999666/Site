@@ -127,7 +127,9 @@ for (const mode of ["new", "replay", "transaction-replay", "mismatched-tool", "w
 for (const outcome of ["committed", "rolled-back", "unknown"] as const) {
   test(`MCP staged-import failure reconciles ${outcome} commit without premature image deletion`, async () => {
     const calls: string[] = []
-    const result = { postId: "post", title: "draft", status: "DRAFT", importedImageCount: 1 }
+    const warning = "原图已保留，响应式图片生成失败；当前使用原图。"
+    const result = { postId: "post", title: "draft", status: "DRAFT", importedImageCount: 1,
+      imageProcessingWarnings: [{ url: "/uploads/new.png", warning }] }
     let failed = false
     const approval = {
       id: "approval", toolName: "import", status: "PENDING_APPROVAL", credentialId: "credential",
@@ -135,8 +137,14 @@ for (const outcome of ["committed", "rolled-back", "unknown"] as const) {
       payload: { kind: "create_draft_from_staged_markdown", bundleId: "10000000-0000-4000-8000-000000000001" },
     }
     const transaction = {
-      mcpExecution: { findUnique: async () => null, create: async () => { calls.push("execution") } },
-      mcpApproval: { update: async () => { calls.push("approve") } },
+      mcpExecution: { findUnique: async () => null, create: async ({ data }: { data: { resultSummary: unknown } }) => {
+        assert.deepEqual(data.resultSummary, result)
+        calls.push("execution")
+      } },
+      mcpApproval: { update: async ({ data }: { data: { resultSummary: unknown } }) => {
+        assert.deepEqual(data.resultSummary, result)
+        calls.push("approve")
+      } },
     }
     const prisma = {
       mcpApproval: {
@@ -165,12 +173,15 @@ for (const outcome of ["committed", "rolled-back", "unknown"] as const) {
       "./audit-service": { recordMcpAudit: async () => {}, errorDetails: (error: Error) => ({ message: error.message }) },
       "./credential-service": { MCP_SCOPES: ["draft:import"], requireMcpScope: () => {} },
       "./import-staging-service": {
-        materializeStagedMarkdownImport: async () => ({ input: {}, importedImages: ["/uploads/new.png"], cleanup: async () => { calls.push("delete-images") } }),
+        materializeStagedMarkdownImport: async () => ({ input: {}, importedImages: ["/uploads/new.png"],
+          imageProcessing: [{ url: "/uploads/new.png", processing: { status: "failed", reason: "processing-failed", warning } }],
+          cleanup: async () => { calls.push("delete-images") } }),
         cleanupStagedImportBundle: async (_id: string, consumed: boolean) => { assert.equal(consumed, true); calls.push("consume-bundle") },
       },
     })
     if (outcome === "committed") {
-      await service.approveMcpApproval("approval")
+      const completed = await service.approveMcpApproval("approval")
+      assert.deepEqual(completed.resultSummary, result)
       assert.deepEqual(calls, ["post", "execution", "approve", "reconcile", "consume-bundle"])
     } else {
       await assert.rejects(() => service.approveMcpApproval("approval"), /commit response lost/)
