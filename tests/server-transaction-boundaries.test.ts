@@ -181,6 +181,7 @@ for (const outcome of ["committed", "rolled-back", "unknown"] as const) {
     })
     if (outcome === "committed") {
       const completed = await service.approveMcpApproval("approval")
+      assert.ok(completed && typeof completed === "object" && !Array.isArray(completed) && "resultSummary" in completed)
       assert.deepEqual(completed.resultSummary, result)
       assert.deepEqual(calls, ["post", "execution", "approve", "reconcile", "consume-bundle"])
     } else {
