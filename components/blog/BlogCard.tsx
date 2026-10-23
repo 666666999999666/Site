@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl"
 import { Link } from "@/i18n/navigation"
 import type { BlogCardData } from "@/lib/blog-card"
 import { highlightSearchText } from "@/lib/blog-search"
+import { publicBlogPostHref } from "@/lib/public-blog-navigation"
 
 function HighlightedText({ text, query }: { text: string; query: string }) {
   return highlightSearchText(text, query).map((part, index) => part.match
@@ -11,12 +12,12 @@ function HighlightedText({ text, query }: { text: string; query: string }) {
     : part.text)
 }
 
-export function BlogCard({ post, chapter }: { post: BlogCardData; chapter?: number }) {
+export function BlogCard({ post, chapter, returnTo }: { post: BlogCardData; chapter?: number; returnTo?: string }) {
   const t = useTranslations("blog")
   const query = post.search?.query ?? ""
 
   return (
-    <Link href={`/blog/${post.slug}`} className="group block h-full">
+    <Link href={publicBlogPostHref(post.slug, returnTo)} className="group block h-full">
       <article className="flex flex-col h-full border border-border/50 rounded-lg p-5 transition-all group-hover:border-border group-hover:bg-muted/50">
         {chapter !== undefined && <p className="mb-2 text-xs font-medium text-primary">{t("seriesChapter", { number: chapter })}</p>}
         {(post.categoryName || post.seriesTitle || post.contentFormatLabel) && (

@@ -115,6 +115,8 @@ MCP Streamable HTTP / 本地导入 stdio
 
 `/admin/settings/image-variants` 是固定历史六图的最小补齐入口，鉴权 API 先预览、后明确执行，只处理白名单站内上传文件，复用现有图片引擎。原图和文章内容不变，处理量有界，失败可重试；它不是通用媒体管理或公开写接口。
 
+公开博客筛选列表通过文章链接的 `returnTo` 保留 `search` 和 `category`；文章页“返回博客”及文章间导航复用该上下文。返回目标只接受不带 locale 的 `/blog` 和这两个查询字段，交给 `i18n/navigation.Link` 添加当前语言前缀；外站、后台、其他 locale 和嵌套返回参数均不接受。首页和直达文章仍使用干净 URL 并返回默认博客列表，不调用 `history.back()` 或依赖全局浏览记录。canonical、RSS 和文章结构化数据仍保持干净文章 URL。
+
 公开页面的系统文案和 Metadata 统一使用 `messages/zh.json`。数据库中的文章、分类、项目和个人介绍属于所有者创作内容，保持作者原文；不因站点收口为中文界面而删除英文文章、英文技术名词或英文 slug，也不增加重复的中英文字段。
 
 `app/[locale]/layout.tsx` 保留为 `NextIntlClientProvider` 的边界，但只有 `zh` 能进入该布局；`next-intl` 在这里是中文文案基础设施，不再代表双语产品能力。`/admin` 有意保持为不带语言前缀的中文管理界面。只在公开路由中使用的组件可以直接调用 `next-intl` Hook；被公开路由与后台共同使用的组件不得假设 Provider 一定存在，应由调用方传入中文文案。`ThemeToggle` 即采用该方式，避免已登录后台在服务端渲染时因缺少 Provider 返回 500。

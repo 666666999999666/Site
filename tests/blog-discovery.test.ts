@@ -151,3 +151,20 @@ test("tag normalization preserves technical and quoted comma syntax", () => {
   assert.deepEqual(normalizeTags(["tuple<T, U>、Agent"]), ["tuple<T, U>", "Agent"])
   assert.deepEqual(splitTagTokens("Agent, Harness"), ["Agent", " Harness"])
 })
+
+test("public card renders a localized return context only when supplied by a filtered list", () => {
+  const post = toBlogCard(basePost)
+  // eslint-disable-next-line react/no-children-prop
+  const render = (returnTo?: string) => renderToStaticMarkup(createElement(NextIntlClientProvider, {
+    locale: "zh", timeZone: "Asia/Shanghai", messages: zh, children: createElement(BlogCard, { post, returnTo }),
+  }))
+  const filtered = render("/blog?search=%E7%94%A8+AI&category=notes")
+  const href = filtered.match(/href="([^"]+)"/)?.[1]?.replaceAll("&amp;", "&")
+  assert.ok(href)
+  const article = new URL(href, "https://example.test")
+  assert.equal(article.pathname, "/zh/blog/article-a")
+  assert.equal(article.searchParams.get("returnTo"), "/blog?search=%E7%94%A8+AI&category=notes")
+  assert.match(render(), /href="\/zh\/blog\/article-a"/)
+  assert.doesNotMatch(render(), /returnTo=/)
+  assert.doesNotMatch(render("https://evil.test/blog?search=x"), /evil\.test|returnTo=/)
+})

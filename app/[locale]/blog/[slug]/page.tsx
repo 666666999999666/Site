@@ -20,6 +20,7 @@ import { relatedPostReason, selectPostRecommendations } from "@/lib/related-post
 import { seriesDisplayPosition, seriesPostOrder } from "@/lib/series-order"
 import { blogCardSelect, toBlogCard } from "@/lib/blog-card"
 import { normalizeTags } from "@/lib/tags"
+import { publicBlogPostHref, safePublicBlogReturnHref } from "@/lib/public-blog-navigation"
 import { getArticleImageMetadata } from "@/lib/article-images"
 import { getPostSummary, getPostPresentation } from "@/lib/publication-content"
 
@@ -64,10 +65,13 @@ export async function generateMetadata({
 
 export default async function PostPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ locale: string; slug: string }>
+  searchParams: Promise<{ returnTo?: string | string[] }>
 }) {
   const { slug } = await params
+  const returnTo = safePublicBlogReturnHref((await searchParams).returnTo)
   const post = await getPost(slug)
   if (!post || post.status !== "PUBLISHED") notFound()
 
@@ -149,7 +153,7 @@ export default async function PostPage({
         <div className={`flex gap-12${headings.length === 0 ? " justify-center" : ""}`}>
           <article className="min-w-0 max-w-3xl flex-1">
             <header className="mb-10">
-              <Link href="/blog" className="mb-6 inline-flex items-center text-sm text-muted-foreground transition-colors hover:text-foreground">
+              <Link href={returnTo} className="mb-6 inline-flex items-center text-sm text-muted-foreground transition-colors hover:text-foreground">
                 ← {t("backLink")}
               </Link>
               {post.series && (
@@ -193,7 +197,7 @@ export default async function PostPage({
                   {sequence.map((item, index) => (
                     <li key={item.id} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-2 text-sm">
                       <span className="text-muted-foreground">{seriesDisplayPosition(index)}</span>
-                      <Link href={`/blog/${item.slug}`} aria-current={item.id === post.id ? "page" : undefined} className={item.id === post.id ? "font-semibold text-foreground" : "text-muted-foreground hover:text-foreground"}>
+                      <Link href={publicBlogPostHref(item.slug, returnTo)} aria-current={item.id === post.id ? "page" : undefined} className={item.id === post.id ? "font-semibold text-foreground" : "text-muted-foreground hover:text-foreground"}>
                         {item.title}
                       </Link>
                     </li>
@@ -205,13 +209,13 @@ export default async function PostPage({
             {(previous || next) && (
               <nav aria-label={t("postNavigation")} className="mt-10 grid gap-3 sm:grid-cols-2">
                 {previous ? (
-                  <Link href={`/blog/${previous.slug}`} className="rounded-lg border border-border/60 p-4 transition-colors hover:border-border hover:bg-muted/40">
+                  <Link href={publicBlogPostHref(previous.slug, returnTo)} className="rounded-lg border border-border/60 p-4 transition-colors hover:border-border hover:bg-muted/40">
                     <span className="block text-xs text-muted-foreground">← {t(post.seriesId ? "previousPost" : "previousChronologicalPost")}</span>
                     <span className="mt-1 block font-medium">{previous.title}</span>
                   </Link>
                 ) : <span />}
                 {next && (
-                  <Link href={`/blog/${next.slug}`} className="rounded-lg border border-border/60 p-4 text-right transition-colors hover:border-border hover:bg-muted/40">
+                  <Link href={publicBlogPostHref(next.slug, returnTo)} className="rounded-lg border border-border/60 p-4 text-right transition-colors hover:border-border hover:bg-muted/40">
                     <span className="block text-xs text-muted-foreground">{t(post.seriesId ? "nextPost" : "nextChronologicalPost")} →</span>
                     <span className="mt-1 block font-medium">{next.title}</span>
                   </Link>
@@ -228,7 +232,7 @@ export default async function PostPage({
                       {recommendations.kind === "related" && reason && (
                         <p className="text-xs text-muted-foreground">{t(reason === "series" ? "relatedBySeries" : reason === "category" ? "relatedByCategory" : "relatedByTag")}</p>
                       )}
-                      <BlogCard post={item} />
+                      <BlogCard post={item} returnTo={returnTo} />
                     </div>
                   ))}
                 </div>

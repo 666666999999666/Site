@@ -12,6 +12,7 @@ import { absoluteUrl } from "@/lib/site"
 import { breadcrumbJsonLd } from "@/lib/structured-data"
 import { blogCardSelect, toBlogCard } from "@/lib/blog-card"
 import { literalContainsSearch } from "@/lib/blog-search"
+import { publicBlogListHref } from "@/lib/public-blog-navigation"
 
 export const dynamic = "force-dynamic"
 
@@ -66,6 +67,7 @@ export default async function BlogPage({
     select: blogCardSelect,
   })
 
+  const returnTo = publicBlogListHref({ category, search })
   const hasFilters = Boolean(category || search)
   const categoryName = categories.find((item) => item.id === category)?.name ?? t("unknownCategory")
 
@@ -98,7 +100,7 @@ export default async function BlogPage({
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
             {posts.map((p) => (
-              <BlogCard key={p.id} post={toBlogCard(p, search)} />
+              <BlogCard key={p.id} post={toBlogCard(p, search)} returnTo={returnTo} />
             ))}
           </div>
         )}
