@@ -10,3 +10,13 @@ export const todoInclude = {
     ],
   },
 } satisfies Prisma.TodoInclude
+
+export function todoIncludeForOwner(ownerId: string) {
+  return {
+    ...todoInclude,
+    ideaConversions: {
+      where: { ownerId },
+      select: { idea: { select: { id: true, title: true } } },
+    },
+  } satisfies Prisma.TodoInclude
+}

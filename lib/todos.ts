@@ -23,7 +23,7 @@ async function convertTodoToDraft(id: string, markDone: boolean, database: TodoD
     publishedAt: null,
   }, database)
 
-  const updatedTodo = markDone && todo.status !== "DONE"
+  const updatedTodo = markDone && todo.status === "TODO"
     ? await database.todo.update({
         where: { id },
         data: { status: "DONE" },

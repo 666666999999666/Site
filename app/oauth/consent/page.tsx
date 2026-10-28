@@ -18,6 +18,9 @@ const SCOPE_LABELS: Record<string, string> = {
   "draft:read": "搜索草稿与文章元数据",
   "draft:update": "提交草稿元数据修改审批",
   "category:create": "提交新建分区审批",
+  "material:read": "读取私人材料、原文与讨论摘要",
+  "material:write": "提交私人材料保存与整理审批",
+  "material:convert": "提交材料转 Todo 或草稿审批",
   "todo:convert": "提交 Todo 转草稿审批",
   offline_access: "保持连接并自动刷新短期令牌",
 }

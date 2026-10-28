@@ -62,12 +62,18 @@ test("online tools work over stateless Streamable HTTP", async () => {
       tools.tools.map((tool) => tool.name).sort(),
       [
         "begin_markdown_draft_import",
+        "convert_material",
         "create_category",
+        "create_material",
         "finalize_markdown_draft_import",
         "get_approval_status",
+        "list_materials",
+        "read_material",
         "search_drafts",
+        "search_materials",
         "todo_to_draft",
         "update_draft_metadata",
+        "update_material",
       ]
     )
 

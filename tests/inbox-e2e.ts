@@ -58,11 +58,11 @@ async function main() {
     const beforeInvalid = await api.get("/api/inbox/items")
     assert.equal(beforeInvalid.status(), 200)
     const beforeCount = (await beforeInvalid.json() as unknown[]).length
-    const invalidPrefix = await api.post("/api/inbox/items", {
+    const emptyCapture = await api.post("/api/inbox/items", {
       headers: { Origin: baseURL },
-      data: { rawInput: "学习：第一版不支持", requestKey: `${requestKey}-invalid` },
+      data: { rawInput: "  \n\t", requestKey: `${requestKey}-invalid` },
     })
-    assert.equal(invalidPrefix.status(), 422)
+    assert.equal(emptyCapture.status(), 422)
     const afterInvalid = await api.get("/api/inbox/items")
     assert.equal((await afterInvalid.json() as unknown[]).length, beforeCount)
 

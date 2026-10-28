@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { useRouter } from "next/navigation"
 import { FileText, ListTodo } from "lucide-react"
 import type { Project } from "@/lib/generated/prisma/client"
@@ -29,12 +29,14 @@ interface ConversionResult {
 
 export function IdeaConversionDialog({
   ideaId,
+  ownerId = "local",
   title: ideaTitle,
   content: ideaContent,
   tags: ideaTags,
   projects,
 }: {
   ideaId: string
+  ownerId?: string
   title: string
   content: string
   tags: string[]
@@ -53,23 +55,35 @@ export function IdeaConversionDialog({
   const [subtasks, setSubtasks] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
+  const [submitted, setSubmitted] = useState(false)
+  const retrySnapshots = useRef<Record<string, Record<string, string>>>({})
+  const storageKey = (kind: ConversionTarget) => `qz-idea-conversion-v2:${ownerId}:${ideaId}:${kind}`
 
   function open(nextTarget: ConversionTarget) {
     setTarget(nextTarget)
-    setRequestKey(crypto.randomUUID())
-    setTitle(ideaTitle)
-    setContent(ideaContent)
-    setTags(ideaTags.join(", "))
-    setProjectId("")
-    setPriority("")
-    setDueDate("")
-    setCompletionCriteria("")
-    setSubtasks("")
+    // A lost response must retain both identity and exactly the submitted fields.
+    const key = storageKey(nextTarget)
+    let snapshot = retrySnapshots.current[key]
+    try {
+      const stored = JSON.parse(sessionStorage.getItem(key) || "null")
+      if (stored && ["requestKey", "title", "content", "tags", "projectId", "priority", "dueDate", "completionCriteria", "subtasks"]
+        .every((field) => typeof stored[field] === "string")) snapshot = stored
+    } catch { /* Mounted dialogs still retain their retry snapshot. */ }
+    setSubmitted(!!snapshot)
+    setRequestKey(snapshot?.requestKey || crypto.randomUUID())
+    setTitle(snapshot?.title ?? ideaTitle)
+    setContent(snapshot?.content ?? ideaContent)
+    setTags(snapshot?.tags ?? ideaTags.join(", "))
+    setProjectId(snapshot?.projectId ?? "")
+    setPriority(snapshot?.priority ?? "")
+    setDueDate(snapshot?.dueDate ?? "")
+    setCompletionCriteria(snapshot?.completionCriteria ?? "")
+    setSubtasks(snapshot?.subtasks ?? "")
     setError("")
   }
 
   async function convert() {
-    if (!target || !requestKey) return
+    if (!target || !requestKey || pending) return
     if (!title.trim()) {
       setError(target === "BLOG" ? "请输入文章标题" : "请输入任务标题")
       return
@@ -102,14 +116,28 @@ export function IdeaConversionDialog({
               .filter(Boolean)
               .map((item) => ({ title: item })),
           }
+      const key = storageKey(target)
+      const snapshot = { requestKey, title, content, tags, projectId, priority, dueDate, completionCriteria, subtasks }
+      retrySnapshots.current[key] = snapshot
+      try { sessionStorage.setItem(key, JSON.stringify(snapshot)) } catch { /* In-memory retry remains safe. */ }
+      setSubmitted(true)
       const result = await apiRequest<ConversionResult>(
         `/api/ideas/${ideaId}/conversions`,
-        jsonRequest("POST", body)
+        jsonRequest("POST", body),
+        (message, status) => Object.assign(new Error(message), { status })
       )
+      delete retrySnapshots.current[storageKey(target)]
+      try { sessionStorage.removeItem(storageKey(target)) } catch { /* Navigation remains usable. */ }
       setTarget(null)
       router.push(result.href)
       router.refresh()
     } catch (caught) {
+      const status = (caught as {status?: number})?.status
+      if (status && [400, 401, 403, 404, 422].includes(status)) {
+        delete retrySnapshots.current[storageKey(target)]
+        try { sessionStorage.removeItem(storageKey(target)) } catch { /* Retry stays local. */ }
+        setSubmitted(false)
+      }
       setError(caught instanceof Error ? caught.message : "转换失败")
     } finally {
       setPending(false)
@@ -138,7 +166,8 @@ export function IdeaConversionDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4">
+          {submitted && <p className="text-sm text-muted-foreground">保留上次提交的内容。重试只核对同一请求，不会重复创建；确认成功后可在目标页继续编辑。</p>}
+          <fieldset disabled={pending || submitted} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="conversion-title">标题</Label>
               <Input
@@ -234,14 +263,14 @@ export function IdeaConversionDialog({
             )}
 
             {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-          </div>
+          </fieldset>
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setTarget(null)} disabled={pending}>
               取消
             </Button>
             <Button type="button" onClick={convert} disabled={pending}>
-              {pending ? "创建中…" : target === "BLOG" ? "确认创建草稿" : "确认创建 Todo"}
+              {pending ? "创建中…" : submitted ? "重试原请求" : target === "BLOG" ? "确认创建草稿" : "确认创建 Todo"}
             </Button>
           </DialogFooter>
         </DialogContent>

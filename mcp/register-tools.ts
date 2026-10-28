@@ -3,6 +3,8 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
 import {
   beginMarkdownDraftImportInputSchema,
   createCategoryInputSchema,
+  createMaterialInputSchema, listMaterialsInputSchema, searchMaterialsInputSchema,
+  readMaterialInputSchema, updateMaterialInputSchema, convertMaterialInputSchema,
   finalizeMarkdownDraftImportInputSchema,
   getApprovalStatusInputSchema,
   searchDraftsInputSchema,
@@ -21,10 +23,10 @@ export type McpToolInvoker<Names extends McpToolName> = <Name extends Names>(
 
 function createServer(name: string) {
   return new McpServer(
-    { name, version: "1.3.0" },
+    { name, version: "1.4.0" },
     {
       instructions: [
-        "This server only transports and manages owner-authored blog drafts.",
+        "This server manages owner-authored blog drafts and private materials. Preserve raw material input; discussion does not imply creating a task.",
         "It never generates article body text, publishes posts, or deletes data.",
         "All write tools create a pending approval that must be approved in the blog admin UI.",
       ].join(" "),
@@ -83,6 +85,43 @@ export function createRegisteredOnlineMcpServer(invoke: McpToolInvoker<OnlineMcp
     inputSchema: getApprovalStatusInputSchema,
     annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   }, async (args) => invoke("get_approval_status", args))
+
+  server.registerTool("create_material", {
+    title: "保存私人材料",
+    description: "逐字保存用户输入和来源，需人工审批；无需前缀，不自动拆分 Todo。重试复用 request_key。",
+    inputSchema: createMaterialInputSchema,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async (args) => invoke("create_material", args))
+  server.registerTool("list_materials", {
+    title: "列出私人材料",
+    description: "只列出当前 OAuth 所有者的材料，可按暂存、想讨论、已讨论或已归档筛选。",
+    inputSchema: listMaterialsInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async (args) => invoke("list_materials", args))
+  server.registerTool("search_materials", {
+    title: "搜索私人材料",
+    description: "按关键词搜索当前所有者的原文、标题、整理内容和讨论摘要，不查询其他所有者材料。",
+    inputSchema: searchMaterialsInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async (args) => invoke("search_materials", args))
+  server.registerTool("read_material", {
+    title: "读取私人材料",
+    description: "读取指定材料的原文、来源、采集时间、整理内容、讨论状态和转换关联。",
+    inputSchema: readMaterialInputSchema,
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async (args) => invoke("read_material", args))
+  server.registerTool("update_material", {
+    title: "更新材料整理与讨论",
+    description: "提交人工审批，修改整理内容、讨论状态或摘要；原始输入、来源和采集时间始终不变。",
+    inputSchema: updateMaterialInputSchema,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async (args) => invoke("update_material", args))
+  server.registerTool("convert_material", {
+    title: "明确转换材料",
+    description: "用户明确决定后，提交一个 Todo 或文章草稿的转换审批；保留材料和双向关联，重试不重复创建。",
+    inputSchema: convertMaterialInputSchema,
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  }, async (args) => invoke("convert_material", args))
 
   return server
 }

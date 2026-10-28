@@ -79,7 +79,7 @@ export function requireMcpScope(
   }
 }
 
-export async function listMcpCredentials() {
+export async function listMcpCredentials(actorUserId?: string) {
   return prisma.mcpCredential.findMany({
     orderBy: { createdAt: "desc" },
     select: {
@@ -91,7 +91,10 @@ export async function listMcpCredentials() {
       revokedAt: true,
       lastUsedAt: true,
       createdAt: true,
-      _count: { select: { approvals: true } },
+      _count: { select: { approvals: { where: { OR: [
+        { requiredScope: { notIn: ["material:read", "material:write", "material:convert"] } },
+        ...(actorUserId ? [{ payload: { path: ["ownerId"], equals: actorUserId } }] : []),
+      ] } } } },
     },
   })
 }

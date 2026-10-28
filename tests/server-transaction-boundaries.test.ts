@@ -4,6 +4,8 @@ import path from "node:path"
 import test from "node:test"
 import { z } from "zod/v3"
 import * as dates from "../lib/daily-date"
+import * as dailyPolicy from "../lib/daily-policy"
+import * as todosPolicy from "../lib/todos-policy"
 import * as errors from "../lib/errors"
 import { loadRoute } from "./helpers/load-route"
 
@@ -27,7 +29,8 @@ for (const operation of ["disable", "delete"] as const) {
         delete: async () => { calls.push("delete:1") },
       } }
       const service = loadRoute<typeof import("../lib/daily")>(path.join(root, "lib/daily.ts"), {
-        "node:crypto": { createHash }, "@/lib/daily-date": dates, "@/lib/errors": errors,
+        "node:crypto": { createHash }, "@/lib/daily-date": dates,
+        "@/lib/daily-policy": dailyPolicy, "@/lib/todos-policy": todosPolicy, "@/lib/errors": errors,
         "@/lib/generated/prisma/client": { Prisma: { PrismaClientKnownRequestError: KnownRequestError } },
         "@/lib/db": { prisma: { $transaction: async (run: (tx: unknown) => unknown) => {
           calls.push("begin")

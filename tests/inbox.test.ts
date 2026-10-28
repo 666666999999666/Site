@@ -15,7 +15,7 @@ test("parseInboxInput recognizes the three prefixes without asking a model", () 
   assert.deepEqual(parseInboxInput("idea：一个想法"), {
     kind: "IDEA",
     parsedBody: "一个想法",
-    parserVersion: 1,
+    parserVersion: 2,
   })
   assert.equal(parseInboxInput("IDEA: upper case").kind, "IDEA")
   assert.equal(parseInboxInput("文章: 一篇文章").kind, "BLOG")
@@ -34,8 +34,8 @@ test("parseInboxInput only treats the first prefix as routing data", () => {
   assert.equal(parsed.parsedBody, "先处理收件箱\nidea：这一行仍是描述")
 })
 
-test("parseInboxInput rejects a missing prefix, empty body, and oversized raw input", () => {
-  for (const rawInput of ["没有前缀", "idea：  \n\t", "学习：以后再做"]) {
+test("parseInboxInput rejects empty body and oversized raw input", () => {
+  for (const rawInput of ["", " \n\t", "idea：  \n\t"]) {
     assert.throws(
       () => parseInboxInput(rawInput),
       (error) => error instanceof InboxInputError && error.code === "INVALID_PREFIX_OR_BODY"
@@ -170,4 +170,17 @@ test("the migration protects raw input, idempotency, and nullable Todo priority"
   assert.match(migration, /InboxExecution_pkey/)
   assert.match(migration, /CREATE TRIGGER "InboxItem_raw_immutable"/)
   assert.match(migration, /UPDATE OF "rawInput", "rawSha256"/)
+})
+
+
+test("prefixless mixed input is one private material, never inferred tasks", () => {
+  const raw = "  一个问题\r\nhttps://example.test\n- 买书\n- 看视频\n突然的想法\n引用\n下次聊  "
+  assert.deepEqual(parseInboxInput(raw), { kind: "IDEA", parsedBody: raw.trim(), parserVersion: 2 })
+  assert.equal(parseInboxInput("学习：以后再做").kind, "IDEA")
+})
+
+test("explicit material mode treats legacy prefix-looking input as original text", () => {
+  for (const raw of ["todo：", "todo：这只是引用", "文章：待讨论", "idea：原文标签"]) {
+    assert.deepEqual(parseInboxInput(raw, true), { kind: "IDEA", parsedBody: raw, parserVersion: 2 })
+  }
 })

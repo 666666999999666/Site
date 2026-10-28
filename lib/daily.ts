@@ -18,6 +18,9 @@ import type {
   DailyTaskInput,
 } from "@/lib/daily-validation"
 
+import { dailyProgress } from "@/lib/daily-policy"
+import { isInactiveTodo } from "@/lib/todos-policy"
+
 type DailyDatabase = typeof prisma | Prisma.TransactionClient
 
 export interface DailyQuoteView {
@@ -36,6 +39,8 @@ export interface DailyTaskView {
   completed: boolean
   completedAt: string | null
   sourceTodoId: string | null
+  inactive?: boolean
+  sourceTodoStatus?: string | null
 }
 
 export interface DailyDayView {
@@ -79,11 +84,12 @@ interface PlanRecord {
     title: string
     completedAt: Date | null
     sourceTodoId: string | null
+    sourceTodo?: { status: string } | null
   }>
 }
 
 const planInclude = {
-  tasks: { orderBy: { slot: "asc" as const } },
+  tasks: { orderBy: { slot: "asc" as const }, include: { sourceTodo: { select: { status: true } } } },
 } as const
 
 function normalizeQuote(value: string): string {
@@ -92,10 +98,6 @@ function normalizeQuote(value: string): string {
 
 function quoteHash(value: string): string {
   return createHash("sha256").update(normalizeQuote(value), "utf8").digest("hex")
-}
-
-function progressFor(completedCount: number): number {
-  return Math.round((completedCount / 3) * 100)
 }
 
 function quoteView(record: {
@@ -130,13 +132,15 @@ function taskViews(tasks: PlanRecord["tasks"]): DailyTaskView[] {
   const bySlot = new Map(tasks.map((task) => [task.slot, task]))
   return ([1, 2, 3] as const).map((slot) => {
     const task = bySlot.get(slot)
+    const inactive = isInactiveTodo(task?.sourceTodo?.status)
     return {
       id: task?.id ?? null,
       slot,
       title: task?.title ?? "",
-      completed: Boolean(task?.completedAt),
-      completedAt: task?.completedAt?.toISOString() ?? null,
+      completed: !inactive && Boolean(task?.completedAt),
+      completedAt: inactive ? null : task?.completedAt?.toISOString() ?? null,
       sourceTodoId: task?.sourceTodoId ?? null,
+      ...(inactive ? { inactive: true, sourceTodoStatus: task?.sourceTodo?.status ?? null } : {}),
     }
   })
 }
@@ -163,8 +167,8 @@ function planQuoteView(plan: {
 
 function dayView(date: string, quote: DailyQuoteView, records: PlanRecord["tasks"]): DailyDayView {
   const tasks = taskViews(records)
-  const completedCount = tasks.filter((task) => task.completed).length
-  return { date, quote, tasks, completedCount, progress: progressFor(completedCount) }
+  const { completedCount, progress } = dailyProgress(tasks)
+  return { date, quote, tasks, completedCount, progress }
 }
 
 async function getDailyDayWithDatabase(
@@ -188,7 +192,7 @@ export async function getDailyDay(userId: string, date: string): Promise<DailyDa
 function buildStats(plans: PlanRecord[], today: string, month: string): DailyStatsView {
   const completeDates = new Set(
     plans
-      .filter((plan) => plan.tasks.length === 3 && plan.tasks.every((task) => task.completedAt))
+      .filter((plan) => dailyProgress(plan.tasks).progress === 100)
       .map((plan) => databaseDateToKey(plan.planDate))
   )
   let cursor = completeDates.has(today) ? today : addDateKeyDays(today, -1)
@@ -199,17 +203,16 @@ function buildStats(plans: PlanRecord[], today: string, month: string): DailySta
   }
 
   const monthPlans = plans.filter((plan) => databaseDateToKey(plan.planDate).startsWith(month))
-  const recordedPlans = monthPlans.filter((plan) => plan.tasks.length > 0)
+  const recordedPlans = monthPlans.filter((plan) => dailyProgress(plan.tasks).selectedCount > 0)
   const completedDays = recordedPlans.filter(
-    (plan) => plan.tasks.length === 3 && plan.tasks.every((task) => task.completedAt)
+    (plan) => dailyProgress(plan.tasks).progress === 100
   ).length
   const completedTasks = recordedPlans.reduce(
-    (total, plan) => total + plan.tasks.filter((task) => task.completedAt).length,
+    (total, plan) => total + dailyProgress(plan.tasks).completedCount,
     0
   )
-  const averageProgress = recordedPlans.length
-    ? Math.round((completedTasks / (recordedPlans.length * 3)) * 100)
-    : 0
+  const selectedTasks = recordedPlans.reduce((total, plan) => total + dailyProgress(plan.tasks).selectedCount, 0)
+  const averageProgress = selectedTasks ? Math.round((completedTasks / selectedTasks) * 100) : 0
 
   return {
     streak,
@@ -232,6 +235,7 @@ async function getPlansForStats(userId: string, today: string): Promise<PlanReco
           title: true,
           completedAt: true,
           sourceTodoId: true,
+          sourceTodo: { select: { status: true } },
         },
       },
     },
@@ -295,7 +299,7 @@ export async function getDailyHistory(userId: string, month: string, now = new D
 
 function assertToday(date: string, now: Date) {
   if (date !== getShanghaiDateKey(now)) {
-    throw new ValidationError("只能修改今天的三件事")
+    throw new ValidationError("只能修改今天想做的事")
   }
 }
 
@@ -330,7 +334,7 @@ export async function saveDailyTask(
           select: { title: true, status: true },
         })
         if (!todo || todo.status !== "TODO") {
-          throw new ValidationError("所选 Todo 已不存在或已经完成")
+          throw new ValidationError("所选 Todo 已不存在、已完成、已暂停或已放弃")
         }
         if (todo.title.trim() !== input.title) sourceTodoId = null
       }

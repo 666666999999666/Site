@@ -75,6 +75,9 @@ const scopeLabels: Record<McpScope, string> = {
   "draft:read": "查询草稿",
   "draft:update": "修改元数据",
   "category:create": "创建分类",
+  "material:read": "读取私人材料、原文与讨论摘要",
+  "material:write": "提交私人材料保存与整理审批",
+  "material:convert": "提交材料转 Todo 或草稿审批",
   "todo:convert": "Todo 转草稿",
 }
 
@@ -86,6 +89,9 @@ const toolLabels: Record<string, string> = {
   create_category: "创建分类",
   todo_to_draft: "Todo 转草稿",
   get_approval_status: "查询审批状态",
+  create_material: "保存私人材料", list_materials: "列出私人材料",
+  search_materials: "搜索私人材料", read_material: "读取私人材料",
+  update_material: "整理材料与讨论", convert_material: "转换材料",
 }
 
 const statusLabels: Record<ApprovalStatus, string> = {
@@ -134,6 +140,18 @@ export function McpManager({
   const router = useRouter()
   const [busyKey, setBusyKey] = useState<string | null>(null)
   const [error, setError] = useState("")
+  const [materialPreviews, setMaterialPreviews] = useState<Record<string, unknown>>({})
+
+  async function previewMaterialApproval(id: string) {
+    setBusyKey(`preview:${id}`)
+    setError("")
+    try {
+      const result = await apiRequest<{ proposal: unknown }>(`/api/mcp/admin/approvals/${id}`)
+      setMaterialPreviews((current) => ({ ...current, [id]: result.proposal }))
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "读取拟修改内容失败")
+    } finally { setBusyKey(null) }
+  }
 
   const pendingApprovals = useMemo(
     () => approvals.filter((approval) => approval.status === "PENDING_APPROVAL"),
@@ -358,7 +376,7 @@ export function McpManager({
                           type="button"
                           size="sm"
                           onClick={() => decideApproval(approval, "approve")}
-                          disabled={Boolean(approval.processingAt) || Boolean(approval.credential.revokedAt) || busyKey === `approval:${approval.id}`}
+                          disabled={Boolean(approval.processingAt) || Boolean(approval.credential.revokedAt) || busyKey === `approval:${approval.id}` || (approval.requiredScope.startsWith("material:") && !(approval.id in materialPreviews))}
                         >
                           <Check className="size-3.5" />
                           批准并执行
@@ -379,6 +397,21 @@ export function McpManager({
                     )}
                   </div>
                   <Summary value={approval.parameterSummary} />
+                  {approval.requiredScope.startsWith("material:") && (
+                    <div className="mt-3 space-y-2">
+                      {approval.id in materialPreviews ? (
+                        <details open className="rounded-md border border-border p-3">
+                          <summary className="cursor-pointer text-sm font-medium">拟保存的私人内容（仅自己可见）</summary>
+                          <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs">{JSON.stringify(materialPreviews[approval.id], null, 2)}</pre>
+                        </details>
+                      ) : (
+                        <Button type="button" size="sm" variant="outline"
+                          onClick={() => previewMaterialApproval(approval.id)} disabled={busyKey === `preview:${approval.id}`}>
+                          {busyKey === `preview:${approval.id}` ? "读取中…" : "查看拟保存内容后再审批"}
+                        </Button>
+                      )}
+                    </div>
+                  )}
                   {Boolean(approval.resultSummary) && (
                     <div className="mt-3">
                       <p className="text-xs font-medium text-muted-foreground">执行结果</p>

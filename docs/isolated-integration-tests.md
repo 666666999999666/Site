@@ -65,3 +65,30 @@ PG_BIN_DIR=/path/to/postgres16/bin \
   'node --import tsx tests/prepare-document-workflow.ts &&
    node node_modules/@playwright/test/cli.js test --config=playwright.documents.config.ts'
 ```
+
+Historical material upgrade/provenance coverage (empty isolated base database only):
+
+```sh
+PG_BIN_DIR=/path/to/postgres16/bin bash scripts/with-isolated-postgres.sh \
+  node --import tsx tests/material-upgrade-integration.ts
+```
+
+This fixture applies pre-change migrations, creates synthetic legacy Inbox/manual
+Ideas, then verifies the new migration preserves original bytes, capture times,
+public posts and authored settings. It refuses a nonempty database. The regular
+`inbox` suite additionally covers seven mixed captures, discussion/resume/archive,
+immutable provenance and concurrent conversion retry identities.
+
+Actual Next.js HTTP/API and server-rendered-page acceptance without a browser
+process (still **not** a substitute for browser/visual QA):
+
+```sh
+PG_BIN_DIR=/path/to/postgres16/bin bash scripts/with-isolated-postgres.sh \
+  node --import tsx tests/material-workflow-http.ts
+```
+
+It uses only the wrapper's empty `site_test_inbox` database, synthetic credentials
+and loopback port 3258, starts/stops its own development server, and checks raw
+capture, auth, owner isolation, conversions, Todo/Daily filtering, public-content
+exclusion and read-only quiz data. The public schema matches the application's
+current raw SQL locking queries. It never reads a production environment file.

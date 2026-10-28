@@ -19,6 +19,15 @@ enum PostStatus {
 enum TodoStatus {
   TODO
   DONE
+  PAUSED
+  CANCELLED
+}
+
+enum IdeaDiscussionStatus {
+  STORED
+  WANT_DISCUSS
+  DISCUSSED
+  ARCHIVED
 }
 
 enum CategoryType {
@@ -168,6 +177,7 @@ model Todo {
   categoryId         String?
   category           Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   status             TodoStatus       @default(TODO)
+  statusReason       String?          @db.VarChar(1000)
   priority           Int?             @default(0)
   dueDate            DateTime?
   projectId          String?
@@ -550,6 +560,7 @@ model InboxItem {
   kind           InboxKind
   status         InboxStatus     @default(RECEIVED)
   rawInput       String          @db.Text
+  source         String          @default("inbox") @db.VarChar(200)
   rawSha256      String          @db.Char(64)
   parsedBody     String          @db.Text
   parserVersion  Int
@@ -600,6 +611,11 @@ model Idea {
   owner             User             @relation(fields: [ownerId], references: [id], onDelete: Restrict)
   title             String
   content           String           @db.Text
+  rawInput          String?          @db.Text
+  source            String           @default("manual") @db.VarChar(200)
+  capturedAt        DateTime         @default(now())
+  discussionStatus  IdeaDiscussionStatus @default(STORED)
+  discussionSummary String?          @db.Text
   tags              String[]         @default([])
   projects          Project[]
   sourceInboxItemId String?          @unique
@@ -609,6 +625,7 @@ model Idea {
   updatedAt         DateTime         @updatedAt
 
   @@index([ownerId, createdAt(sort: Desc)])
+  @@index([ownerId, discussionStatus, updatedAt(sort: Desc)])
 }
 
 model IdeaConversion {
@@ -619,6 +636,7 @@ model IdeaConversion {
   idea       Idea                 @relation(fields: [ideaId], references: [id], onDelete: Cascade)
   targetType IdeaConversionTarget
   requestKey String               @db.VarChar(200)
+  inputDigest String?             @db.Char(64)
   postId     String?              @unique
   post       Post?                @relation("IdeaConversionPost", fields: [postId], references: [id], onDelete: SetNull)
   todoId     String?              @unique

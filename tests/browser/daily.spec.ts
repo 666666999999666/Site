@@ -52,7 +52,7 @@ test.afterAll(async () => {
   }
 })
 
-test("Daily Top 3 supports the complete admin workflow and responsive layouts", async ({ page, playwright }) => {
+test("Optional daily choices support the complete admin workflow and responsive layouts", async ({ page, playwright }) => {
   test.setTimeout(360_000)
   const baseUrl = "http://127.0.0.1:3230"
   const originHeaders = { Origin: baseUrl }
@@ -114,12 +114,10 @@ test("Daily Top 3 supports the complete admin workflow and responsive layouts", 
   let quoteId: number | null = null
   try {
     await page.goto("/admin")
-    await expect(page.getByRole("heading", { name: "今日三件事" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "今天想做的事" })).toBeVisible()
     const sidebar = page.locator("aside nav")
-    await expect(sidebar.getByRole("link", { name: "历史记录" })).toBeHidden()
-    await sidebar.getByRole("button", { name: "展开每日三件事菜单" }).click()
-    await expect(sidebar.getByRole("link", { name: "历史记录" })).toBeVisible()
-    await expect(sidebar.getByRole("link", { name: "每日提醒语" })).toBeVisible()
+    await expect(sidebar.getByRole("link", { name: "今天想做的事 · 历史" })).toBeVisible()
+    await expect(sidebar.getByRole("link", { name: "提醒语", exact: true })).toBeVisible()
     await expect(page.getByRole("textbox", { name: "第 1 件事", exact: true })).toBeVisible()
     await expect(page.getByRole("textbox", { name: "第 2 件事", exact: true })).toBeVisible()
     await expect(page.getByRole("textbox", { name: "第 3 件事", exact: true })).toBeVisible()
@@ -137,8 +135,9 @@ test("Daily Top 3 supports the complete admin workflow and responsive layouts", 
 
     await page.getByRole("button", { name: "完成第 1 件事" }).click()
     await page.getByRole("button", { name: "完成第 2 件事" }).click()
-    await expect(page.getByRole("progressbar", { name: "今日完成度" })).toHaveAttribute("aria-valuenow", "67")
-    await expect(page.getByText("已经完成大半，继续保持当前节奏。")).toBeVisible()
+    await page.getByText("查看完成情况与本月统计（可选）", { exact: true }).click()
+    await expect(page.getByRole("progressbar", { name: "今日完成度" })).toHaveAttribute("aria-valuenow", "100")
+    await expect(page.getByText("今天选的事情已经做完了。")).toBeVisible()
     await expect(page.getByRole("article", { name: "第 1 件事卡片" }).getByText("已保存")).toBeVisible()
     await expect(page.getByRole("article", { name: "第 2 件事卡片" }).getByText("已保存")).toBeVisible()
     await page.screenshot({ path: "test-results/daily-progress-desktop.png", fullPage: true, caret: "initial" })
@@ -146,11 +145,12 @@ test("Daily Top 3 supports the complete admin workflow and responsive layouts", 
     await page.reload()
     await expect(page.getByRole("textbox", { name: "第 1 件事", exact: true })).toHaveValue(`${marker} 手动事项`)
     await expect(page.getByRole("textbox", { name: "第 2 件事", exact: true })).toHaveValue(`${marker} Todo`)
-    await expect(page.getByRole("progressbar", { name: "今日完成度" })).toHaveAttribute("aria-valuenow", "67")
+    await page.getByText("查看完成情况与本月统计（可选）", { exact: true }).click()
+    await expect(page.getByRole("progressbar", { name: "今日完成度" })).toHaveAttribute("aria-valuenow", "100")
 
     await page.goto("/admin/daily/history")
     await expect(page.getByRole("heading", { name: "历史记录" })).toBeVisible()
-    await expect(page.locator("aside nav").getByRole("link", { name: "每日提醒语" })).toBeVisible()
+    await expect(page.locator("aside nav").getByRole("link", { name: "提醒语", exact: true })).toBeVisible()
     await expect(page.getByText(`${marker} 手动事项`)).toBeVisible()
     await expect(page.getByText(`${marker} Todo`)).toBeVisible()
 
@@ -180,7 +180,7 @@ test("Daily Top 3 supports the complete admin workflow and responsive layouts", 
 
     await page.setViewportSize({ width: 390, height: 844 })
     await page.reload()
-    await expect(page.getByRole("heading", { name: "今日三件事" })).toBeVisible()
+    await expect(page.getByRole("heading", { name: "今天想做的事" })).toBeVisible()
     const dimensions = await page.evaluate(() => ({
       scrollWidth: document.documentElement.scrollWidth,
       clientWidth: document.documentElement.clientWidth,

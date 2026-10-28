@@ -4,6 +4,14 @@ import { prisma } from "../db"
 import { auditDeletionBlockReason } from "./deletion-policy"
 
 type JsonSummary = Record<string, unknown>
+const MATERIAL_TOOLS = ["create_material", "list_materials", "search_materials", "read_material", "update_material", "convert_material", "get_approval_status"]
+
+function materialAuditVisibility(actorUserId?: string): Prisma.McpAuditLogWhereInput {
+  return { OR: [
+    { toolName: { notIn: MATERIAL_TOOLS } },
+    ...(actorUserId ? [{ credential: { oauthSubject: actorUserId } }] : []),
+  ] }
+}
 
 function jsonValue(value: JsonSummary): Prisma.InputJsonValue {
   return JSON.parse(JSON.stringify(value)) as Prisma.InputJsonValue
@@ -100,11 +108,13 @@ export async function listMcpAuditLogs(input: {
   credentialId?: string
   toolName?: string
   limit?: number
+  actorUserId?: string
 }) {
   return prisma.mcpAuditLog.findMany({
     where: {
       credentialId: input.credentialId,
       toolName: input.toolName,
+      ...materialAuditVisibility(input.actorUserId),
     },
     orderBy: { createdAt: "desc" },
     take: Math.min(Math.max(input.limit ?? 50, 1), 200),
@@ -112,8 +122,8 @@ export async function listMcpAuditLogs(input: {
   })
 }
 
-export async function deleteMcpAuditLog(id: string) {
-  const audit = await prisma.mcpAuditLog.findUnique({ where: { id }, select: { status: true } })
+export async function deleteMcpAuditLog(id: string, actorUserId?: string) {
+  const audit = await prisma.mcpAuditLog.findFirst({ where: { id, ...materialAuditVisibility(actorUserId) }, select: { status: true } })
   if (!audit) throw new NotFoundError("MCP 审计记录不存在")
   const blocked = auditDeletionBlockReason(audit.status)
   if (blocked) throw new ConflictError(blocked)

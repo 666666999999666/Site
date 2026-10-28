@@ -3,6 +3,7 @@ import test from "node:test"
 import {
   EMPTY_QUESTION_NAVIGATION,
   questionEditorURL,
+  questionBrowseURL,
   questionNewURL,
   questionPageURL,
   questionReturnTo,
@@ -50,4 +51,14 @@ test("editing and creating carry the same local return context without unsafe pa
   assert.equal(create.pathname, "/admin/questions/new")
   assert.equal(create.searchParams.get("returnTo"), returnTo)
   assert.equal(new URL(questionEditorURL("row", "https://evil.invalid"), "https://example.test").searchParams.get("returnTo"), "/admin/questions")
+})
+
+
+test("Read-only question links preserve the library state and never use a review URL", () => {
+  const returnTo = questionPageURL(library) + "#question-row-1"
+  const browse = new URL(questionBrowseURL("row/one", returnTo), "https://example.test")
+  assert.equal(browse.pathname, "/admin/questions/row%2Fone")
+  assert.equal(browse.searchParams.get("view"), "read")
+  assert.equal(browse.searchParams.get("returnTo"), returnTo)
+  assert.equal(new URL(questionBrowseURL("row", "https://evil.invalid"), "https://example.test").searchParams.get("returnTo"), "/admin/questions")
 })

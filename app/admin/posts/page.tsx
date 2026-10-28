@@ -21,7 +21,7 @@ export default async function PostsPage({ searchParams }: {
   return (
     <Container>
       <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-semibold">Blog</h1>
+        <h1 className="text-3xl font-semibold">文章</h1>
         <PostCreateLink />
       </div>
       <PostsList

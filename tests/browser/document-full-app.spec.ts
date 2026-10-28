@@ -70,7 +70,7 @@ test("Idea real save survives refresh; cancel preserves content, owner, tags, pr
   const text = "测试保存的正文。\n第二行保持换行。\n\n" + initial.content
   await page.getByRole("textbox", { name: "正文", exact: true }).fill(text)
   await expect(page.getByRole("textbox", { name: "正文", exact: true })).toHaveValue(text)
-  await page.getByRole("button", { name: "保存 Idea" }).click()
+  await page.getByRole("button", { name: "保存素材" }).click()
   await expect(page.getByRole("article", { name: "Idea 阅读" })).toContainText("测试保存的正文")
   await expect(page).toHaveURL(/document-test-idea-0$/)
   await page.reload()
@@ -201,7 +201,7 @@ test("new Idea and article create only after explicit save, then read after refr
   await page.getByRole("textbox", { name: "标题", exact: true }).fill("测试创建的 Idea")
   await page.getByRole("textbox", { name: "正文", exact: true }).fill("新建内容。\n换行保留。")
   await page.getByRole("tab", { name: "预览", exact: true }).click()
-  await page.getByRole("button", { name: "保存 Idea" }).click()
+  await page.getByRole("button", { name: "保存素材" }).click()
   await expect(page.getByRole("article", { name: "Idea 阅读" })).toContainText("新建内容")
   await expect(page).toHaveURL(/\/admin\/ideas\/[^/]+$/)
   await expect(page).not.toHaveURL(/\/new$/)

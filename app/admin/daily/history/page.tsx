@@ -52,7 +52,7 @@ export default async function DailyHistoryPage({
           <div>
             <p className="mb-2 flex items-center gap-2 text-sm text-muted-foreground">
               <CalendarDays className="size-4" />
-              每日三件事
+              今天想做的事
             </p>
             <h1 className="text-3xl font-semibold">历史记录</h1>
           </div>
@@ -154,7 +154,8 @@ export default async function DailyHistoryPage({
                       !task.title && "text-muted-foreground/60",
                       task.completed && "text-muted-foreground line-through"
                     )}>
-                      {task.title || "未填写"}
+                      {task.title || "未选择（可留空）"}
+                      {task.inactive && <span className="ml-2 text-xs text-muted-foreground">{task.sourceTodoStatus === "CANCELLED" ? "已放弃" : "已暂停"} · 不计入统计</span>}
                     </span>
                   </li>
                 ))}

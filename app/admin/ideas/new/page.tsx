@@ -14,7 +14,7 @@ export default async function NewIdeaPage({ searchParams }: {
   const projects = await prisma.project.findMany({ orderBy: { sortOrder: "asc" } })
   return (
     <Container size="wide">
-      <h1 className="mb-8 text-3xl font-semibold">新建 Idea</h1>
+      <h1 className="mb-8 text-3xl font-semibold">新建素材</h1>
       <IdeaForm projects={projects} ownerId={userId} returnTo={safeIdeaReturnHref(returnTo)} />
     </Container>
   )

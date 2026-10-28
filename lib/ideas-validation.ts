@@ -1,4 +1,5 @@
 import { z, ZodError } from "zod/v3"
+import { MATERIAL_STATUSES } from "./material-status"
 import { ValidationError } from "./errors"
 
 const TITLE_MAX_LENGTH = 200
@@ -45,6 +46,10 @@ export const ideaCreateSchema = z.object({
     ),
   tags: tagsSchema.default([]),
   projectIds: projectIdsSchema.default([]),
+  rawInput: z.string().max(200_000).optional(),
+  source: trimmedString("来源", 200).optional(),
+  discussionStatus: z.enum(MATERIAL_STATUSES).optional(),
+  discussionSummary: nullableTrimmedString("讨论摘要", 10_000).optional(),
 }).strict()
 
 export const ideaUpdateSchema = z.object({
@@ -58,6 +63,8 @@ export const ideaUpdateSchema = z.object({
     .optional(),
   tags: tagsSchema.optional(),
   projectIds: projectIdsSchema.optional(),
+  discussionStatus: z.enum(MATERIAL_STATUSES).optional(),
+  discussionSummary: nullableTrimmedString("讨论摘要", 10_000).optional(),
 }).strict().refine((input) => Object.keys(input).length > 0, {
   message: "至少提供一个需要修改的字段",
 })
@@ -121,7 +128,7 @@ export function parseIdeaInput<T extends z.ZodTypeAny>(schema: T, input: unknown
 }
 
 export function parseIdeaSearchParams(searchParams: URLSearchParams) {
-  const allowedKeys = new Set(["q", "tag", "projectId"])
+  const allowedKeys = new Set(["q", "tag", "projectId", "discussionStatus"])
   const unknown = [...searchParams.keys()].filter((key) => !allowedKeys.has(key))
   if (unknown.length > 0) {
     throw new ValidationError(`不支持的查询字段：${[...new Set(unknown)].join(", ")}`)
@@ -136,7 +143,12 @@ export function parseIdeaSearchParams(searchParams: URLSearchParams) {
     return value
   }
 
+  const discussionStatus = read("discussionStatus", 30)
+  if (discussionStatus && !MATERIAL_STATUSES.includes(discussionStatus as typeof MATERIAL_STATUSES[number])) {
+    throw new ValidationError("讨论状态无效")
+  }
   return {
+    ...(discussionStatus ? { discussionStatus: discussionStatus as typeof MATERIAL_STATUSES[number] } : {}),
     q: read("q", 200),
     tag: read("tag", TAG_MAX_LENGTH),
     projectId: read("projectId", 100),

@@ -20,7 +20,7 @@ function QuestionSchoolContent() {
     <div className="animate-in fade-in space-y-7 duration-300">
       <header className="flex flex-col gap-5 border-b border-border/60 pb-7 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="mb-2 text-sm text-muted-foreground">自己出题 · 自己审核 · 按记忆节奏复习</p>
+          <p className="mb-2 text-sm text-muted-foreground">可以只浏览，也可以按需评分复习</p>
           <h1 className="text-3xl font-semibold">问题中学</h1>
         </div>
         <Link href={questionNewURL(questionPageURL(navigation))} className={cn(buttonVariants(), "h-10 gap-1.5 px-4")}>
@@ -34,7 +34,7 @@ function QuestionSchoolContent() {
             <BookOpenCheck /> 今日复习
           </TabsTrigger>
           <TabsTrigger value="library" className="h-full px-4">
-            <Library /> 题库管理
+            <Library /> 浏览题库
           </TabsTrigger>
         </TabsList>
         <TabsContent value="today">

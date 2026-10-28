@@ -235,14 +235,14 @@ test("question APIs stay private and the complete review workflow is auditable",
 
   await expect(page.getByText(directPrompt, { exact: true })).toBeVisible()
   expect(await page.locator("body").textContent()).not.toContain(directAnswer)
-  await page.getByRole("button", { name: "直接揭晓" }).click()
+  await page.getByRole("button", { name: "揭晓并记为重来" }).click()
   await expect(page.getByText(directAnswer, { exact: true })).toBeVisible()
   await expect(page.getByText("已自动记为“重来”", { exact: true })).toBeVisible()
   await expect(page.getByText("直接揭晓不保存答案正文，也不能改档。", { exact: true })).toBeVisible()
   await page.getByRole("button", { name: "下一题" }).click()
 
-  await page.getByRole("tab", { name: "题库管理" }).click()
-  await expect(page.getByLabel("题库管理").getByText("题库管理", { exact: true })).toBeVisible()
+  await page.getByRole("tab", { name: "浏览题库" }).click()
+  await expect(page.getByLabel("浏览题库").getByText("浏览题库", { exact: true })).toBeVisible()
   await page.getByRole("textbox", { name: "搜索题库" }).fill(marker)
   await page.getByRole("button", { name: "搜索", exact: true }).click()
   const questionList = page.getByLabel("题目列表")
@@ -294,7 +294,7 @@ test("question school is readable without horizontal overflow in every viewport 
     caret: "initial",
   })
 
-  await page.getByRole("button", { name: "直接揭晓" }).click()
+  await page.getByRole("button", { name: "揭晓并记为重来" }).click()
   await expect(page.getByText(visualAnswer, { exact: true })).toBeVisible()
   await expect(page.getByText("已自动记为“重来”", { exact: true })).toBeVisible()
   await expectNoHorizontalOverflow(page)
@@ -303,4 +303,50 @@ test("question school is readable without horizontal overflow in every viewport 
     fullPage: true,
     caret: "initial",
   })
+})
+
+
+test("unscored browsing can reveal, close, reload and return without writing reviews or changing due statistics", async ({ page, playwright }, testInfo) => {
+  await login(page)
+  const prompt = `${marker} · ${testInfo.project.name} 只浏览题目`
+  const answer = `${marker} · ${testInfo.project.name} 浏览参考答案`
+  const question = await createReadyQuestion(page.request, prompt, answer)
+  const before = await database.query(`SELECT * FROM "Question" WHERE "id" = $1`, [question.id])
+  const summaryBefore = await (await page.request.get("/api/questions/today")).json()
+  const logsBefore = await database.query(`SELECT COUNT(*) FROM "QuestionReviewLog" WHERE "ownerId" = $1`, [userId])
+  const ticketsBefore = await database.query(`SELECT COUNT(*) FROM "QuestionReviewTicket" WHERE "ownerId" = $1`, [userId])
+  const questionWrites: string[] = []
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/api/questions") && request.method() !== "GET") {
+      questionWrites.push(`${request.method()} ${new URL(request.url()).pathname}`)
+    }
+  })
+  await page.goto("/admin/questions?tab=library&q=" + encodeURIComponent(prompt))
+  await page.getByRole("link", { name: "浏览（不评分）", exact: true }).click()
+  await expect(page.getByRole("heading", { name: "浏览题目", exact: true })).toBeVisible()
+  await expect(page.getByText(answer, { exact: true })).toHaveCount(0)
+  await page.getByRole("button", { name: "查看答案（不评分）", exact: true }).click()
+  await expect(page.getByText(answer, { exact: true })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+  await page.screenshot({ path: `test-results/questions-browse-${testInfo.project.name}.png`, fullPage: true })
+  await page.getByRole("button", { name: "收起答案", exact: true }).click()
+  await expect(page.getByText(answer, { exact: true })).toHaveCount(0)
+  await page.reload()
+  await page.getByRole("button", { name: "查看答案（不评分）", exact: true }).click()
+  await expect(page.getByText(answer, { exact: true })).toBeVisible()
+  await page.getByRole("link", { name: "返回题库" }).click()
+  await expect(page.getByRole("textbox", { name: "搜索题库" })).toHaveValue(prompt)
+  await page.goBack()
+  await expect(page.getByRole("heading", { name: "浏览题目", exact: true })).toBeVisible()
+  expect(questionWrites).toEqual([])
+  expect((await database.query(`SELECT * FROM "Question" WHERE "id" = $1`, [question.id])).rows).toEqual(before.rows)
+  const summaryAfter = await (await page.request.get("/api/questions/today")).json()
+  for (const key of ["totalActions", "uniqueQuestions", "typedCount", "directRevealCount", "newIntroducedToday", "ratings"]) {
+    expect(summaryAfter.summary[key]).toEqual(summaryBefore.summary[key])
+  }
+  expect((await database.query(`SELECT COUNT(*) FROM "QuestionReviewLog" WHERE "ownerId" = $1`, [userId])).rows).toEqual(logsBefore.rows)
+  expect((await database.query(`SELECT COUNT(*) FROM "QuestionReviewTicket" WHERE "ownerId" = $1`, [userId])).rows).toEqual(ticketsBefore.rows)
+  const anonymous = await playwright.request.newContext({ baseURL: baseUrl })
+  try { expect((await anonymous.get(`/api/questions/${question.id}`)).status()).toBe(401) }
+  finally { await anonymous.dispose() }
 })

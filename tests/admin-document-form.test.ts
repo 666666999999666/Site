@@ -14,9 +14,9 @@ const emptyIdea = {title: '', content: '', tags: '', projectIds: []}
 
 test('new drafts initialize every field and preserve persisted text', () => {
  assert.deepEqual(draftFromPost(), emptyPost)
- assert.deepEqual(draftFromIdea(), emptyIdea)
+ assert.deepEqual(draftFromIdea(), {...emptyIdea, discussionStatus:"STORED", discussionSummary:""})
  const projects = [{id:'z'}, {id:'a'}]
- assert.deepEqual(draftFromIdea({title:' raw ',content:'<p>old</p>',tags:['x','y'],projects}), {title:' raw ',content:'<p>old</p>',tags:'x, y',projectIds:['a','z']})
+ assert.deepEqual(draftFromIdea({title:' raw ',content:'<p>old</p>',tags:['x','y'],projects}), {title:' raw ',content:'<p>old</p>',tags:'x, y',projectIds:['a','z'],discussionStatus:'STORED',discussionSummary:''})
  assert.deepEqual(projects, [{id:'z'}, {id:'a'}])
  assert.deepEqual(draftFromPost(postSource({title:' raw ', content:'<p>old</p>', tags:['a','b'],seriesOrder:0})), {...emptyPost,title:' raw ',content:'<p>old</p>',tags:'a, b',seriesOrder:'0'})
 })
@@ -83,4 +83,11 @@ test('payload construction does not mutate drafts or baseline', () => {
  Object.freeze(idea.projectIds)
  Object.freeze(idea)
  ideaMutationInput(idea,Object.freeze({...emptyIdea}),true)
+})
+
+test('material interpretation mutations never send immutable raw provenance', () => {
+ const baseline = draftFromIdea({title:'title',content:'body',tags:[],projects:[],discussionStatus:'WANT_DISCUSS',discussionSummary:'resume here'})
+ assert.deepEqual(ideaMutationInput({...baseline,discussionStatus:'ARCHIVED'},baseline,true), {discussionStatus:'ARCHIVED'})
+ assert.deepEqual(ideaMutationInput({...baseline,discussionSummary:''},baseline,true), {discussionSummary:null})
+ assert.equal('rawInput' in ideaMutationInput(baseline, baseline, false), false)
 })

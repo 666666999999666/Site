@@ -46,7 +46,7 @@ test("list filters accept only documented kinds and statuses", () => {
 test("target links route each formal object to its existing editor", () => {
   assert.equal(getInboxTargetHref("BLOG", "post 1"), "/admin/posts/post%201")
   assert.equal(getInboxTargetHref("IDEA", "idea 1"), "/admin/ideas/idea%201")
-  assert.equal(getInboxTargetHref("TODO", "todo 1"), "/admin/todos#todo-todo%201")
+  assert.equal(getInboxTargetHref("TODO", "todo 1"), "/admin/todos?status=ALL#todo-todo%201")
 })
 
 test("serialized inbox items expose ISO dates and never mutate the raw input", () => {
@@ -76,4 +76,11 @@ test("serialized inbox items expose ISO dates and never mutate the raw input", (
   assert.equal(view.rawInput, rawInput)
   assert.equal(view.createdAt, "2026-08-15T00:00:00.000Z")
   assert.equal(view.execution?.targetHref, "/admin/ideas/idea-1")
+})
+
+test("explicit material capture validates mode and source without rewriting original", () => {
+  assert.deepEqual(validateInboxCaptureBody({rawInput:"todo：引用",requestKey:"key",mode:"material",source:"  mobile  "}), {
+    rawInput:"todo：引用",requestKey:"key",forceMaterial:true,source:"mobile",
+  })
+  assert.throws(() => validateInboxCaptureBody({rawInput:"x",requestKey:"key",mode:"public"}))
 })

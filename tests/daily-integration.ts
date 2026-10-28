@@ -67,6 +67,26 @@ try {
     }, day("2026-08-10")),
     /不能同时放入/
   )
+  // Pausing or abandoning a linked Todo keeps the daily row, but it is no longer
+  // an active selection, a candidate, or a completion. Resuming is explicit.
+  for (const status of ["PAUSED", "CANCELLED"] as const) {
+    await prisma.todo.update({ where: { id: todo.id }, data: { status, statusReason: "暂时不做" } })
+    const inactive = await getDailyDashboard(user.id, day("2026-08-10"))
+    assert.equal(inactive.day.tasks[0].title, todo.title)
+    assert.equal(inactive.day.tasks[0].inactive, true)
+    assert.equal(inactive.day.tasks[0].completed, false)
+    assert.equal(inactive.day.completedCount, 0)
+    assert.equal(inactive.day.progress, 0)
+    assert.equal(inactive.todoOptions.some((item) => item.id === todo.id), false)
+    assert.equal(inactive.stats.completedDays, 2)
+    await assert.rejects(saveDailyTask(user.id, 1, {
+      date: "2026-08-10", title: todo.title, sourceTodoId: todo.id, completed: true,
+    }, day("2026-08-10")), /已暂停或已放弃/)
+  }
+  await prisma.todo.update({ where: { id: todo.id }, data: { status: "TODO" } })
+  const resumed = await getDailyDashboard(user.id, day("2026-08-10"))
+  assert.equal(resumed.todoOptions.some((item) => item.id === todo.id), true)
+  assert.equal(resumed.day.progress, 100)
   const detached = await saveDailyTask(user.id, 1, {
     date: "2026-08-10",
     title: "编辑后的独立事项",
@@ -76,10 +96,10 @@ try {
   assert.equal(detached.tasks[0].sourceTodoId, null)
 
   const history = await getDailyHistory(user.id, "2026-08", day("2026-08-10"))
-  assert.equal(history.stats.streak, 2)
+  assert.equal(history.stats.streak, 3)
   assert.equal(history.stats.recordedDays, 3)
-  assert.equal(history.stats.completedDays, 2)
-  assert.equal(history.stats.averageProgress, 78)
+  assert.equal(history.stats.completedDays, 3)
+  assert.equal(history.stats.averageProgress, 100)
   assert.equal(history.days.length, 3)
 
   await assert.rejects(

@@ -23,7 +23,7 @@ export default async function AdminOverviewPage() {
 
   return (
     <Container>
-      <h1 className="mb-8 text-3xl font-semibold">概览</h1>
+      <h1 className="mb-8 text-3xl font-semibold">统计概览</h1>
       <div className="mb-10 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Link href="/admin/posts" className="rounded-lg border border-border/50 bg-card p-6 transition-colors hover:border-primary">
           <div className="text-3xl font-semibold text-primary">{postCount}</div>
@@ -31,7 +31,7 @@ export default async function AdminOverviewPage() {
         </Link>
         <Link href="/admin/ideas" className="rounded-lg border border-border/50 bg-card p-6 transition-colors hover:border-primary">
           <div className="text-3xl font-semibold text-primary">{ideaCount}</div>
-          <div className="mt-1 text-sm text-muted-foreground">私人 Idea</div>
+          <div className="mt-1 text-sm text-muted-foreground">私人素材</div>
         </Link>
         <Link href="/admin/todos" className="rounded-lg border border-border/50 bg-card p-6 transition-colors hover:border-primary">
           <div className="text-3xl font-semibold text-primary">{todoCount}</div>
@@ -43,7 +43,7 @@ export default async function AdminOverviewPage() {
         </Link>
       </div>
 
-      <h2 className="mb-4 text-xl font-semibold">待办</h2>
+      <h2 className="mb-4 text-xl font-semibold">进行中的待办</h2>
       {pendingTodos.length === 0 ? (
         <p className="text-muted-foreground">暂无待办。</p>
       ) : (

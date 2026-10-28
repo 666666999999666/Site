@@ -1,4 +1,5 @@
-export interface PostListFilters { q: string; categoryId: string }
+export type PostListStatus = "ALL" | "DRAFT" | "PUBLISHED"
+export interface PostListFilters { q: string; categoryId: string; status?: PostListStatus }
 export const EMPTY_POST_LIST_FILTERS: PostListFilters = { q: "", categoryId: "" }
 
 export function readPostListFilters(params: Pick<URLSearchParams, "get">): PostListFilters {
@@ -6,12 +7,18 @@ export function readPostListFilters(params: Pick<URLSearchParams, "get">): PostL
     const value = params.get(key)?.trim() ?? ""
     return [...value].length <= limit ? value : ""
   }
-  return { q: read("q", 200), categoryId: read("categoryId", 100) }
+  const status = params.get("status")
+  return {
+    q: read("q", 200), categoryId: read("categoryId", 100),
+    ...(status === "DRAFT" || status === "PUBLISHED" ? { status } : {}),
+  }
 }
 
 export function postListHref(filters: PostListFilters): string {
   const params = new URLSearchParams()
-  for (const [key, value] of Object.entries(readPostListFilters(new URLSearchParams({ ...filters })))) {
+  const input = new URLSearchParams({ q: filters.q, categoryId: filters.categoryId })
+  if (filters.status) input.set("status", filters.status)
+  for (const [key, value] of Object.entries(readPostListFilters(input))) {
     if (value) params.set(key, value)
   }
   return "/admin/posts" + (params.size ? "?" + params : "")

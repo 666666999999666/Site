@@ -221,22 +221,14 @@ test("table insertion asks for dimensions and renders clear borders in both them
   }
 })
 
-test("daily sidebar children stay collapsed until requested and open on child pages", async ({ page }) => {
+test("admin navigation puts everyday materials before optional study and management", async ({ page }) => {
   await page.goto("/sidebar")
-  const navigation = page.getByRole("navigation")
-  await expect(navigation.getByRole("link", { name: "历史记录" })).toBeHidden()
-  await expect(navigation.getByRole("link", { name: "每日提醒语" })).toBeHidden()
-
-  await navigation.getByRole("button", { name: "展开每日三件事菜单" }).click()
-  await expect(navigation.getByRole("link", { name: "历史记录" })).toBeVisible()
-  await expect(navigation.getByRole("link", { name: "每日提醒语" })).toBeVisible()
-  await page.screenshot({ path: "test-results/admin-sidebar-expanded.png", fullPage: false })
-
-  await navigation.getByRole("button", { name: "收起每日三件事菜单" }).click()
-  await expect(navigation.getByRole("link", { name: "历史记录" })).toBeHidden()
-
-  await page.goto("/admin/daily/history")
-  await expect(page.getByRole("navigation").getByRole("link", { name: "历史记录" })).toBeVisible()
+  const navigation = page.getByRole("navigation", { name: "后台导航" })
+  await expect(navigation.getByRole("group", { name: "日常", exact: true }).getByRole("link")).toHaveText(["工作台", "素材", "Todo", "文章", "收件箱"])
+  await expect(navigation.getByRole("group", { name: "按需使用", exact: true }).getByRole("link")).toHaveText(["问题中学", "今天想做的事 · 历史"])
+  await expect(navigation.getByRole("group", { name: "管理", exact: true }).getByRole("link", { name: "MCP 与审计" })).toBeVisible()
+  await navigation.getByRole("link", { name: "今天想做的事 · 历史" }).click()
+  await expect(page.getByRole("navigation").getByRole("link", { name: "今天想做的事 · 历史" })).toHaveAttribute("aria-current", "page")
 })
 
 test("desktop admin sidebar collapses to an accessible icon rail", async ({ page }) => {
@@ -244,7 +236,7 @@ test("desktop admin sidebar collapses to an accessible icon rail", async ({ page
 
   const sidebar = page.getByRole("complementary", { name: "后台侧栏" })
   const navigation = sidebar.getByRole("navigation", { name: "后台导航" })
-  const overview = navigation.getByRole("link", { name: "概览" })
+  const overview = navigation.getByRole("link", { name: "统计概览" })
   const collapse = sidebar.getByRole("button", { name: "收起后台侧栏" })
 
   await expect(sidebar).toHaveCSS("width", "224px")
@@ -255,7 +247,7 @@ test("desktop admin sidebar collapses to an accessible icon rail", async ({ page
   await expect(sidebar).toHaveCSS("width", "64px")
   await expect(expand).toBeVisible()
   await expect(overview).toBeVisible()
-  await expect(overview).toHaveAttribute("title", "概览")
+  await expect(overview).toHaveAttribute("title", "统计概览")
   await expect(navigation.getByRole("button", { name: "展开每日三件事菜单" })).toHaveCount(0)
   await page.screenshot({ path: "test-results/admin-sidebar-collapsed-light.png", fullPage: false })
 
@@ -271,7 +263,7 @@ test("desktop admin sidebar collapses to an accessible icon rail", async ({ page
   await expect(sidebar.getByRole("button", { name: "收起后台侧栏" })).toBeVisible()
   await expect(sidebar.getByText("当前设备的后台会话将失效。")).toBeVisible()
   await expect(sidebar.getByRole("button", { name: "确认退出" })).toBeVisible()
-  await expect(overview).not.toHaveAttribute("title", "概览")
+  await expect(overview).not.toHaveAttribute("title", "统计概览")
   await page.screenshot({ path: "test-results/admin-sidebar-expanded-dark.png", fullPage: false })
   await sidebar.getByRole("button", { name: "取消" }).focus()
   await page.keyboard.press("Enter")

@@ -3,13 +3,25 @@ import { prisma } from "@/lib/db"
 import { ensureAuthenticated } from "@/lib/api/auth"
 import { requireJsonRequest } from "@/lib/api/admin-mutation"
 import { privateNoStore, handlePrivateApiError } from "@/lib/api/private-response"
-import { ValidationError } from "@/lib/errors"
+import { NotFoundError, ValidationError } from "@/lib/errors"
 import { readJsonObject, validateTodoUpdate } from "@/lib/validation"
-import { todoInclude } from "../_shared"
+import { todoIncludeForOwner } from "../_shared"
+
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  try {
+    const { userId } = await ensureAuthenticated()
+    const { id } = await params
+    const todo = await prisma.todo.findUnique({ where: { id }, include: todoIncludeForOwner(userId) })
+    if (!todo) throw new NotFoundError("Todo 不存在")
+    return privateNoStore(NextResponse.json(todo))
+  } catch (error) {
+    return handlePrivateApiError(error)
+  }
+}
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    await ensureAuthenticated()
+    const { userId } = await ensureAuthenticated()
     requireJsonRequest(req)
     const { id } = await params
     const { subtasks, ...body } = validateTodoUpdate(await readJsonObject(req))
@@ -47,7 +59,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           }]),
         } : undefined,
       },
-      include: todoInclude,
+      include: todoIncludeForOwner(userId),
     })
     return privateNoStore(NextResponse.json(todo))
   } catch (e) {

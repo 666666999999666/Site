@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 
-export const INBOX_PARSER_VERSION = 1
+export const INBOX_PARSER_VERSION = 2
 export const MAX_INBOX_RAW_CHARACTERS = 100_000
 
 export type ParsedInboxKind = "BLOG" | "IDEA" | "TODO"
@@ -32,30 +32,19 @@ function codePointLength(value: string) {
   return Array.from(value).length
 }
 
-export function parseInboxInput(rawInput: string): ParsedInboxInput {
+export function parseInboxInput(rawInput: string, forceMaterial = false): ParsedInboxInput {
   if (typeof rawInput !== "string" || codePointLength(rawInput) > MAX_INBOX_RAW_CHARACTERS) {
     throw new InboxInputError("INPUT_TOO_LONG", "输入内容不能超过 100,000 个字符")
   }
 
-  const match = PREFIX_PATTERN.exec(rawInput)
-  if (!match) {
-    throw new InboxInputError(
-      "INVALID_PREFIX_OR_BODY",
-      "请输入以 idea：、文章：或 todo：开头的内容"
-    )
-  }
-
-  const parsedBody = rawInput.slice(match[0].length).trim()
+  const match = forceMaterial ? null : PREFIX_PATTERN.exec(rawInput)
+  const parsedBody = (match ? rawInput.slice(match[0].length) : rawInput).trim()
   if (!parsedBody) {
-    throw new InboxInputError("INVALID_PREFIX_OR_BODY", "前缀后需要填写内容")
+    throw new InboxInputError("INVALID_PREFIX_OR_BODY", "请填写要保存的内容")
   }
 
-  const prefix = match[1].toLowerCase()
-  const kind: ParsedInboxKind = prefix === "文章"
-    ? "BLOG"
-    : prefix === "idea"
-      ? "IDEA"
-      : "TODO"
+  const prefix = match?.[1].toLowerCase()
+  const kind: ParsedInboxKind = prefix === "文章" ? "BLOG" : prefix === "todo" ? "TODO" : "IDEA"
 
   return {
     kind,

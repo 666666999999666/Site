@@ -31,11 +31,11 @@ export default async function IdeasPage({ searchParams }: {
     <Container size="wide">
       <div className="mb-8 flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold">Idea</h1>
-          <p className="mt-2 text-sm text-muted-foreground">私人想法、随笔和下一步实验。</p>
+          <h1 className="text-3xl font-semibold">素材</h1>
+          <p className="mt-2 text-sm text-muted-foreground">私人原文、链接和随想。先暂存，想聊时再继续，不自动变成任务。</p>
         </div>
         <Link href={ideaDocumentHref("new", listHref)} className={cn(buttonVariants(), "shrink-0 gap-1.5")}>
-          <Plus className="size-4" /> 新建 Idea
+          <Plus className="size-4" /> 新建素材
         </Link>
       </div>
       <IdeasList key={listHref} initialIdeas={ideas} projects={projects} initialFilters={filters}

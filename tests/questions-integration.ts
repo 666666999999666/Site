@@ -131,6 +131,20 @@ try {
   assert.equal(readOnlyToday.state, "READY")
   assert.equal(await prisma.questionReviewTicket.count({ where: { ownerId: user.id } }), 0)
 
+  // Browsing a question/answer repeatedly is strictly read-only: no tickets,
+  // failed reviews, due changes, new-queue changes, or summary effects.
+  const beforeBrowse = await prisma.question.findUniqueOrThrow({ where: { id: pending.id } })
+  const beforeBrowseSummary = await getTodayView(user.id, prisma, tick(baseNow, 2_500))
+  for (let index = 0; index < 3; index += 1) {
+    const browsed = await getQuestionDetail(user.id, pending.id)
+    assert.equal(browsed.question.referenceAnswerMarkdown, ready.referenceAnswerMarkdown)
+  }
+  assert.deepEqual(await prisma.question.findUniqueOrThrow({ where: { id: pending.id } }), beforeBrowse)
+  assert.deepEqual(await getTodayView(user.id, prisma, tick(baseNow, 2_500)), beforeBrowseSummary)
+  assert.equal(await prisma.questionReviewLog.count({ where: { ownerId: user.id } }), 0)
+  assert.equal(await prisma.questionReviewTicket.count({ where: { ownerId: user.id } }), 0)
+  assert.equal(await prisma.questionAttempt.count({ where: { ownerId: user.id } }), 0)
+
   const started = await startToday(user.id, tick(baseNow, 3_000))
   assert.equal(started.state, "READY")
   if (started.state !== "READY" || !("question" in started)) throw new Error("Expected READY question")

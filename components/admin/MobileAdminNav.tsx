@@ -30,7 +30,8 @@ export function MobileAdminNav() {
         </div>
       </div>
       {open && (
-        <div id="mobile-admin-navigation" className="space-y-4 border-b border-border/50 p-4">
+        <div id="mobile-admin-navigation" className="space-y-4 border-b border-border/50 p-4"
+          onClick={(event) => { if ((event.target as HTMLElement).closest("a")) setOpen(false) }}>
           <AdminSidebar />
           <LogoutButton />
           <SignOutButton />

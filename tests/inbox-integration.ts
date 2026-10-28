@@ -54,6 +54,56 @@ async function runIntegration(prisma: TestDatabase) {
     },
   })
 
+  const { getIdea, searchIdeas, updateIdea, convertIdea } = await import("../lib/ideas")
+  const { ideaConversionSchema } = await import("../lib/ideas-validation")
+  const initialTodoCount = await prisma.todo.count()
+  const materialInputs = [
+    "  一段随想\r\n不想现在就执行  ", "https://example.test/reading", "一个没想明白的问题？",
+    "- 买书\n- 看视频\n只是以后可能想做", "今天有点累，先记在这里", "todo：这是摘录，不是任务", "文章：这是素材，不是草稿",
+  ]
+  const materialIds: string[] = []
+  for (const [index, rawInput] of materialInputs.entries()) {
+    const item = await captureInboxItem({ ownerId: owner.id, rawInput, requestKey: `material-${suffix}-${index}`, source: "integration", forceMaterial: true })
+    assert.equal(item.execution?.targetType, "IDEA")
+    const record = await getIdea(owner.id, item.execution!.targetId)
+    materialIds.push(record.id)
+    assert.equal(record.rawInput, rawInput)
+    assert.equal(record.source, "integration")
+    assert.equal(record.discussionStatus, "STORED")
+    assert.equal(record.capturedAt.getTime(), item.createdAt.getTime())
+  }
+  assert.equal(await prisma.todo.count(), initialTodoCount)
+  for (const id of materialIds.slice(0, 2)) await updateIdea(owner.id, id, { discussionStatus: "WANT_DISCUSS", discussionSummary: "下次接着聊" })
+  assert.equal((await searchIdeas(owner.id, {discussionStatus:"WANT_DISCUSS"})).length, 2)
+  await updateIdea(owner.id, materialIds[0], {title:"整理后的标题",content:"AI 对原文的解释",discussionStatus:"DISCUSSED",discussionSummary:"已有初步结论"})
+  assert.equal((await getIdea(owner.id,materialIds[0])).rawInput, materialInputs[0])
+  assert.equal((await searchIdeas(owner.id,{q:"一段随想"}))[0].id, materialIds[0])
+  await updateIdea(owner.id, materialIds[1], {discussionStatus:"ARCHIVED"})
+  await updateIdea(owner.id, materialIds[1], {discussionStatus:"WANT_DISCUSS"})
+  await assert.rejects(() => getIdea(otherOwner.id, materialIds[0]), /不存在/)
+  await assert.rejects(() => updateIdea(otherOwner.id, materialIds[0], {discussionStatus:"ARCHIVED"}), /不存在/)
+  assert.equal((await searchIdeas(otherOwner.id, {})).length, 0)
+  await assert.rejects(() => prisma.idea.update({where:{id:materialIds[0]},data:{rawInput:"tampered"}}))
+  for (const field of ["source", "capturedAt"] as const) await assert.rejects(() => prisma.idea.update({where:{id:materialIds[0]},data: field === "source" ? {source:"changed"} : {capturedAt:new Date(0)}}))
+  for (const targetType of ["TODO", "BLOG"] as const) {
+    const conversionInput = ideaConversionSchema.parse({targetType,requestKey:`conversion-${suffix}-${targetType}`,title:"明确选择才转换",...(targetType === "BLOG" ? {content:"草稿正文"} : {description:"一个任务"})})
+    const [a,b] = await Promise.all([convertIdea(owner.id, materialIds[0], conversionInput),convertIdea(owner.id, materialIds[0], conversionInput)])
+    assert.equal(a.targetId,b.targetId)
+    await assert.rejects(() => convertIdea(owner.id, materialIds[0], {...conversionInput,title:"changed proposal"}), /不同内容/)
+    assert.equal(await prisma.ideaConversion.count({where:{ideaId:materialIds[0],targetType}}),1)
+    assert.ok(a.href.startsWith(targetType === "TODO" ? "/admin/todos?status=ALL#todo-" : "/admin/posts/"))
+    if (targetType === "BLOG") assert.equal((await prisma.post.findUniqueOrThrow({where:{id:a.targetId}})).status,"DRAFT")
+    await assert.rejects(() => convertIdea(otherOwner.id, materialIds[0], conversionInput),/不存在/)
+  }
+  const linked = await getIdea(owner.id,materialIds[0])
+  assert.equal(linked.conversions.length,2)
+  assert.ok(linked.conversions.some((link) => link.post?.title === "明确选择才转换"))
+  assert.ok(linked.conversions.some((link) => link.todo?.title === "明确选择才转换"))
+  const keptRaw = (await getIdea(owner.id,materialIds[2])).rawInput
+  const rawRecord = await prisma.idea.findUniqueOrThrow({where:{id:materialIds[2]}})
+  await deleteInboxItem(owner.id,rawRecord.sourceInboxItemId!)
+  assert.equal((await getIdea(owner.id,materialIds[2])).rawInput,keptRaw)
+
   const articleBody = '{"type":"doc","content":[{"type":"paragraph"}]}\r\n第二行原文'
   const articleRaw = `文章：${articleBody}`
   const article = await captureInboxItem({

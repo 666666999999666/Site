@@ -3,6 +3,8 @@ import { createHash } from "node:crypto"
 import path from "node:path"
 import test from "node:test"
 import * as dates from "../lib/daily-date"
+import * as dailyPolicy from "../lib/daily-policy"
+import * as todosPolicy from "../lib/todos-policy"
 import * as errors from "../lib/errors"
 import { loadRoute } from "./helpers/load-route"
 
@@ -14,6 +16,7 @@ function dailyService(prisma: unknown) {
     "node:crypto": { createHash },
     "@/lib/db": { prisma },
     "@/lib/daily-date": dates,
+    "@/lib/daily-policy": dailyPolicy, "@/lib/todos-policy": todosPolicy,
     "@/lib/errors": errors,
     "@/lib/generated/prisma/client": { Prisma: {} },
   })
@@ -45,9 +48,9 @@ for (const quoteId of [17, null]) {
         { id: "first", slot: 1, title: "first", completed: false, completedAt: null, sourceTodoId: null },
         { id: null, slot: 2, title: "", completed: false, completedAt: null, sourceTodoId: null },
         { id: "third", slot: 3, title: "third", completed: true, completedAt: at.toISOString(), sourceTodoId: "todo" },
-      ], completedCount: 1, progress: 33,
+      ], completedCount: 1, progress: 50,
     })
-    assert.deepEqual(calls[0], { where: { userId_planDate: { userId: "owner", planDate: snapshot.planDate } }, include: { tasks: { orderBy: { slot: "asc" } } } })
+    assert.deepEqual(calls[0], { where: { userId_planDate: { userId: "owner", planDate: snapshot.planDate } }, include: { tasks: { orderBy: { slot: "asc" }, include: { sourceTodo: { select: { status: true } } } } } })
     for (const query of calls.slice(1) as { where: { userId: string } }[]) assert.equal(query.where.userId, "owner")
   })
 }

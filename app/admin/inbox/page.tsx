@@ -14,7 +14,7 @@ export default async function InboxPage() {
       <Container>
         <h1 className="mb-3 text-3xl font-semibold">智能收件箱</h1>
         <p className="max-w-2xl text-muted-foreground">
-          此功能当前已关闭。部署者可通过 INBOX_ENABLED=true 启用确定性的前缀分流。
+          此功能当前已关闭。部署者可通过 INBOX_ENABLED=true 启用私人收录与兼容前缀分流。
         </p>
       </Container>
     )
@@ -42,7 +42,7 @@ export default async function InboxPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-semibold">智能收件箱</h1>
         <p className="mt-2 max-w-3xl text-muted-foreground">
-          使用普通代码识别 idea、文章和 todo 前缀，立即保存原文并分流，不会调用 LLM 或抓取网址。
+          无需前缀即可保存私人素材；旧的 idea、文章和 todo 前缀仍可使用。原文独立保留，不调用 LLM，也不抓取网址。
         </p>
       </div>
       <InboxManager initialItems={items.map(serializeInboxSummary)} />

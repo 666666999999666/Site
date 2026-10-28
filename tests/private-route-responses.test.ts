@@ -6,6 +6,7 @@ import * as handler from "../lib/api/handler"
 import * as privateResponse from "../lib/api/private-response"
 import * as errors from "../lib/errors"
 import * as validation from "../lib/validation"
+import * as todosPolicy from "../lib/todos-policy"
 import * as ideaValidation from "../lib/ideas-validation"
 import * as inbox from "../lib/inbox"
 import * as inboxRequest from "../lib/inbox-request"
@@ -27,7 +28,7 @@ const inboxSummary = {
   updatedAt: "2026-01-01T00:00:00.000Z", execution: null,
 }
 const inboxDetail = {
-  ...inboxSummary, rawInput: "idea：原文\r\n", rawSha256: "hash", parsedBody: "原文\r\n",
+  ...inboxSummary, source: "inbox", rawInput: "idea：原文\r\n", rawSha256: "hash", parsedBody: "原文\r\n",
   parserVersion: 1, requestKey: "request-1", events: [],
 }
 const ok = { ok: true }
@@ -53,6 +54,7 @@ const routes: RouteCase[] = [
   { path: "ideas/[id]", method: "DELETE", body: {}, response: ok, validation: unknownIdeaField },
   { path: "ideas/[id]/conversions", method: "POST", body: { targetType: "BLOG", requestKey: "request-123", title: "文章", content: "原文" }, status: 201, response: record, validation: unknownIdeaField },
   { path: "todos", method: "GET", response: [record] },
+  { path: "todos/[id]", method: "GET", response: record },
   { path: "todos", method: "POST", body: { title: "任务" }, status: 201, response: record, validation: unknownField },
   { path: "todos/[id]", method: "PATCH", body: { title: "任务" }, response: record, validation: unknownField },
   { path: "todos/[id]", method: "DELETE", response: ok },
@@ -101,6 +103,7 @@ function routeHarness(route: RouteCase) {
     "@/lib/api/private-response": privateResponse,
     "@/lib/errors": errors,
     "@/lib/validation": validation,
+    "@/lib/todos-policy": todosPolicy,
     "@/lib/ideas-validation": ideaValidation,
     "@/lib/inbox": inbox,
     "@/lib/inbox-request": inboxRequest,

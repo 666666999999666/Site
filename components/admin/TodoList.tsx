@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation"
 import type { Category, Post, Project, Todo, TodoSubtask } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
+import Link from "next/link"
+import { isInactiveTodo, TODO_STATUS_LABELS, type TodoStatusValue } from "@/lib/todos-policy"
 import { CategoryManager } from "./CategoryManager"
 import { dueDateInput, editableTodoSubtasks, filterTodos, todoMutationInput, type EditableSubtask, type StatusFilter } from "./todo-model"
 import { reconcileCategoryItems, useCategories } from "./useCategories"
@@ -18,6 +20,7 @@ type TodoWithRelations = Todo & {
   category: Category | null
   project: Project | null
   subtasks: TodoSubtask[]
+  ideaConversions?: { idea: { id: string; title: string } }[]
 }
 // #29: 用 useSyncExternalStore 在 hydration 后读取 localStorage 记住的新建分类，
 // 避免 useState 初始化访问 localStorage 导致 hydration mismatch，
@@ -51,10 +54,12 @@ export function TodoList({
   todos: initialTodos,
   categories: initialCategories,
   projects,
+  initialStatus = "TODO",
 }: {
   todos: TodoWithRelations[]
   categories: Category[]
   projects: Project[]
+  initialStatus?: StatusFilter
 }) {
   const [todos, setTodos] = useState(initialTodos)
   const categoryMutations = useCategories(initialCategories, "TODO")
@@ -71,7 +76,7 @@ export function TodoList({
       ? rememberedCategory
       : initialCategories[0]?.id || ""
   const [activeGroupId, setActiveGroupId] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("TODO")
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>(initialStatus)
   const [query, setQuery] = useState("")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
@@ -124,6 +129,7 @@ export function TodoList({
   }
 
   async function toggle(todo: Todo) {
+    if (isInactiveTodo(todo.status)) return
     await updateTodo(todo.id, {
       status: todo.status === "TODO" ? "DONE" : "TODO",
     }).catch(() => undefined)
@@ -250,9 +256,11 @@ export function TodoList({
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="inline-flex w-fit rounded-md border border-border p-0.5" aria-label="Todo 状态筛选">
+          <div className="inline-flex w-fit max-w-full flex-wrap rounded-md border border-border p-0.5" aria-label="Todo 状态筛选">
             {([
-              ["TODO", "未完成"],
+              ["TODO", "进行中"],
+              ["PAUSED", "已暂停"],
+              ["CANCELLED", "已放弃"],
               ["DONE", "已完成"],
               ["ALL", "全部"],
             ] as const).map(([value, label]) => (
@@ -340,12 +348,17 @@ function TodoItem({
   const [dueDate, setDueDate] = useState(dueDateInput(todo.dueDate))
   const [completionCriteria, setCompletionCriteria] = useState(todo.completionCriteria || "")
   const [subtasks, setSubtasks] = useState<EditableSubtask[]>(() => editableTodoSubtasks(todo.subtasks))
+  const [status, setStatus] = useState<TodoStatusValue>(todo.status)
+  const [statusReason, setStatusReason] = useState(todo.statusReason || "")
   const [error, setError] = useState("")
   const [copiedId, setCopiedId] = useState(false)
   const done = todo.status === "DONE"
+  const inactive = isInactiveTodo(todo.status)
 
-  function beginEdit() {
+  function beginEdit(nextStatus?: TodoStatusValue) {
     setTitle(todo.title)
+    setStatus(nextStatus ?? todo.status)
+    setStatusReason(todo.statusReason || "")
     setDescription(todo.description || "")
     setCategoryId(todo.categoryId || "")
     setProjectId(todo.projectId || "")
@@ -364,7 +377,7 @@ function TodoItem({
     }
     try {
       await onSave(todoMutationInput({
-        title, description, categoryId, projectId, priority, dueDate, completionCriteria, subtasks,
+        title, description, categoryId, projectId, priority, dueDate, completionCriteria, subtasks, status, statusReason,
       }))
       setEditing(false)
     } catch (caught) {
@@ -374,7 +387,7 @@ function TodoItem({
 
   async function createDraft() {
     if (!window.confirm(`将“${todo.title}”创建为博客草稿？`)) return
-    const markDone = !done && window.confirm("创建草稿后，同时将该 Todo 标记为已完成？")
+    const markDone = todo.status === "TODO" && window.confirm("创建草稿后，同时将该 Todo 标记为已完成？")
     await onCreateDraft(markDone)
   }
 
@@ -406,7 +419,7 @@ function TodoItem({
         <button
           type="button"
           onClick={onToggle}
-          disabled={disabled}
+          disabled={disabled || inactive}
           aria-label={`${done ? "标记为未完成" : "标记为已完成"}：${todo.title}`}
           aria-pressed={done}
           className={cn(
@@ -430,6 +443,7 @@ function TodoItem({
           )}
           {!editing && (
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>{TODO_STATUS_LABELS[todo.status]}</span>
               {todo.category && <span>{todo.category.name}</span>}
               {todo.project && <span>项目：{todo.project.title}</span>}
               {todo.priority === null ? (
@@ -446,6 +460,27 @@ function TodoItem({
                   })}
                 </time>
               )}
+            </div>
+          )}
+          {!editing && inactive && todo.statusReason && (
+            <p className="mt-2 whitespace-pre-wrap break-words text-sm text-muted-foreground">原因：{todo.statusReason}</p>
+          )}
+          {!editing && (
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
+              {inactive ? (
+                <Button type="button" variant="outline" size="sm" disabled={disabled}
+                  onClick={() => void onSave({ status: "TODO", statusReason: null }).catch(() => undefined)}>
+                  恢复进行
+                </Button>
+              ) : todo.status === "TODO" ? (
+                <>
+                  <button type="button" className="text-muted-foreground hover:text-foreground" disabled={disabled} onClick={() => beginEdit("PAUSED")}>暂停</button>
+                  <button type="button" className="text-muted-foreground hover:text-foreground" disabled={disabled} onClick={() => beginEdit("CANCELLED")}>放弃</button>
+                </>
+              ) : null}
+              {todo.ideaConversions?.map(({ idea }) => (
+                <Link key={idea.id} href={`/admin/ideas/${idea.id}`} className="text-primary underline-offset-4 hover:underline">来源素材：{idea.title}</Link>
+              ))}
             </div>
           )}
           {!editing && todo.completionCriteria && (
@@ -500,7 +535,7 @@ function TodoItem({
           type="button"
           variant="ghost"
           size="icon"
-          onClick={editing ? () => setEditing(false) : beginEdit}
+          onClick={editing ? () => setEditing(false) : () => beginEdit()}
           disabled={disabled}
           aria-label={`${editing ? "收起编辑" : "编辑"}：${todo.title}`}
         >
@@ -529,6 +564,18 @@ function TodoItem({
               onChange={(event) => setTitle(event.target.value)}
               maxLength={600}
             />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor={`todo-status-${todo.id}`}>状态</Label>
+              <select id={`todo-status-${todo.id}`} value={status} onChange={(event) => setStatus(event.target.value as TodoStatusValue)} className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm">
+                {Object.entries(TODO_STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor={`todo-status-reason-${todo.id}`}>暂停 / 放弃原因（可选）</Label>
+              <Input id={`todo-status-reason-${todo.id}`} value={statusReason} onChange={(event) => setStatusReason(event.target.value)} maxLength={1000} placeholder="不想做了，也可以不填原因" />
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor={`todo-description-${todo.id}`}>描述</Label>

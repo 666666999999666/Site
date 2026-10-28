@@ -20,6 +20,7 @@ import type {
 import { apiRequest, jsonRequest } from "@/lib/api-client"
 import { formatChineseDate } from "@/lib/daily-date"
 import { cn } from "@/lib/utils"
+import { dailyProgress } from "@/lib/daily-policy"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { DailyReviewCard } from "@/components/questions/DailyReviewCard"
@@ -27,11 +28,10 @@ import { withTask, changeTaskTitle, selectTaskTodo } from "./daily-task-state"
 
 type SaveState = "idle" | "pending" | "saving" | "saved" | "error"
 
-function feedback(progress: number): string {
-  if (progress === 100) return "今天的重要事情已经全部完成。"
-  if (progress >= 67) return "已经完成大半，继续保持当前节奏。"
-  if (progress >= 33) return "很好。今天的重要事情已经推进一步。"
-  return "今天只完成最重要的三件事。"
+function feedback(progress: number, selectedCount: number): string {
+  if (!selectedCount) return "今天可以不安排，也可以随时选一件想做的事。"
+  if (progress === 100) return "今天选的事情已经做完了。"
+  return "按自己的节奏来，没做完也可以之后继续。"
 }
 
 function saveLabel(state: SaveState): string {
@@ -141,7 +141,7 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
   }
 
   function toggleTask(task: DailyTaskView) {
-    if (!task.title) return
+    if (!task.title || task.inactive) return
     const nextTask: DailyTaskView = {
       ...task,
       completed: !task.completed,
@@ -188,6 +188,7 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
     await saveQueue.current
   }
 
+  const { selectedCount } = dailyProgress(day.tasks)
   const usedTodoIds = new Set(day.tasks.map((task) => task.sourceTodoId).filter(Boolean))
 
   return (
@@ -199,7 +200,7 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
               <CalendarDays className="size-4" />
               <time dateTime={day.date}>{formatChineseDate(day.date)}</time>
             </div>
-            <h1 className="text-3xl font-semibold">今日三件事</h1>
+            <h1 className="text-3xl font-semibold">今天想做的事</h1>
           </div>
           <Link
             href="/admin/daily/history"
@@ -224,9 +225,9 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
         <div className="mb-5 flex items-center justify-between gap-4">
           <h2 id="daily-tasks-heading" className="flex items-center gap-2 text-lg font-semibold">
             <ListChecks className="size-5" />
-            今天最重要的三件事
+            可选 0–3 件，不必填满
           </h2>
-          <span className="text-sm tabular-nums text-muted-foreground">{day.completedCount} / 3</span>
+          <span className="text-sm tabular-nums text-muted-foreground">{selectedCount ? `${day.completedCount} / ${selectedCount}` : "还没选择"}</span>
         </div>
 
         <div className="grid gap-4 lg:grid-cols-3">
@@ -259,7 +260,7 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
                 <button
                   type="button"
                   onClick={() => toggleTask(task)}
-                  disabled={!task.title}
+                  disabled={!task.title || task.inactive}
                   className={cn(
                     "flex size-11 shrink-0 items-center justify-center rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-35",
                     task.completed
@@ -275,7 +276,7 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
                   ref={(node) => { inputs.current[index] = node }}
                   value={task.title}
                   maxLength={300}
-                  placeholder={`第 ${task.slot} 件事`}
+                  placeholder={`可选事项 ${task.slot}`}
                   className={cn(
                     "h-11 min-w-0 px-3",
                     task.completed && "text-muted-foreground line-through"
@@ -310,7 +311,8 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
                 className="mt-3 h-11 w-full rounded-md border border-border/70 bg-background px-3 text-sm text-muted-foreground outline-none transition-colors focus:border-ring focus:ring-2 focus:ring-ring/40"
                 aria-label={`为第 ${task.slot} 件事选择 Todo`}
               >
-                <option value="">从未完成 Todo 选择</option>
+                <option value="">从进行中的 Todo 选择（可选）</option>
+                {task.inactive && task.sourceTodoId && <option value={task.sourceTodoId}>原 Todo 已暂停 / 放弃，不计入今天</option>}
                 {initialDashboard.todoOptions.map((todo) => (
                   <option
                     key={todo.id}
@@ -322,6 +324,7 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
                 ))}
               </select>
 
+              {task.inactive && <p className="mt-2 text-xs text-muted-foreground">原 Todo {task.sourceTodoStatus === "CANCELLED" ? "已放弃" : "已暂停"}，不计入今天或完成统计。可清空、替换，或在 Todo 中恢复。</p>}
               <p className="mt-2 min-h-5 text-xs text-destructive" role={errors[task.slot] ? "alert" : undefined}>
                 {errors[task.slot] ?? ""}
               </p>
@@ -332,6 +335,8 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
 
       <DailyReviewCard />
 
+      <details className="mt-6 border-t border-border/60 py-4">
+        <summary className="cursor-pointer text-sm text-muted-foreground">查看完成情况与本月统计（可选）</summary>
       <section className="border-y border-border/60 py-7" aria-labelledby="daily-progress-heading">
         <div className="flex items-center justify-between gap-4">
           <h2 id="daily-progress-heading" className="text-sm font-medium">今日完成度</h2>
@@ -350,7 +355,7 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
             style={{ width: `${day.progress}%` }}
           />
         </div>
-        <p className="mt-4 text-sm text-muted-foreground" aria-live="polite">{feedback(day.progress)}</p>
+        <p className="mt-4 text-sm text-muted-foreground" aria-live="polite">{feedback(day.progress, selectedCount)}</p>
       </section>
 
       <section className="grid gap-px bg-border/60 sm:grid-cols-3" aria-label="本月统计">
@@ -376,6 +381,7 @@ export function DailyTopThree({ initialDashboard }: { initialDashboard: DailyDas
           </div>
         </div>
       </section>
+      </details>
     </div>
   )
 }

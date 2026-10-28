@@ -66,7 +66,7 @@ test("Study direct reveal hides answer until response and stale summary cannot r
   await open(page, "Study")
   await expect(page.getByText("Question one", { exact: true })).toBeVisible()
   await expect(page.getByText("Secret reference", { exact: true })).toHaveCount(0)
-  await page.getByRole("button", { name: "直接揭晓", exact: true }).click()
+  await page.getByRole("button", { name: "揭晓并记为重来", exact: true }).click()
   await expect.poll(() => Boolean(reveal)).toBe(true)
   expect(reveal!.request().postDataJSON()).toEqual({ answerMarkdown: "", expectedContentVersion: 2, expectedScheduleVersion: 3 })
   await expect(page.getByText("Secret reference", { exact: true })).toHaveCount(0)

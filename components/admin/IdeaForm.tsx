@@ -1,6 +1,8 @@
 "use client"
 
 import { useCallback, useMemo, useRef, useState } from "react"
+import Link from "next/link"
+import { MATERIAL_STATUSES, MATERIAL_STATUS_LABELS, type MaterialStatus } from "@/lib/material-status"
 import { useRouter } from "next/navigation"
 import { LockKeyhole } from "lucide-react"
 import type { Project } from "@/lib/generated/prisma/client"
@@ -23,6 +25,12 @@ interface EditableIdea {
   ownerId?: string
   title: string
   content: string
+  rawInput?: string | null
+  source?: string
+  capturedAt?: Date | string
+  discussionStatus?: MaterialStatus
+  discussionSummary?: string | null
+  conversions?: Array<{ id: string; post: { id: string; title: string } | null; todo: { id: string; title: string } | null }>
   tags: string[]
   projects: Project[]
   sourceInboxItem?: { id: string; rawInput: string } | null
@@ -86,7 +94,7 @@ export function IdeaForm({
         savedIdea ? "/api/ideas/" + savedIdea.id : "/api/ideas",
         jsonRequest(savedIdea ? "PATCH" : "POST", body)
       )
-      setSavedIdea(saved)
+      setSavedIdea((previous) => ({ ...previous, ...saved }))
       draft.commit(draftFromIdea(saved))
       switchMode("read")
       if (!idea) router.replace(ideaDocumentHref(saved.id, listHref))
@@ -117,10 +125,10 @@ export function IdeaForm({
 
   return (
     <div className="admin-document min-w-0 max-w-4xl">
-      <DocumentActionBar mode={mode} dirty={draft.dirty} pending={pending} ready={draft.ready} status="私人 Idea"
+      <DocumentActionBar mode={mode} dirty={draft.dirty} pending={pending} ready={draft.ready} status={"私人素材 · " + MATERIAL_STATUS_LABELS[savedIdea?.discussionStatus ?? "STORED"]}
         onBack={() => { if (draft.confirmLeave()) router.push(listHref) }}
         onEdit={beginEditing} onModeChange={switchMode} onCancel={cancel}>
-        <Button type="button" size="sm" onClick={save} disabled={locked || !draft.dirty}>保存 Idea</Button>
+        <Button type="button" size="sm" onClick={save} disabled={locked || !draft.dirty}>保存素材</Button>
       </DocumentActionBar>
 
       {draft.recovery && <DraftRecoveryNotice
@@ -133,7 +141,7 @@ export function IdeaForm({
         <article className="mx-auto min-w-0 max-w-3xl" aria-label={mode === "read" ? "Idea 阅读" : "Idea 预览"}
           id={mode === "preview" ? "document-preview" : undefined}>
           <header className="mb-8 space-y-4 border-b border-border/60 pb-6">
-            <p className="flex items-center gap-2 text-xs text-muted-foreground"><LockKeyhole className="size-3.5" />私人 Idea</p>
+            <p className="flex items-center gap-2 text-xs text-muted-foreground"><LockKeyhole className="size-3.5" />私人素材</p>
             <h1 className="break-words text-2xl font-semibold leading-tight sm:text-3xl">
               {mode === "read" ? savedIdea?.title : data.title || "未命名 Idea"}
             </h1>
@@ -144,11 +152,34 @@ export function IdeaForm({
                 .map((project) => <span key={project.id} className="rounded-md border border-border px-2 py-1">{project.title}</span>)}
             </div>
           </header>
+          {(mode === "read" ? savedIdea?.discussionSummary : data.discussionSummary) && (
+            <section className="mb-6 rounded-lg bg-muted/50 p-4" aria-label="讨论摘要">
+              <h2 className="mb-2 text-sm font-medium">讨论摘要</h2>
+              <p className="whitespace-pre-wrap break-words text-sm">{mode === "read" ? savedIdea?.discussionSummary : data.discussionSummary}</p>
+            </section>
+          )}
           <IdeaContent content={mode === "read" ? savedIdea?.content ?? "" : data.content} />
         </article>
       )}
 
       <div id="document-edit" hidden={mode !== "edit"} inert={locked} className="space-y-6">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="idea-status">讨论状态</Label>
+            <select id="idea-status" value={data.discussionStatus ?? savedIdea?.discussionStatus ?? "STORED"} disabled={locked}
+              onChange={(event) => draft.update({ ...data, discussionStatus: event.target.value as MaterialStatus })}
+              className="h-10 w-full rounded-md border border-border bg-background px-3 text-sm">
+              {MATERIAL_STATUSES.map((status) => <option key={status} value={status}>{MATERIAL_STATUS_LABELS[status]}</option>)}
+            </select>
+          </div>
+          <p className="self-end text-sm text-muted-foreground">先存下来也可以；想讨论不等于要执行。</p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="idea-summary">讨论摘要（可选）</Label>
+          <Textarea id="idea-summary" value={data.discussionSummary ?? savedIdea?.discussionSummary ?? ""} rows={3} maxLength={10_000} disabled={locked}
+            onChange={(event) => draft.update({ ...data, discussionSummary: event.target.value })}
+            placeholder="聊到哪里、形成了什么想法，或下次想接着聊什么" />
+        </div>
         <div className="space-y-2">
           <Label htmlFor="idea-title">标题</Label>
           <Input id="idea-title" value={data.title} onChange={(event) => draft.update({ ...data, title: event.target.value })}
@@ -186,20 +217,35 @@ export function IdeaForm({
         </fieldset>
       </div>
 
-      {savedIdea?.sourceInboxItem && (
+      {savedIdea && (
         <details className="mx-auto mt-8 max-w-3xl rounded-lg border border-border/60 p-4">
-          <summary className="cursor-pointer text-sm font-medium">查看来源收件箱原文（只读）</summary>
+          <summary className="cursor-pointer text-sm font-medium">查看原始输入（只读）</summary>
+          <p className="mt-3 text-xs text-muted-foreground">
+            来源：{savedIdea.source ?? "历史记录"}
+            {savedIdea.capturedAt && <> · 收录于 {new Date(savedIdea.capturedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</>}
+          </p>
+          {savedIdea.source === "legacy" && <p className="mt-2 text-xs text-muted-foreground">历史手工素材保留本次升级前的正文快照，不代表更早的未编辑版本。</p>}
           <pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">
-            {savedIdea.sourceInboxItem.rawInput}
+            {savedIdea.rawInput ?? savedIdea.sourceInboxItem?.rawInput ?? savedIdea.content}
           </pre>
         </details>
+      )}
+      {!!savedIdea?.conversions?.length && (
+        <section className="mx-auto mt-6 max-w-3xl space-y-2" aria-label="已转换内容">
+          <h2 className="text-sm font-medium">由这份素材创建</h2>
+          {savedIdea.conversions.map((conversion) => conversion.post ? (
+            <Link key={conversion.id} href={"/admin/posts/" + conversion.post.id} className="block text-sm text-primary hover:underline">文章：{conversion.post.title}</Link>
+          ) : conversion.todo ? (
+            <Link key={conversion.id} href={"/admin/todos?status=ALL#todo-" + conversion.todo.id} className="block text-sm text-primary hover:underline">Todo：{conversion.todo.title}</Link>
+          ) : null)}
+        </section>
       )}
       {savedIdea && !editing && (
         <details className="mx-auto mt-8 max-w-3xl rounded-lg border border-border/60 p-4">
           <summary className="cursor-pointer text-sm font-medium">更多操作</summary>
           <div className="mt-4 space-y-4">
             <p className="text-sm text-muted-foreground">转换前会打开确认表单，不会自动发布或完成内容。</p>
-            <IdeaConversionDialog ideaId={savedIdea.id} title={savedIdea.title} content={savedIdea.content}
+            <IdeaConversionDialog ideaId={savedIdea.id} ownerId={ownerId ?? savedIdea.ownerId} title={savedIdea.title} content={savedIdea.content}
               tags={savedIdea.tags} projects={projects} />
             <Button type="button" variant="destructive" onClick={remove} disabled={pending}>删除 Idea</Button>
           </div>

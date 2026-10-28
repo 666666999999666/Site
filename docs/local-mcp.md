@@ -26,7 +26,7 @@
 
 ## 2. 权限与工具
 
-OAuth 有五个业务权限：
+OAuth 有八个业务权限：
 
 | Scope | 用途 |
 |---|---|
@@ -35,8 +35,11 @@ OAuth 有五个业务权限：
 | `draft:update` | 提交草稿 metadata 修改审批 |
 | `category:create` | 提交新建分区审批 |
 | `todo:convert` | 提交 Todo 转草稿审批 |
+| `material:read` | 读取当前所有者的私人材料、原文与讨论摘要 |
+| `material:write` | 提交私人材料保存、整理和讨论状态修改审批 |
+| `material:convert` | 提交材料转 Todo 或文章草稿审批 |
 
-对应七个工具：
+对应十三个工具：
 
 | Tool | 行为 |
 |---|---|
@@ -47,8 +50,22 @@ OAuth 有五个业务权限：
 | `create_category` | 创建 BLOG 或 TODO 分区 |
 | `todo_to_draft` | 搬运指定 Todo 的已有内容，不生成正文 |
 | `get_approval_status` | 查询当前 Agent 自己发起的审批结果 |
+| `create_material` | 逐字保存输入及来源为一条私人材料，不自动拆成 Todo |
+| `list_materials` | 列出当前所有者的材料，可筛选讨论状态 |
+| `search_materials` | 搜索当前所有者的标题、原文、整理内容及讨论摘要 |
+| `read_material` | 读取指定材料的原文、来源、采集时间、讨论状态与转换关联 |
+| `update_material` | 提交整理内容、讨论状态或摘要的修改审批；原文不可改 |
+| `convert_material` | 经明确决定后转换一个 Todo 或草稿，保留原材料及关联 |
 
 MCP 不提供正文生成、发布或删除工具。OAuth Consent 只决定某个 Agent能使用哪些能力；每一次写操作仍需在博客后台单独批准。
+
+新增材料权限不会自动授予已有 Agent；需要材料能力时由用户在 OAuth 授权页明确同意。旧的 `draft:*` 权限不能读取私人材料。所有材料操作的所有者来自 Access Token 的 `sub`，工具参数不能指定或更换 owner。
+
+材料写工具必须提供 8–100 位的 `request_key`（字母、数字、`.`、`_`、`:`、`-`）；同一次操作重试复用该 key，修改拟保存内容则使用新 key。相同 Agent、工具和 key 返回同一审批，改变 payload 会拒绝；采集和转换也有业务级幂等记录，因此确认丢失后重试不会重复创建材料或目标。`create_material` 即使收到 `todo:` 或 `文章:` 开头的原文，也只保存一条材料。
+
+`discussion_status` 采用 `STORED`（暂存）、`WANT_DISCUSS`（想讨论）、`DISCUSSED`（已讨论）、`ARCHIVED`（已归档）；归档不删除原文。`update_material.changes` 复用后台 Idea 字段与校验，`convert_material.conversion` 复用原有 Idea 转换表单参数，不允许发布文章。
+
+后台材料审批、审批内容预览和材料审计只展示给对应所有者。审批列表只展示摘要；点击“查看拟保存内容后再审批”才经鉴权读取完整拟保存内容。内容有输入长度上限，且只在当前页面展示，不写入审计日志。审批状态查询的审计也按 Agent 所有者隔离，避免间接暴露材料 ID。
 
 ## 3. 远程 Markdown 导入
 
@@ -129,3 +146,17 @@ MCP_OAUTH_TEST_DATABASE_URL="postgresql://.../qz_mcp_test" npm run test:mcp:oaut
 ```
 
 `test:mcp` 验证 Streamable HTTP 协议和工具列表。`test:mcp:gateway` 使用隔离测试数据库验证远程 Markdown/图片暂存、审批、正文保密和清理。`test:mcp:oauth` 会清空名称包含 `test` 的本机 PostgreSQL 数据库，完整验证 DCR、PKCE、Consent、Token 刷新、撤销、双 Agent 隔离、审批、审计和管理员改密，禁止指向生产数据库。
+
+## 10. 私人素材工具
+
+| 工具 | 权限 | 行为 |
+|---|---|---|
+| `list_materials` / `search_materials` | `material:read` | 按当前 OAuth 用户查询素材、讨论状态和摘要；不暴露其他所有者 |
+| `read_material` | `material:read` | 读取原文、可编辑整理内容、来源时间及转换链接 |
+| `create_material` | `material:write` | 将原始文本原样保存为私人素材；即使以 todo/文章前缀开头也不转换任务 |
+| `update_material` | `material:write` | 修改标题、整理正文、标签、讨论状态或摘要；不能改原始输入/来源/时间/所有者 |
+| `convert_material` | `material:convert` | 明确将素材转换为 Todo 或未发布草稿，保留来源链接 |
+
+新增 scope 不会自动授予旧 Agent；需要所有者按原有 OAuth Consent 流程主动授权。没有修改 Session、Token 生命周期或部署凭证。所有写工具继续先进入后台审批。所有者须先展开“查看提案”核对完整原文或具体修改，再批准；提案仅在鉴权、所有者检查后按需返回，不进入审计正文。
+
+写调用必须提供稳定的 `request_key`。重试相同 key/参数复用同一审批与目标；改变参数但沿用 key 返回冲突。所有者来自已验证的 OAuth subject，而不是模型输入。审批读取、批准、拒绝、删除以及材料相关审计均按实际 Session 所有者过滤；审批成功后重放也先校验身份。转换仍不提供发布、删除或自动正文生成能力。

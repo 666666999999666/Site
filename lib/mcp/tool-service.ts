@@ -283,6 +283,15 @@ export async function runGatewayMcpTool<Name extends GatewayMcpToolName>(
   input: McpToolInputMap[Name]
 ): Promise<Record<string, unknown>> {
   switch (name) {
+    case "create_material":
+    case "list_materials":
+    case "search_materials":
+    case "read_material":
+    case "update_material":
+    case "convert_material": {
+      const { runMaterialMcpTool } = await import("./material-tool-service")
+      return runMaterialMcpTool(context, config, name, input)
+    }
     case "search_drafts":
       return runSearchDrafts(context, config, input)
     case "update_draft_metadata":

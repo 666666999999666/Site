@@ -29,6 +29,7 @@ export interface InboxItemSummaryView {
 
 export interface InboxItemView extends InboxItemSummaryView {
   rawInput: string
+  source?: string
   rawSha256: string
   parsedBody: string
   parserVersion: number
@@ -43,6 +44,7 @@ interface InboxItemRecord {
   kind: InboxKindValue
   status: InboxStatusValue
   rawInput: string
+  source?: string
   rawSha256: string
   parsedBody: string
   parserVersion: number
@@ -89,7 +91,7 @@ export function getInboxTargetHref(targetType: InboxKindValue, targetId: string)
   const encodedId = encodeURIComponent(targetId)
   if (targetType === "BLOG") return `/admin/posts/${encodedId}`
   if (targetType === "IDEA") return `/admin/ideas/${encodedId}`
-  return `/admin/todos#todo-${encodedId}`
+  return `/admin/todos?status=ALL#todo-${encodedId}`
 }
 
 export function serializeInboxSummary(item: InboxItemSummaryRecord): InboxItemSummaryView {
@@ -117,6 +119,7 @@ export function serializeInboxItem(item: InboxItemRecord): InboxItemView {
   return {
     ...serializeInboxSummary(item),
     rawInput: item.rawInput,
+    source: item.source ?? "inbox",
     rawSha256: item.rawSha256,
     parsedBody: item.parsedBody,
     parserVersion: item.parserVersion,

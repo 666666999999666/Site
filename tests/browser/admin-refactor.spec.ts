@@ -316,3 +316,105 @@ test("Todo save preserves failed input then commits normalized subtasks and sear
   await expect(row.getByRole("textbox", { name: "子任务 1 标题", exact: true })).toHaveValue("  kept subtask  ")
   await expect(row.getByRole("textbox", { name: "子任务 2 标题", exact: true })).toHaveCount(0)
 })
+
+test("quick capture keeps seven raw fragments as one material with the same retry key through reload", async ({ page }) => {
+  const rawInput = "todo：这仍只是素材，不是承诺\n1. 一本书\n2. 一段情绪\n3. https://example.test\n4. 也许做个工具\n5. 想聊 Agent\n6. Python 问题\n7. 随手一记  \n"
+  const requests: Array<{ rawInput: string; requestKey: string; mode: string }> = []
+  await page.route("**/api/inbox/items", async (route) => {
+    requests.push(route.request().postDataJSON())
+    if (requests.length === 1) {
+      await route.fulfill({ status: 503, json: { error: "暂时断线，请重试" } })
+    } else {
+      await route.fulfill({ status: 201, json: {
+        id: "saved-material", kind: "IDEA", status: "APPLIED",
+        execution: { targetHref: "/admin/ideas/saved-material" },
+      } })
+    }
+  })
+  await page.goto("/capture-browse")
+  const input = page.getByRole("textbox", { name: "快速记录原文" })
+  await input.fill(rawInput)
+  await page.getByRole("button", { name: "保存素材", exact: true }).click()
+  await expect(page.getByRole("alert")).toContainText("暂时断线，请重试")
+  expect(requests).toHaveLength(1)
+  expect(requests[0].rawInput).toBe(rawInput)
+  expect(requests[0].mode).toBe("material")
+  page.on("dialog", dialog => dialog.accept())
+  await page.reload()
+  await expect(page.getByRole("button", { name: "恢复草稿", exact: true })).toBeVisible()
+  await page.getByRole("button", { name: "恢复草稿", exact: true }).click()
+  await expect(input).toHaveValue(rawInput)
+  await page.getByRole("button", { name: "保存素材", exact: true }).evaluate((button: HTMLButtonElement) => { button.click(); button.click() })
+  await expect(page.getByRole("status")).toContainText("已保存，原文会独立保留。")
+  expect(requests).toHaveLength(2)
+  expect(requests[1]).toEqual(requests[0])
+  await expect(input).toHaveValue("")
+  expect(await page.evaluate(() => localStorage.getItem("qz-quick-capture:capture-fixture-owner"))).toBeNull()
+})
+
+for (const width of [390, 1440]) {
+  test(`read-only question browse uses GET only at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 })
+    const requests: string[] = []
+    await page.route("**/api/questions/**", async (route) => {
+      requests.push(route.request().method())
+      await route.fulfill({ json: questionResponse("browse-fixture") })
+    })
+    await page.goto("/capture-browse?view=question")
+    await expect(page.getByRole("heading", { name: "浏览题目" })).toBeVisible()
+    await expect(page.getByText("Answer browse-fixture", { exact: true })).toHaveCount(0)
+    await page.getByRole("button", { name: "查看答案（不评分）", exact: true }).click()
+    await expect(page.getByText("Answer browse-fixture", { exact: true })).toBeVisible()
+    await page.screenshot({ path: testInfo.outputPath(`question-browse-${width}.png`), fullPage: true })
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width)
+    await page.getByRole("button", { name: "收起答案", exact: true }).click()
+    await expect(page.getByText("Answer browse-fixture", { exact: true })).toHaveCount(0)
+    await page.reload()
+    await page.getByRole("button", { name: "查看答案（不评分）", exact: true }).click()
+    await expect(page.getByText("Answer browse-fixture", { exact: true })).toBeVisible()
+    expect(requests).toEqual(["GET", "GET"])
+  })
+}
+
+test("article publication filters retain search/category context and Back/Forward state", async ({ page }) => {
+  await page.goto("/admin-refactor")
+  const status = page.getByRole("group", { name: "按文章发布状态筛选" })
+  await status.getByRole("button", { name: "草稿", exact: true }).click()
+  await expect(page).toHaveURL(/status=DRAFT/)
+  await expect(page.getByRole("link", { name: "Post Alpha", exact: true }).first()).toBeVisible()
+  await status.getByRole("button", { name: "已发布", exact: true }).click()
+  await expect(page).toHaveURL(/status=PUBLISHED/)
+  await expect(page.getByRole("link", { name: "Post Alpha", exact: true })).toHaveCount(0)
+  await page.goBack()
+  await expect(status.getByRole("button", { name: "草稿", exact: true })).toHaveAttribute("aria-pressed", "true")
+  await expect(page.getByRole("link", { name: "Post Alpha", exact: true }).first()).toBeVisible()
+  await page.goForward()
+  await expect(status.getByRole("button", { name: "已发布", exact: true })).toHaveAttribute("aria-pressed", "true")
+  await status.getByRole("button", { name: "全部", exact: true }).click()
+  await expect(page).not.toHaveURL(/status=/)
+})
+
+
+test("article filters cannot race a pending search and Back restores the completed status", async ({ page }) => {
+  let pending: Route | undefined
+  await page.route("**/api/posts?*", route => { pending = route })
+  await page.goto("/admin-refactor")
+  const query = page.getByRole("textbox", { name: "搜索文章标题或内容" })
+  const status = page.getByRole("group", { name: "按文章发布状态筛选" })
+  await query.fill("delayed")
+  await page.getByRole("button", { name: "搜索文章", exact: true }).click()
+  await expect.poll(() => Boolean(pending)).toBe(true)
+  await expect(query).toBeDisabled()
+  await expect(status.getByRole("button", { name: "草稿", exact: true })).toBeDisabled()
+  await status.getByRole("button", { name: "草稿", exact: true }).evaluate((button: HTMLButtonElement) => button.click())
+  await expect(page).not.toHaveURL(/status=DRAFT/)
+  await pending!.fulfill({ json: [] })
+  await expect(query).toBeEnabled()
+  await expect(page).toHaveURL(/q=delayed/)
+  await status.getByRole("button", { name: "草稿", exact: true }).click()
+  await expect(page).toHaveURL(/q=delayed&status=DRAFT/)
+  await status.getByRole("button", { name: "已发布", exact: true }).click()
+  await page.goBack()
+  await expect(status.getByRole("button", { name: "草稿", exact: true })).toHaveAttribute("aria-pressed", "true")
+  await expect(query).toHaveValue("delayed")
+})

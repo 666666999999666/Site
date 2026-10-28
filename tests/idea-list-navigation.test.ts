@@ -40,3 +40,10 @@ test("List scroll positions are owner/filter scoped and malformed stored values 
   for (const value of [null, "NaN", "Infinity", "-1", "10000001", "{}"])
     assert.equal(readIdeaListPosition(value), 0)
 })
+
+test("material discussion filters survive open, edit and back without accepting unknown states", () => {
+  const href = ideaListHref({ q: "原文", tag: "", projectId: "", discussionStatus: "WANT_DISCUSS" })
+  assert.equal(readIdeaListFilters(new URL(href, "https://example.test").searchParams).discussionStatus, "WANT_DISCUSS")
+  assert.equal(safeIdeaReturnHref(new URL(ideaDocumentHref("m", href), "https://example.test").searchParams.get("returnTo")), href)
+  assert.equal(safeIdeaReturnHref("/admin/ideas?discussionStatus=PUBLIC"), "/admin/ideas")
+})

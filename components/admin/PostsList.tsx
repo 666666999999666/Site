@@ -13,7 +13,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
   EMPTY_POST_LIST_FILTERS, postDocumentHref, postListHref, postListPositionKey,
-  readPostListFilters, readPostListPosition, shouldRestorePostListOnMount, type PostListFilters,
+  readPostListFilters, readPostListPosition, shouldRestorePostListOnMount, type PostListFilters, type PostListStatus,
 } from "@/lib/post-list-navigation"
 
 type PostWithRelations = Post & { category: Category | null; series: Series | null }
@@ -45,9 +45,10 @@ export function PostsList({
   const { categories } = categoryMutations
   const [series, setSeries] = useState(initialSeries)
   const [activeGroupId, setActiveGroupId] = useState<string | null>(initialFilters.categoryId || null)
+  const [statusFilter, setStatusFilter] = useState<PostListStatus>(initialFilters.status ?? "ALL")
   const [pending, setPending] = useState(false)
   const [error, setError] = useState("")
-  const listHref = postListHref({ q: appliedQuery, categoryId: activeGroupId ?? "" })
+  const listHref = postListHref({ q: appliedQuery, categoryId: activeGroupId ?? "", status: statusFilter })
   const positionKey = postListPositionKey(ownerId, listHref)
 
   function rememberPosition() {
@@ -62,9 +63,10 @@ export function PostsList({
   }
 
   function selectCategory(id: string | null) {
+    if (pending) return
     rememberPosition()
     setActiveGroupId(id)
-    updateLocation({ q: appliedQueryRef.current, categoryId: id ?? "" })
+    updateLocation({ q: appliedQueryRef.current, categoryId: id ?? "", status: statusFilter })
   }
 
   useLayoutEffect(() => {
@@ -87,6 +89,7 @@ export function PostsList({
       const sequence = ++searchSequence.current
       setQuery(filters.q)
       setActiveGroupId(filters.categoryId || null)
+      setStatusFilter(filters.status ?? "ALL")
       if (filters.q === appliedQueryRef.current) { setPending(false); return }
       setPending(true)
       setError("")
@@ -126,7 +129,7 @@ export function PostsList({
       appliedQueryRef.current = nextQuery
       setAppliedQuery(nextQuery)
       setPosts(data)
-      updateLocation({ q: nextQuery, categoryId: activeGroupId ?? "" })
+      updateLocation({ q: nextQuery, categoryId: activeGroupId ?? "", status: statusFilter })
     } catch (caught) {
       if (sequence === searchSequence.current) setError(caught instanceof Error ? caught.message : "搜索失败")
     } finally {
@@ -193,9 +196,10 @@ export function PostsList({
     )))
   }
 
-  const filteredPosts = activeGroupId
-    ? posts.filter((post) => post.categoryId === activeGroupId)
-    : posts
+  const filteredPosts = posts.filter((post) => (
+    (!activeGroupId || post.categoryId === activeGroupId)
+    && (statusFilter === "ALL" || post.status === statusFilter)
+  ))
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-6 lg:flex-row">
@@ -226,12 +230,25 @@ export function PostsList({
       </aside>
 
       <div className="min-w-0 flex-1 space-y-4">
+        <div className="flex flex-wrap gap-2" role="group" aria-label="按文章发布状态筛选">
+          {([["ALL", "全部"], ["DRAFT", "草稿"], ["PUBLISHED", "已发布"]] as const).map(([status, label]) => (
+            <Button key={status} type="button" variant={statusFilter === status ? "default" : "outline"}
+              aria-pressed={statusFilter === status} disabled={pending} onClick={() => {
+                rememberPosition()
+                setStatusFilter(status)
+                updateLocation({ q: appliedQueryRef.current, categoryId: activeGroupId ?? "", status })
+              }}>
+              {label}
+            </Button>
+          ))}
+        </div>
         <div className="flex gap-2">
           <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               placeholder="搜索标题或内容"
               aria-label="搜索文章标题或内容"
+              disabled={pending}
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               onKeyDown={(event) => {

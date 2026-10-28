@@ -2,6 +2,7 @@ import { ValidationError } from "@/lib/errors"
 import type { PostStatusValue } from "@/lib/post-policy"
 import { CONTENT_FORMATS, type ContentFormat } from "./publication-content"
 import { normalizeTags } from "./tags"
+import { TODO_STATUSES, type TodoStatusValue } from "./todos-policy"
 
 type JsonObject = Record<string, unknown>
 
@@ -12,7 +13,7 @@ const POST_KEYS = [
 const SERIES_KEYS = ["title", "slug", "description", "coverImage", "sortOrder"] as const
 const TODO_KEYS = [
   "title", "description", "categoryId", "projectId", "status", "priority", "dueDate",
-  "completionCriteria", "subtasks",
+  "completionCriteria", "subtasks", "statusReason",
 ] as const
 const CATEGORY_CREATE_KEYS = [
   "name", "type", "description", "color", "sortOrder",
@@ -330,7 +331,8 @@ export interface TodoInput {
   description?: string | null
   categoryId?: string | null
   projectId?: string | null
-  status?: "TODO" | "DONE"
+  status?: TodoStatusValue
+  statusReason?: string | null
   priority?: number | null
   dueDate?: Date | null
   completionCriteria?: string | null
@@ -398,8 +400,9 @@ function parseTodo(value: JsonObject, partial: boolean): TodoInput {
   if (value.categoryId !== undefined) result.categoryId = optionalString(value.categoryId, "分区", 128)
   if (value.projectId !== undefined) result.projectId = optionalString(value.projectId, "项目", 128)
   if (value.status !== undefined) {
-    result.status = optionalEnum(value.status, "Todo 状态", ["TODO", "DONE"])
+    result.status = optionalEnum(value.status, "Todo 状态", TODO_STATUSES)
   }
+  if (value.statusReason !== undefined) result.statusReason = optionalString(value.statusReason, "状态原因", 1000)
   if (value.priority !== undefined) {
     result.priority = optionalNullableInteger(value.priority, "优先级", 0, 2)
   }

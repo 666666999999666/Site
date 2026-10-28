@@ -68,3 +68,18 @@ test('Todo order is TODO first then descending priority with null last then newe
  assert.deepEqual(todos.map(x=>x.id),before)
  assert.notEqual(filterTodos(todos,null,'ALL',''),todos)
 })
+
+test('paused and cancelled Todos are absent from active/completed views, and remain searchable separately', () => {
+ const todos = [item({id:'active'}),item({id:'done',status:'DONE'}),item({id:'paused',status:'PAUSED',statusReason:'Wait for budget'}),item({id:'cancelled',status:'CANCELLED'})]
+ assert.deepEqual(filterTodos(todos,null,'TODO','').map(x=>x.id),['active'])
+ assert.deepEqual(filterTodos(todos,null,'DONE','').map(x=>x.id),['done'])
+ assert.deepEqual(filterTodos(todos,null,'PAUSED','budget').map(x=>x.id),['paused'])
+ assert.deepEqual(filterTodos(todos,null,'CANCELLED','').map(x=>x.id),['cancelled'])
+ assert.equal(filterTodos(todos,null,'ALL','').length,4)
+})
+test('Todo editor sends explicit status and optional status reason', () => {
+ const input = todoMutationInput({...emptyDraft,status:'PAUSED',statusReason:'Need a break'})
+ assert.equal(input.status,'PAUSED')
+ assert.equal(input.statusReason,'Need a break')
+ assert.equal(todoMutationInput({...emptyDraft,status:'TODO',statusReason:''}).statusReason,null)
+})

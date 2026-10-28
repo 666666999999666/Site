@@ -22,6 +22,8 @@ export interface CaptureInboxItemInput {
   ownerId: string
   rawInput: string
   requestKey: string
+  source?: string
+  forceMaterial?: boolean
 }
 
 const APPLY_FAILURE_MESSAGE = "正式内容创建失败，请稍后重试"
@@ -126,6 +128,9 @@ export async function createFormalTarget(
           ownerId: item.ownerId,
           title: mapped.title,
           content: mapped.content,
+          rawInput: item.rawInput,
+          source: item.source,
+          capturedAt: item.createdAt,
           tags: mapped.tags,
           sourceInboxItemId: item.id,
         },
@@ -241,7 +246,9 @@ async function recordApplyFailure(
 export async function captureInboxItem(
   input: CaptureInboxItemInput
 ): Promise<InboxItemDetail> {
-  const parsed = parseInboxInput(input.rawInput)
+  const parsed = parseInboxInput(input.rawInput, input.forceMaterial)
+  const source = input.source?.trim() || "inbox"
+  if (source.length > 200) throw new ConflictError("来源不能超过 200 个字符")
   const requestKey = assertInboxRequestKey(input.requestKey)
   const rawSha256 = createInboxRawHash(input.rawInput)
 
@@ -253,6 +260,7 @@ export async function captureInboxItem(
         kind: parsed.kind,
         status: "RECEIVED",
         rawInput: input.rawInput,
+        source,
         rawSha256,
         parsedBody: parsed.parsedBody,
         parserVersion: parsed.parserVersion,
@@ -279,7 +287,7 @@ export async function captureInboxItem(
       include: inboxItemDetailInclude,
     })
     if (!existing) throw error
-    if (existing.rawSha256 !== rawSha256) {
+    if (existing.rawSha256 !== rawSha256 || existing.kind !== parsed.kind) {
       throw new ConflictError("requestKey 已用于另一条收件箱内容")
     }
     item = existing

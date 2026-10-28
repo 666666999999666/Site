@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
-import { Archive, ArchiveRestore, Clock3, LoaderCircle, Pencil, Plus, Search } from "lucide-react"
+import { Archive, ArchiveRestore, Clock3, Eye, LoaderCircle, Pencil, Plus, Search } from "lucide-react"
 import { questionApiRequest, questionErrorMessage, questionJsonRequest } from "@/components/questions/api"
 import {
   dueLabel,
@@ -19,7 +19,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
-import { EMPTY_QUESTION_NAVIGATION, questionEditorURL, questionNewURL, questionPageURL, type QuestionNavigation } from "@/lib/questions/navigation"
+import { EMPTY_QUESTION_NAVIGATION, questionBrowseURL, questionEditorURL, questionNewURL, questionPageURL, type QuestionNavigation } from "@/lib/questions/navigation"
 
 const statusOptions = [
   { value: "", label: "可复习（默认）" },
@@ -150,9 +150,9 @@ export function QuestionLibrary({ navigation, onNavigate }: {
         <CardHeader className="border-b">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
             <div>
-              <CardTitle>题库管理</CardTitle>
+              <CardTitle>浏览题库</CardTitle>
               <CardDescription className="mt-1">
-                默认显示已启用且答案就绪的题目；列表不会展示标准答案。
+                随时浏览题目和答案，不评分，也不改变复习安排；需要时再进入今日复习。
               </CardDescription>
             </div>
             <Link href={questionNewURL(listURL)} onClick={rememberPosition} className={cn(buttonVariants(), "h-9 gap-1.5 px-3")}>
@@ -263,7 +263,7 @@ export function QuestionLibrary({ navigation, onNavigate }: {
                     </Badge>
                   </div>
                   <h3 className="text-base font-medium leading-7 text-foreground">
-                    {markdownSummary(item.promptMarkdown)}
+                    <Link href={questionBrowseURL(item.id, listURL + `#question-${item.id}`)} onClick={rememberPosition} className="hover:underline">{markdownSummary(item.promptMarkdown)}</Link>
                   </h3>
                   <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
                     <span className="inline-flex items-center gap-1.5">
@@ -274,6 +274,10 @@ export function QuestionLibrary({ navigation, onNavigate }: {
                 </div>
 
                 <div className="flex shrink-0 flex-wrap gap-2">
+                  <Link href={questionBrowseURL(item.id, listURL + `#question-${item.id}`)} onClick={rememberPosition}
+                    className={cn(buttonVariants({ variant: "outline" }), "gap-1.5")}>
+                    <Eye className="size-4" /> 浏览（不评分）
+                  </Link>
                   <Link
                     href={questionEditorURL(item.id, listURL + `#question-${item.id}`)}
                     onClick={rememberPosition}

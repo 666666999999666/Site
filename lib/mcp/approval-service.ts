@@ -45,11 +45,36 @@ const todoPayloadSchema = z.object({
   markDone: z.boolean(),
 }).strict()
 
+const materialCreatePayloadSchema = z.object({
+  kind: z.literal("create_material"),
+  ownerId: z.string().min(1),
+  rawInput: z.string(),
+  source: z.string().optional(),
+  requestKey: z.string().min(8).max(100),
+}).strict()
+
+const materialUpdatePayloadSchema = z.object({
+  kind: z.literal("update_material"),
+  ownerId: z.string().min(1),
+  materialId: z.string().min(1),
+  input: z.record(z.unknown()),
+}).strict()
+
+const materialConvertPayloadSchema = z.object({
+  kind: z.literal("convert_material"),
+  ownerId: z.string().min(1),
+  materialId: z.string().min(1),
+  input: z.record(z.unknown()),
+}).strict()
+
 const actionPayloadSchema = z.discriminatedUnion("kind", [
   stagedMarkdownPayloadSchema,
   updatePayloadSchema,
   categoryPayloadSchema,
   todoPayloadSchema,
+  materialCreatePayloadSchema,
+  materialUpdatePayloadSchema,
+  materialConvertPayloadSchema,
 ])
 
 export type McpApprovalPayload = z.infer<typeof actionPayloadSchema>
@@ -67,32 +92,85 @@ export async function createMcpApproval(input: {
   parameterSummary: JsonSummary
   ttlHours: number
   database?: Pick<Prisma.TransactionClient, "mcpApproval">
+  requestKey?: string
 }) {
   const payload = actionPayloadSchema.parse(input.payload)
   const expiresAt = new Date(Date.now() + input.ttlHours * 60 * 60 * 1000)
   const database = input.database ?? prisma
-  return database.mcpApproval.create({
-    data: {
-      credentialId: input.credentialId,
-      toolName: input.toolName,
-      requiredScope: input.requiredScope,
-      payload: jsonValue(payload),
-      parameterSummary: jsonValue(input.parameterSummary),
-      expiresAt,
-    },
-    select: { id: true, status: true, expiresAt: true, createdAt: true },
+  let id: string | undefined
+  if (input.requestKey) {
+    const { materialApprovalId } = await import("./material-idempotency")
+    id = materialApprovalId(input.credentialId, input.toolName, input.requestKey)
+  }
+  try {
+    return await database.mcpApproval.create({
+      data: {
+        ...(id ? { id } : {}),
+        credentialId: input.credentialId,
+        toolName: input.toolName,
+        requiredScope: input.requiredScope,
+        payload: jsonValue(payload),
+        parameterSummary: jsonValue(input.parameterSummary),
+        expiresAt,
+      },
+      select: { id: true, status: true, expiresAt: true, createdAt: true },
+    })
+  } catch (error) {
+    if (!id || !error || typeof error !== "object" || !("code" in error) || error.code !== "P2002") throw error
+    const existing = await database.mcpApproval.findUnique({ where: { id } })
+    if (!existing) throw error
+    const { canonicalMcpPayload } = await import("./material-idempotency")
+    if (existing.credentialId !== input.credentialId || existing.toolName !== input.toolName
+      || existing.requiredScope !== input.requiredScope
+      || canonicalMcpPayload(existing.payload) !== canonicalMcpPayload(payload)) {
+      throw new ConflictError("request_key 已用于另一项材料操作")
+    }
+    return { id: existing.id, status: existing.status, expiresAt: existing.expiresAt, createdAt: existing.createdAt }
+  }
+}
+
+export function materialApprovalVisibility(actorUserId?: string): Prisma.McpApprovalWhereInput {
+  return { OR: [
+    { requiredScope: { notIn: ["material:read", "material:write", "material:convert"] } },
+    ...(actorUserId ? [{
+      credential: { oauthSubject: actorUserId },
+      payload: { path: ["ownerId"], equals: actorUserId },
+    }] : []),
+  ] }
+}
+
+function assertMaterialApprovalActor(payloadValue: Prisma.JsonValue, actorUserId?: string) {
+  const payload = actionPayloadSchema.parse(payloadValue)
+  if ("ownerId" in payload && (!actorUserId || payload.ownerId !== actorUserId)) {
+    throw new NotFoundError("审批请求不存在")
+  }
+  return payload
+}
+
+export async function getMcpMaterialApprovalProposal(id: string, actorUserId: string) {
+  const approval = await prisma.mcpApproval.findFirst({
+    where: { id, ...materialApprovalVisibility(actorUserId) },
+    select: { id: true, toolName: true, payload: true },
   })
+  if (!approval) throw new NotFoundError("审批请求不存在")
+  const payload = assertMaterialApprovalActor(approval.payload, actorUserId)
+  if (!("ownerId" in payload)) throw new NotFoundError("此审批没有材料预览")
+  // Body data is fetched only after an explicit owner-authenticated request and
+  // is never copied into the list, audit logs or public routes.
+  const proposal = Object.fromEntries(Object.entries(payload).filter(([key]) => key !== "ownerId"))
+  return { id: approval.id, toolName: approval.toolName, proposal }
 }
 
 export async function listMcpApprovals(input: {
   status?: "PENDING_APPROVAL" | "APPROVED" | "REJECTED"
   limit?: number
+  actorUserId?: string
 } = {}) {
   if (!input.status || input.status === "PENDING_APPROVAL") {
     await cleanupExpiredMcpApprovals()
   }
   return prisma.mcpApproval.findMany({
-    where: { status: input.status },
+    where: { status: input.status, ...materialApprovalVisibility(input.actorUserId) },
     orderBy: { createdAt: "desc" },
     take: Math.min(Math.max(input.limit ?? 50, 1), 200),
     select: {
@@ -154,6 +232,7 @@ export async function getMcpApprovalStatus(id: string, credentialId: string) {
     post_id: typeof result?.postId === "string" ? result.postId : null,
     category_id: typeof result?.categoryId === "string" ? result.categoryId : null,
     todo_id: typeof result?.todoId === "string" ? result.todoId : null,
+    material_id: typeof result?.materialId === "string" ? result.materialId : null,
     result,
     created_at: approval.createdAt.toISOString(),
     expires_at: approval.expiresAt.toISOString(),
@@ -353,6 +432,43 @@ async function dispatchApproval(
         return { categoryId: category.id, name: category.name, type: category.type }
       })).result
     }
+    case "create_material": {
+      const { captureInboxItem, retryInboxItem } = await import("../inbox/service")
+      // Capture is durably request-key idempotent before the approval record is
+      // committed. A lost acknowledgement can be reconciled without losing raw
+      // input or creating another material.
+      let item = await captureInboxItem({
+        ownerId: payload.ownerId, rawInput: payload.rawInput, source: payload.source,
+        requestKey: payload.requestKey, forceMaterial: true,
+      })
+      if (item.status === "FAILED") item = await retryInboxItem(payload.ownerId, item.id)
+      if (item.status !== "APPLIED" || item.execution?.targetType !== "IDEA") {
+        throw new ConflictError("材料原文已保存，但材料创建尚未完成；请重试审批")
+      }
+      const materialId = item.execution.targetId
+      return (await runDatabaseExecution(approvalId, toolName, async () => ({
+        materialId, inboxItemId: item.id, href: `/admin/ideas/${encodeURIComponent(materialId)}`,
+      }))).result
+    }
+    case "update_material": {
+      const { updateIdea } = await import("../ideas")
+      const { parseIdeaInput, ideaUpdateSchema } = await import("../ideas-validation")
+      const input = parseIdeaInput(ideaUpdateSchema, payload.input)
+      return (await runDatabaseExecution(approvalId, toolName, async (transaction) => {
+        const material = await updateIdea(payload.ownerId, payload.materialId, input, transaction)
+        return { materialId: material.id, discussionStatus: material.discussionStatus }
+      })).result
+    }
+    case "convert_material": {
+      const { convertIdea } = await import("../ideas")
+      const { parseIdeaInput, ideaConversionSchema } = await import("../ideas-validation")
+      const input = parseIdeaInput(ideaConversionSchema, payload.input)
+      return (await runDatabaseExecution(approvalId, toolName, async (transaction) => {
+        const converted = await convertIdea(payload.ownerId, payload.materialId, input, transaction)
+        return { materialId: payload.materialId, ...converted,
+          ...(converted.targetType === "BLOG" ? { postId: converted.targetId } : { todoId: converted.targetId }) }
+      })).result
+    }
     case "todo_to_draft": {
       return (await runDatabaseExecution(approvalId, toolName, async (transaction) => {
         const result = await todoToDraft(payload.todoId, payload.markDone, transaction)
@@ -367,12 +483,13 @@ async function dispatchApproval(
   }
 }
 
-export async function approveMcpApproval(id: string) {
+export async function approveMcpApproval(id: string, actorUserId?: string) {
   const approval = await prisma.mcpApproval.findUnique({
     where: { id },
     include: { credential: true },
   })
   if (!approval) throw new NotFoundError("审批请求不存在")
+  assertMaterialApprovalActor(approval.payload, actorUserId)
   if (approval.status === "APPROVED") return approval.resultSummary
   if (approval.status === "REJECTED") throw new ConflictError("审批请求已被拒绝")
   if (approval.expiresAt.getTime() <= Date.now()) {
@@ -386,6 +503,12 @@ export async function approveMcpApproval(id: string) {
     throw new PermissionError("审批请求包含未知 scope")
   }
   requireMcpScope(approval.credential, approval.requiredScope as McpScope)
+
+  const parsedPayload = actionPayloadSchema.parse(approval.payload)
+  if ("ownerId" in parsedPayload && (approval.credential.kind !== "OAUTH"
+    || approval.credential.oauthSubject !== parsedPayload.ownerId)) {
+    throw new PermissionError("材料审批与 OAuth 所有者不匹配")
+  }
 
   const staleBefore = new Date(Date.now() - 10 * 60 * 1000)
   const claim = await prisma.mcpApproval.updateMany({
@@ -441,10 +564,11 @@ export async function approveMcpApproval(id: string) {
   }
 }
 
-export async function rejectMcpApproval(id: string, reasonValue?: string) {
+export async function rejectMcpApproval(id: string, reasonValue?: string, actorUserId?: string) {
   const reason = reasonValue?.trim().slice(0, 1000) || "人工拒绝"
   const approval = await prisma.mcpApproval.findUnique({ where: { id } })
   if (!approval) throw new NotFoundError("审批请求不存在")
+  assertMaterialApprovalActor(approval.payload, actorUserId)
   if (approval.status === "PENDING_APPROVAL" && approval.expiresAt.getTime() <= Date.now()) {
     await rejectExpiredApproval(id)
     throw new ValidationError("审批请求已过期")
@@ -486,7 +610,7 @@ export async function rejectMcpApproval(id: string, reasonValue?: string) {
   return rejected
 }
 
-export async function deleteMcpApproval(id: string) {
+export async function deleteMcpApproval(id: string, actorUserId?: string) {
   const approval = await prisma.mcpApproval.findUnique({
     where: { id },
     select: {
@@ -494,9 +618,11 @@ export async function deleteMcpApproval(id: string) {
       status: true,
       processingAt: true,
       importBundle: { select: { id: true, cleanedAt: true } },
+      payload: true,
     },
   })
   if (!approval) throw new NotFoundError("审批请求不存在")
+  assertMaterialApprovalActor(approval.payload, actorUserId)
   const blocked = approvalDeletionBlockReason(approval)
   if (blocked) throw new ConflictError(blocked)
 

@@ -20,6 +20,7 @@ export default async function EditIdeaPage({ params, searchParams }: {
       include: {
         projects: { orderBy: { sortOrder: "asc" } },
         sourceInboxItem: { select: { id: true, rawInput: true } },
+        conversions: { orderBy: { createdAt: "desc" }, include: { post: { select: { id: true, title: true } }, todo: { select: { id: true, title: true } } } },
       },
     }),
     prisma.project.findMany({ orderBy: { sortOrder: "asc" } }),

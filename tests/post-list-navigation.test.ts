@@ -51,3 +51,17 @@ test("Cached article server props still restore URL state when history changed b
   assert.equal(shouldRestorePostListOnMount({ q: "Cloud2BIM", categoryId: "" }, new URLSearchParams("q=Cloud2BIM&categoryId=a")), true)
   assert.equal(shouldRestorePostListOnMount({ q: "Cloud2BIM", categoryId: "a" }, new URLSearchParams()), true)
 })
+
+
+test("Article publication status survives list, detail and history return navigation", () => {
+  for (const status of ["DRAFT", "PUBLISHED"] as const) {
+    const filters = { q: "学习", categoryId: "a", status }
+    const href = postListHref(filters)
+    assert.deepEqual(readPostListFilters(new URL(href, "https://example.test").searchParams), filters)
+    assert.equal(new URL(postDocumentHref("one", href), "https://example.test").searchParams.get("returnTo"), href)
+    assert.equal(safePostReturnHref(href), href)
+    assert.equal(shouldRestorePostListOnMount({ q: "学习", categoryId: "a" }, new URL(href, "https://example.test").searchParams), true)
+  }
+  assert.equal(postListHref({ q: "", categoryId: "", status: "ALL" }), "/admin/posts")
+  assert.deepEqual(readPostListFilters(new URLSearchParams("status=PRIVATE")), { q: "", categoryId: "" })
+})

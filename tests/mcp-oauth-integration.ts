@@ -20,6 +20,9 @@ const ALL_SCOPES = [
   "draft:update",
   "category:create",
   "todo:convert",
+  "material:read",
+  "material:write",
+  "material:convert",
   "offline_access",
 ].join(" ")
 
@@ -712,6 +715,100 @@ async function main() {
     assert.equal(updatedPost.title, `OAuth approved title ${marker}`)
     assert.equal(updatedPost.content, bodyMarker)
     progress("tool scopes, approvals and Agent isolation verified")
+
+    const rawMaterial = `todo: this is a quoted prefix, not a task\n${bodyMarker}\n1. a passing thought\n2. a link https://example.com\n3. a quote\n4. a question\n5. a code note\n6. a fragment\n7. a possible next step`
+    const captureArgs = { raw_input: rawMaterial, source: "OAuth synthetic fixture", request_key: `capture-${marker}` }
+    await assert.rejects(toolService.runGatewayMcpTool({ ...contextA, scopes: ["draft:read"] }, config,
+      "create_material", captureArgs), /material:write/)
+    const [materialApproval, sameMaterialApproval] = await Promise.all([
+      toolService.runGatewayMcpTool(contextA, config, "create_material", captureArgs),
+      toolService.runGatewayMcpTool(contextA, config, "create_material", captureArgs),
+    ])
+    assert.equal(sameMaterialApproval.approval_id, materialApproval.approval_id)
+    assert.equal(await prisma.idea.count(), 0, "material capture remains approval-controlled")
+    await assert.rejects(toolService.runGatewayMcpTool(contextA, config, "create_material", {
+      ...captureArgs, raw_input: "changed raw input",
+    }), /request_key/)
+    await assert.rejects(approvalService.approveMcpApproval(materialApproval.approval_id as string, "other-owner"), /不存在/)
+    await assert.rejects(approvalService.approveMcpApproval(materialApproval.approval_id as string), /不存在/)
+    await assert.rejects(approvalService.rejectMcpApproval(materialApproval.approval_id as string, undefined, "other-owner"), /不存在/)
+    await assert.rejects(approvalService.deleteMcpApproval(materialApproval.approval_id as string, "other-owner"), /不存在/)
+    await assert.rejects(approvalService.getMcpMaterialApprovalProposal(materialApproval.approval_id as string, "other-owner"), /不存在/)
+    const ownedProposal = await approvalService.getMcpMaterialApprovalProposal(materialApproval.approval_id as string, ADMIN_ID)
+    assert.equal(ownedProposal.proposal.rawInput, rawMaterial)
+    const foreignApprovals = await approvalService.listMcpApprovals({ actorUserId: "other-owner" })
+    assert.ok(!foreignApprovals.some((item) => item.id === materialApproval.approval_id))
+    const originalTransaction = prisma.$transaction.bind(prisma)
+    try {
+      // Simulate interruption after durable raw/Idea capture but before the
+      // independent approval execution record commits. Retry must reconcile it.
+      prisma.$transaction = ((run: (transaction: unknown) => Promise<unknown>) => originalTransaction(async (transaction) => {
+        const create = transaction.mcpExecution.create.bind(transaction.mcpExecution)
+        transaction.mcpExecution.create = (async (...args: Parameters<typeof create>) => {
+          if (args[0].data.approvalId === materialApproval.approval_id)
+            throw new Error("injected between material capture and execution")
+          return create(...args)
+        }) as unknown as typeof create
+        return run(transaction)
+      })) as typeof prisma.$transaction
+      await assert.rejects(() => approvalService.approveMcpApproval(materialApproval.approval_id as string, ADMIN_ID), /injected between material/)
+    } finally { prisma.$transaction = originalTransaction }
+    assert.equal(await prisma.idea.count(), 1, "durable capture survives approval-record failure")
+    assert.equal(await prisma.mcpExecution.count({where:{approvalId:materialApproval.approval_id as string}}),0)
+    const concurrentApprovals = await Promise.allSettled([
+      approvalService.approveMcpApproval(materialApproval.approval_id as string, ADMIN_ID),
+      approvalService.approveMcpApproval(materialApproval.approval_id as string, ADMIN_ID),
+    ])
+    assert.ok(concurrentApprovals.some((result)=>result.status === "fulfilled"))
+    for (const result of concurrentApprovals) if (result.status === "rejected") assert.match(String(result.reason),/正在执行/)
+    await approvalService.approveMcpApproval(materialApproval.approval_id as string, ADMIN_ID)
+    assert.equal(await prisma.mcpExecution.count({where:{approvalId:materialApproval.approval_id as string}}),1)
+    const materialStatus = await toolService.runGatewayMcpTool(contextA, config, "get_approval_status", {
+      approval_id: materialApproval.approval_id as string,
+    })
+    const materialId = materialStatus.material_id as string
+    await assert.rejects(approvalService.approveMcpApproval(materialApproval.approval_id as string, "other-owner"), /不存在/)
+    assert.equal(await prisma.idea.count(), 1)
+    assert.equal(await prisma.todo.count(), 1, "quoted todo prefix and seven fragments must not create tasks")
+    const material = await toolService.runGatewayMcpTool(contextA, config, "read_material", { material_id: materialId })
+    assert.equal(material.raw_input, rawMaterial)
+    assert.equal(material.source, "OAuth synthetic fixture")
+    const materialSearch = await toolService.runGatewayMcpTool(contextA, config, "search_materials", {
+      query: bodyMarker, limit: 20,
+    })
+    assert.equal(materialSearch.count, 1)
+    const materialUpdate = await toolService.runGatewayMcpTool(contextA, config, "update_material", {
+      material_id: materialId, request_key: `update-${marker}`,
+      changes: { title: "整理后的标题", content: "整理后的解释", discussionStatus: "WANT_DISCUSS", discussionSummary: "下次从问题二继续" },
+    })
+    await approvalService.approveMcpApproval(materialUpdate.approval_id as string, ADMIN_ID)
+    const updatedMaterial = await toolService.runGatewayMcpTool(contextA, config, "read_material", { material_id: materialId })
+    assert.equal(updatedMaterial.raw_input, rawMaterial)
+    assert.equal(updatedMaterial.discussion_status, "WANT_DISCUSS")
+    assert.equal(updatedMaterial.discussion_summary, "下次从问题二继续")
+    const materialConvertArgs = {
+      material_id: materialId, request_key: `convert-${marker}`,
+      conversion: { targetType: "TODO" as const, title: "Chosen next step", description: "One deliberate task",
+        projectId: null, priority: null, dueDate: null, completionCriteria: null, subtasks: [] },
+    }
+    const materialConversion = await toolService.runGatewayMcpTool(contextA, config, "convert_material", materialConvertArgs)
+    await approvalService.approveMcpApproval(materialConversion.approval_id as string, ADMIN_ID)
+    const materialConversionReplay = await toolService.runGatewayMcpTool(contextA, config, "convert_material", materialConvertArgs)
+    assert.equal(materialConversionReplay.approval_id, materialConversion.approval_id)
+    assert.equal(materialConversionReplay.status, "approved")
+    assert.equal(await prisma.todo.count(), 2)
+    assert.equal(await prisma.ideaConversion.count({ where: { ideaId: materialId } }), 1)
+    const materialAudits = await prisma.mcpAuditLog.findMany({ where: { toolName: { in: [
+      "create_material", "read_material", "search_materials", "update_material", "convert_material",
+    ] } } })
+    assert.ok(materialAudits.length > 0)
+    const foreignAudits = await auditService.listMcpAuditLogs({ actorUserId: "other-owner", limit: 200 })
+    assert.ok(!foreignAudits.some((entry) => entry.toolName.includes("material")))
+    await assert.rejects(auditService.deleteMcpAuditLog(materialAudits[0].id, "other-owner"), /不存在/)
+
+    assert.ok(!JSON.stringify(materialAudits).includes(bodyMarker), "raw private text is not copied into audit summaries")
+    progress("private material tools, raw preservation, scopes and retry dedup verified")
+
 
     const isolationTool = `oauth-isolation-${marker}`
     await rateLimitService.consumeMcpRateLimit({

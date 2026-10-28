@@ -3,6 +3,7 @@
 import { useLayoutEffect, useMemo, useState, useTransition } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { MATERIAL_STATUSES, MATERIAL_STATUS_LABELS, type MaterialStatus } from "@/lib/material-status"
 import { Pencil, Search, Trash2 } from "lucide-react"
 import type { Project } from "@/lib/generated/prisma/client"
 import { apiRequest, jsonRequest } from "@/lib/api-client"
@@ -19,6 +20,8 @@ export interface IdeaListItem {
   id: string
   title: string
   content: string
+  discussionStatus?: MaterialStatus
+  discussionSummary?: string | null
   tags: string[]
   createdAt: Date | string
   updatedAt: Date | string
@@ -56,6 +59,7 @@ export function IdeasList({
   const ideas = initialIdeas.filter((idea) => !removedIds.includes(idea.id))
   const [query, setQuery] = useState(initialFilters.q)
   const [tag, setTag] = useState(initialFilters.tag)
+  const [discussionStatus, setDiscussionStatus] = useState<MaterialStatus | "">(initialFilters.discussionStatus ?? "")
   const [projectId, setProjectId] = useState(initialFilters.projectId)
   const [mutating, setMutating] = useState(false)
   const [navigating, startTransition] = useTransition()
@@ -90,7 +94,7 @@ export function IdeasList({
     if (pending) return
     setError("")
     rememberPosition()
-    startTransition(() => router.push(ideaListHref({ q: query, tag, projectId })))
+    startTransition(() => router.push(ideaListHref({ q: query, tag, projectId, ...(discussionStatus ? { discussionStatus } : {}) })))
   }
 
   async function remove(idea: IdeaListItem) {
@@ -109,7 +113,7 @@ export function IdeasList({
 
   return (
     <div className="space-y-5">
-      <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_200px_auto]">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_140px_140px_160px_auto]">
         <div className="relative min-w-0">
           <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -118,11 +122,16 @@ export function IdeasList({
             onKeyDown={(event) => {
               if (event.key === "Enter" && !event.nativeEvent.isComposing) void search()
             }}
-            placeholder="搜索标题或正文"
+            placeholder="搜索原文、整理正文或讨论摘要"
             maxLength={200}
             className="pl-9"
           />
         </div>
+        <select value={discussionStatus} onChange={(event) => setDiscussionStatus(event.target.value as MaterialStatus | "")}
+          className="h-10 rounded-md border border-border/50 bg-background px-3 text-sm" aria-label="按讨论状态筛选">
+          <option value="">全部状态</option>
+          {MATERIAL_STATUSES.map((status) => <option key={status} value={status}>{MATERIAL_STATUS_LABELS[status]}</option>)}
+        </select>
         <select
           value={tag}
           onChange={(event) => setTag(event.target.value)}
@@ -152,9 +161,9 @@ export function IdeasList({
 
       {ideas.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border p-10 text-center">
-          <p className="text-sm text-muted-foreground">没有符合条件的 Idea。</p>
+          <p className="text-sm text-muted-foreground">没有符合条件的素材。</p>
           <Link href={ideaDocumentHref("new", listHref)} onClick={rememberPosition} className={cn(buttonVariants({ variant: "outline" }), "mt-4")}>
-            手工创建 Idea
+            手工创建素材
           </Link>
         </div>
       ) : (
@@ -166,7 +175,8 @@ export function IdeasList({
                   <Link href={ideaDocumentHref(idea.id, listHref)} onClick={rememberPosition} className="font-medium hover:underline">
                     {idea.title}
                   </Link>
-                  <IdeaPreview content={idea.content} />
+                  <p className="mt-2 text-xs text-primary">{MATERIAL_STATUS_LABELS[idea.discussionStatus ?? "STORED"]}</p>
+                  <IdeaPreview content={idea.discussionSummary || idea.content} />
                 </div>
                 <Link
                   href={ideaDocumentHref(idea.id, listHref, true)}

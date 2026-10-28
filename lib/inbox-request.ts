@@ -26,9 +26,11 @@ function rejectUnknownKeys(value: JsonObject, allowed: readonly string[]) {
 export function validateInboxCaptureBody(value: unknown): {
   rawInput: string
   requestKey: string
+  source?: string
+  forceMaterial?: boolean
 } {
   const body = requireObject(value)
-  rejectUnknownKeys(body, ["rawInput", "requestKey"])
+  rejectUnknownKeys(body, ["rawInput", "requestKey", "source", "mode"])
 
   if (typeof body.rawInput !== "string") {
     throw new InboxRequestError("原文必须是字符串")
@@ -42,7 +44,11 @@ export function validateInboxCaptureBody(value: unknown): {
     throw new InboxRequestError("requestKey 必须为 1 到 200 个字符")
   }
 
-  return { rawInput: body.rawInput, requestKey }
+  if (body.source !== undefined && (typeof body.source !== "string" || !body.source.trim() || body.source.trim().length > 200)) {
+    throw new InboxRequestError("来源必须为 1 到 200 个字符")
+  }
+  if (body.mode !== undefined && body.mode !== "material") throw new InboxRequestError("保存模式无效")
+  return { rawInput: body.rawInput, requestKey, ...(body.mode === "material" ? { forceMaterial: true } : {}), ...(typeof body.source === "string" ? { source: body.source.trim() } : {}) }
 }
 
 function validateEmptyInboxBody(value: unknown): void {

@@ -17,7 +17,7 @@ import { Textarea } from "@/components/ui/textarea"
 
 const KIND_LABELS: Record<InboxKindValue, string> = {
   BLOG: "文章",
-  IDEA: "Idea",
+  IDEA: "素材",
   TODO: "Todo",
 }
 
@@ -187,7 +187,7 @@ export function InboxManager({ initialItems }: { initialItems: InboxItemSummaryV
       <Card>
         <CardHeader>
           <CardTitle>统一输入</CardTitle>
-          <CardDescription>开头的第一个前缀决定保存位置；正文中的其他前缀按普通文字保留。</CardDescription>
+          <CardDescription>无需前缀，默认存为私人素材。若主动使用文章：或 todo：前缀，仍按原规则创建草稿或任务。原文始终保留。</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="space-y-4" onSubmit={submit}>
@@ -199,7 +199,7 @@ export function InboxManager({ initialItems }: { initialItems: InboxItemSummaryV
             <Textarea
               aria-label="收件箱原文"
               className="min-h-48 resize-y font-mono"
-              placeholder="idea：记录一个刚想到的点子……"
+              placeholder="粘贴一段话、链接、随想或问题，先存下来……"
               value={rawInput}
               onChange={(event) => {
                 setRawInput(event.target.value)
@@ -213,7 +213,7 @@ export function InboxManager({ initialItems }: { initialItems: InboxItemSummaryV
               </span>
               <Button type="submit" disabled={pending || characterCount === 0 || characterCount > 100_000}>
                 <Send />
-                {pending ? "正在分流…" : "保存并分流"}
+                {pending ? "正在保存…" : "保存到收件箱"}
               </Button>
             </div>
           </form>
@@ -224,7 +224,7 @@ export function InboxManager({ initialItems }: { initialItems: InboxItemSummaryV
       <section aria-labelledby="inbox-history-heading" className="space-y-4">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h2 id="inbox-history-heading" className="text-xl font-semibold">最近分流记录</h2>
+            <h2 id="inbox-history-heading" className="text-xl font-semibold">最近收录记录</h2>
             <p className="mt-1 text-sm text-muted-foreground">原文随记录保留；删除记录不会删除已经创建的正式内容。</p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -237,7 +237,7 @@ export function InboxManager({ initialItems }: { initialItems: InboxItemSummaryV
               >
                 <option value="ALL">全部</option>
                 <option value="BLOG">文章</option>
-                <option value="IDEA">Idea</option>
+                <option value="IDEA">素材</option>
                 <option value="TODO">Todo</option>
               </select>
             </label>

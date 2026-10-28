@@ -43,22 +43,22 @@ async function main() {
   await prisma.setting.upsert({
     where: { key: 'home_tagline' },
     update: {},
-    create: { key: 'home_tagline', value: '记录思考、项目和对现代 Web 开发的探索。' },
+    create: { key: 'home_tagline', value: '记录 Agent 应用与 Python 后端开发的学习和实践。' },
   })
   await prisma.setting.upsert({
     where: { key: 'home_role' },
     update: {},
-    create: { key: 'home_role', value: '开发者 / 持续学习者' },
+    create: { key: 'home_role', value: 'Agent 应用 / Python 后端开发' },
   })
   await prisma.setting.upsert({
     where: { key: 'about_intro' },
     update: {},
-    create: { key: 'about_intro', value: '你好，我是一名热爱构建 Web 应用的开发者。' },
+    create: { key: 'about_intro', value: '计算机相关专业硕士背景，关注 Agent 应用与 Python 后端开发。' },
   })
   await prisma.setting.upsert({
     where: { key: 'about_skills' },
     update: {},
-    create: { key: 'about_skills', value: 'TypeScript,React,Next.js,Node.js,Docker,Git,Python,Rust' },
+    create: { key: 'about_skills', value: 'Python,Agent 应用' },
   })
   await prisma.setting.upsert({
     where: { key: 'about_github' },
@@ -69,7 +69,7 @@ async function main() {
   await prisma.setting.upsert({
     where: { key: 'about_whatido' },
     update: {},
-    create: { key: 'about_whatido', value: '' },
+    create: { key: 'about_whatido', value: '整理学习笔记，记录 Agent 应用和 Python 后端开发中的问题与实践。' },
   })
   await prisma.setting.upsert({
     where: { key: 'email' },

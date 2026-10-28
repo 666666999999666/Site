@@ -1,10 +1,10 @@
 import { NextRequest } from "next/server"
 import { z } from "zod/v3"
 import { ensureAuthenticated } from "@/lib/api/auth"
-import { handleApiError } from "@/lib/api/handler"
+import { handlePrivateApiError } from "@/lib/api/private-response"
 import { validateOrigin } from "@/lib/csrf"
 import { PermissionError, ValidationError } from "@/lib/errors"
-import { approveMcpApproval, deleteMcpApproval, rejectMcpApproval } from "@/lib/mcp/approval-service"
+import { approveMcpApproval, deleteMcpApproval, rejectMcpApproval, getMcpMaterialApprovalProposal } from "@/lib/mcp/approval-service"
 import { mcpJson, requireJsonContentType } from "@/lib/mcp/http"
 
 const decisionSchema = z.discriminatedUnion("decision", [
@@ -17,18 +17,18 @@ export async function PATCH(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    await ensureAuthenticated()
+    const { userId } = await ensureAuthenticated()
     if (!validateOrigin(request, { requireOrigin: true })) throw new PermissionError("请求来源无效")
     requireJsonContentType(request)
     const parsed = decisionSchema.safeParse(await request.json())
     if (!parsed.success) throw new ValidationError(parsed.error.issues[0]?.message ?? "审批参数无效")
     const { id } = await context.params
     const result = parsed.data.decision === "approve"
-      ? await approveMcpApproval(id)
-      : await rejectMcpApproval(id, parsed.data.reason)
+      ? await approveMcpApproval(id, userId)
+      : await rejectMcpApproval(id, parsed.data.reason, userId)
     return mcpJson(result)
   } catch (error) {
-    return handleApiError(error)
+    return handlePrivateApiError(error)
   }
 }
 
@@ -37,11 +37,24 @@ export async function DELETE(
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    await ensureAuthenticated()
+    const { userId } = await ensureAuthenticated()
     if (!validateOrigin(request, { requireOrigin: true })) throw new PermissionError("请求来源无效")
     const { id } = await context.params
-    return mcpJson(await deleteMcpApproval(id))
+    return mcpJson(await deleteMcpApproval(id, userId))
   } catch (error) {
-    return handleApiError(error)
+    return handlePrivateApiError(error)
+  }
+}
+
+export async function GET(
+  _request: NextRequest,
+  context: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { userId } = await ensureAuthenticated()
+    const { id } = await context.params
+    return mcpJson(await getMcpMaterialApprovalProposal(id, userId))
+  } catch (error) {
+    return handlePrivateApiError(error)
   }
 }

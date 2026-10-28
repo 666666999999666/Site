@@ -9,11 +9,11 @@ export type PublicSettings = Record<PublicSettingKey, string>
 export const DEFAULT_PUBLIC_SETTINGS: PublicSettings = {
   owner_name: "QZ Site",
   email: "",
-  home_tagline: "记录 Agent 应用、Python 与 Web 工程实践。",
-  home_role: "Agent 应用开发 / Python 学习与实践",
-  about_intro: "",
-  about_whatido: "",
-  about_skills: "",
+  home_tagline: "记录 Agent 应用与 Python 后端开发的学习和实践。",
+  home_role: "Agent 应用 / Python 后端开发",
+  about_intro: "计算机相关专业硕士背景，关注 Agent 应用与 Python 后端开发。",
+  about_whatido: "整理学习笔记，记录 Agent 应用和 Python 后端开发中的问题与实践。",
+  about_skills: "Python,Agent 应用",
   about_github: process.env.NEXT_PUBLIC_GITHUB_URL || "",
 }
 

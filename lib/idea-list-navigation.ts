@@ -1,7 +1,10 @@
+import { isMaterialStatus, type MaterialStatus } from "./material-status"
+
 export interface IdeaListFilters {
   q: string
   tag: string
   projectId: string
+  discussionStatus?: MaterialStatus
 }
 
 export const EMPTY_IDEA_LIST_FILTERS: IdeaListFilters = { q: "", tag: "", projectId: "" }
@@ -12,7 +15,8 @@ export function readIdeaListFilters(params: Pick<URLSearchParams, "get">): IdeaL
     const value = params.get(key)?.trim() ?? ""
     return [...value].length <= maxLength ? value : ""
   }
-  return { q: read("q", 200), tag: read("tag", 50), projectId: read("projectId", 100) }
+  const discussionStatus = params.get("discussionStatus")
+  return { q: read("q", 200), tag: read("tag", 50), projectId: read("projectId", 100), ...(isMaterialStatus(discussionStatus) ? { discussionStatus } : {}) }
 }
 
 export function ideaListHref(filters: IdeaListFilters): string {

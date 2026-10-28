@@ -118,3 +118,16 @@ test("Idea validators retain raw content and conversion defaults", async () => {
     projectId: null, priority: null, dueDate: null, completionCriteria: null, subtasks: [],
   })
 })
+
+test("material states and summary are editable but raw provenance is immutable", async () => {
+  const { ideaUpdateSchema, parseIdeaInput, parseIdeaSearchParams } = await ideas
+  for (const discussionStatus of ["STORED", "WANT_DISCUSS", "DISCUSSED", "ARCHIVED"]) {
+    assert.deepEqual(parseIdeaInput(ideaUpdateSchema, { discussionStatus }), { discussionStatus })
+  }
+  assert.deepEqual(parseIdeaInput(ideaUpdateSchema, { discussionSummary: " summary " }), { discussionSummary: "summary" })
+  for (const key of ["rawInput", "source", "capturedAt", "ownerId"])
+    assert.throws(() => parseIdeaInput(ideaUpdateSchema, { [key]: "changed" }))
+  assert.throws(() => parseIdeaInput(ideaUpdateSchema, { discussionStatus: "PUBLIC" }))
+  assert.equal(parseIdeaSearchParams(new URLSearchParams("discussionStatus=WANT_DISCUSS")).discussionStatus, "WANT_DISCUSS")
+  assert.throws(() => parseIdeaSearchParams(new URLSearchParams("discussionStatus=PUBLIC")))
+})

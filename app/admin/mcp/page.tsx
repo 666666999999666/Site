@@ -1,3 +1,4 @@
+import { ensureAuthenticated } from "@/lib/api/auth"
 import { Container } from "@/components/layout/Container"
 import { McpManager } from "@/components/admin/McpManager"
 import { listMcpApprovals } from "@/lib/mcp/approval-service"
@@ -6,11 +7,12 @@ import { listMcpCredentials } from "@/lib/mcp/credential-service"
 import { runMcpMaintenance } from "@/lib/mcp/maintenance-service"
 
 export default async function McpPage() {
+  const { userId } = await ensureAuthenticated()
   await runMcpMaintenance().catch((error) => console.error("[MCP maintenance failure]", error))
   const [credentials, approvals, auditLogs] = await Promise.all([
-    listMcpCredentials(),
-    listMcpApprovals({ limit: 100 }),
-    listMcpAuditLogs({ limit: 100 }),
+    listMcpCredentials(userId),
+    listMcpApprovals({ limit: 100, actorUserId: userId }),
+    listMcpAuditLogs({ limit: 100, actorUserId: userId }),
   ])
 
   return (

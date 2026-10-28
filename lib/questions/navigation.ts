@@ -59,3 +59,8 @@ export function questionEditorURL(id: string, returnTo: string): string {
 export function questionNewURL(returnTo: string): string {
   return `${listPath}/new?${new URLSearchParams({ returnTo: questionReturnTo(returnTo) })}`
 }
+
+/** Read-only viewing never creates a review ticket or submits a rating. */
+export function questionBrowseURL(id: string, returnTo: string): string {
+  return `${listPath}/${encodeURIComponent(id)}?${new URLSearchParams({ view: "read", returnTo: questionReturnTo(returnTo) })}`
+}

@@ -1,4 +1,12 @@
 import { z } from "zod/v3"
+import {
+  createMaterialInputSchema, listMaterialsInputSchema, searchMaterialsInputSchema,
+  readMaterialInputSchema, updateMaterialInputSchema, convertMaterialInputSchema,
+} from "./material-schemas"
+export {
+  createMaterialInputSchema, listMaterialsInputSchema, searchMaterialsInputSchema,
+  readMaterialInputSchema, updateMaterialInputSchema, convertMaterialInputSchema,
+} from "./material-schemas"
 
 const markdownImportImageSchema = z.object({
   reference: z.string().min(1).max(2048)
@@ -70,6 +78,12 @@ export const mcpToolInputSchemas = {
   create_category: createCategoryInputSchema,
   todo_to_draft: todoToDraftInputSchema,
   get_approval_status: getApprovalStatusInputSchema,
+  create_material: createMaterialInputSchema,
+  list_materials: listMaterialsInputSchema,
+  search_materials: searchMaterialsInputSchema,
+  read_material: readMaterialInputSchema,
+  update_material: updateMaterialInputSchema,
+  convert_material: convertMaterialInputSchema,
 } as const
 
 export type McpToolName = keyof typeof mcpToolInputSchemas
@@ -89,4 +103,10 @@ export interface McpToolInputMap {
   create_category: CreateCategoryInput
   todo_to_draft: TodoToDraftInput
   get_approval_status: GetApprovalStatusInput
+  create_material: z.infer<typeof createMaterialInputSchema>
+  list_materials: z.infer<typeof listMaterialsInputSchema>
+  search_materials: z.infer<typeof searchMaterialsInputSchema>
+  read_material: z.infer<typeof readMaterialInputSchema>
+  update_material: z.infer<typeof updateMaterialInputSchema>
+  convert_material: z.infer<typeof convertMaterialInputSchema>
 }

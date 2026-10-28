@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+import { questionBrowseURL } from "@/lib/questions/navigation"
 import { useCallback, useEffect, useRef, useState } from "react"
 import {
   ArrowLeft,
@@ -294,7 +296,7 @@ export function QuestionStudy() {
               <CardTitle className="flex items-center gap-2">
                 <BookOpenCheck className="size-5" /> 今日复习
               </CardTitle>
-              <CardDescription className="mt-1">只处理今天应学的题目；旧到期题始终优先。</CardDescription>
+              <CardDescription className="mt-1">这是评分复习；只想看题目和答案时，请选择“浏览（不评分）”。</CardDescription>
             </div>
             <Badge variant={current ? "default" : "outline"} className="h-7 px-3">
               {starting ? "同步队列中" : questionQueueMessage(today)}
@@ -417,12 +419,16 @@ export function QuestionStudy() {
                   <p className="text-sm text-muted-foreground">
                     {current.answerMarkdown.trim()
                       ? "揭晓后答案正文会锁定，再由你自评。"
-                      : "空白揭晓会自动记为不可改的“重来”，且不保存答案正文。"}
+                      : "本模式中空白揭晓会记为“重来”。只想看答案，请使用不评分浏览。"}
                   </p>
-                  <Button type="button" size="lg" className="h-11 px-5" disabled={acting} onClick={() => void revealAnswer()}>
-                    {acting ? <LoaderCircle className="animate-spin" /> : <Eye />}
-                    {current.answerMarkdown.trim() ? "对照标准答案" : "直接揭晓"}
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-3">
+                  <Link href={questionBrowseURL(current.question.id, "/admin/questions?tab=library")}
+                    className="text-sm text-primary underline">浏览（不评分）</Link>
+                    <Button type="button" size="lg" className="h-11 px-5" disabled={acting} onClick={() => void revealAnswer()}>
+                      {acting ? <LoaderCircle className="animate-spin" /> : <Eye />}
+                      {current.answerMarkdown.trim() ? "对照标准答案" : "揭晓并记为重来"}
+                    </Button>
+                  </div>
                 </div>
               </>
             ) : (
