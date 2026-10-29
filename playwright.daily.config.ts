@@ -13,6 +13,9 @@ export default defineConfig({
   expect: { timeout: 20_000 },
   outputDir: "test-results/daily",
   use: {
+    ...(process.env.PLAYWRIGHT_EXECUTABLE_PATH
+      ? { launchOptions: { executablePath: process.env.PLAYWRIGHT_EXECUTABLE_PATH } }
+      : {}),
     baseURL: "http://127.0.0.1:3230",
     actionTimeout: 20_000,
     navigationTimeout: 60_000,

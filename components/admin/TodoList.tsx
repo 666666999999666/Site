@@ -415,7 +415,7 @@ function TodoItem({
 
   return (
     <li id={`todo-${todo.id}`} className="min-w-0 scroll-mt-20 p-3 sm:p-4">
-      <div className="flex min-w-0 items-start gap-3">
+      <div className="grid min-w-0 grid-cols-[1.5rem_minmax(0,1fr)] items-start gap-3 sm:flex">
         <button
           type="button"
           onClick={onToggle}
@@ -509,6 +509,7 @@ function TodoItem({
           )}
         </div>
 
+        <div className="col-start-2 flex flex-wrap gap-1 sm:shrink-0 sm:gap-3">
         <Button
           type="button"
           variant="ghost"
@@ -552,6 +553,7 @@ function TodoItem({
         >
           <Trash2 className="size-4" />
         </Button>
+        </div>
       </div>
 
       {editing && (

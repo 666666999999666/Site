@@ -302,6 +302,7 @@ test("Todo save preserves failed input then commits normalized subtasks and sear
   const expected = {
     title: "Todo Alpha", description: "Searchable description", categoryId: null,
     projectId: null, priority: null, dueDate: null, completionCriteria: null,
+    status: "TODO", statusReason: null,
     subtasks: [{ title: "  kept subtask  ", completed: true, sortOrder: 0 }],
   }
   expect(writes).toEqual([expected])
@@ -335,7 +336,7 @@ test("quick capture keeps seven raw fragments as one material with the same retr
   const input = page.getByRole("textbox", { name: "快速记录原文" })
   await input.fill(rawInput)
   await page.getByRole("button", { name: "保存素材", exact: true }).click()
-  await expect(page.getByRole("alert")).toContainText("暂时断线，请重试")
+  await expect(page.getByRole("alert").filter({ hasText: "暂时断线，请重试" })).toBeVisible()
   expect(requests).toHaveLength(1)
   expect(requests[0].rawInput).toBe(rawInput)
   expect(requests[0].mode).toBe("material")
@@ -417,4 +418,20 @@ test("article filters cannot race a pending search and Back restores the complet
   await page.goBack()
   await expect(status.getByRole("button", { name: "草稿", exact: true })).toHaveAttribute("aria-pressed", "true")
   await expect(query).toHaveValue("delayed")
+})
+
+test("Todo text retains readable width beside actions on a 390px screen", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openResource(page, "TODO")
+  const row = item(page, "TODO", "Alpha")
+  const title = row.getByText("Todo Alpha", { exact: true })
+  const copy = row.getByRole("button", { name: "复制 Todo ID：Todo Alpha", exact: true })
+  const titleBox = await title.boundingBox()
+  const copyBox = await copy.boundingBox()
+  expect(titleBox).not.toBeNull()
+  expect(copyBox).not.toBeNull()
+  expect(titleBox!.width).toBeGreaterThanOrEqual(200)
+  expect(copyBox!.y).toBeGreaterThan(titleBox!.y + titleBox!.height)
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390)
+  await page.screenshot({ path: testInfo.outputPath("todo-readable-390.png"), fullPage: true, caret: "initial" })
 })

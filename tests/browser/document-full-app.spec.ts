@@ -112,9 +112,9 @@ test("Idea list extracts clean summaries before truncating and retains Markdown 
       await page.setViewportSize({ width, height: 900 })
       await page.goto("/admin/ideas")
       const card = page.locator("main li").filter({ has: page.getByRole("link", { name: "长笔记演示", exact: true }) })
-      await expect(card.locator("p").first()).toHaveText(expected)
+      await expect(card.locator("p.line-clamp-3")).toHaveText(expected)
       for (const title of ["短笔记演示 1", "短笔记演示 2"]) {
-        await expect(page.locator("main li").filter({ has: page.getByRole("link", { name: title, exact: true }) }).locator("p").first()).toHaveText("暂无文字摘要")
+        await expect(page.locator("main li").filter({ has: page.getByRole("link", { name: title, exact: true }) }).locator("p.line-clamp-3")).toHaveText("暂无文字摘要")
       }
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
       await page.screenshot({ path: testInfo.outputPath("idea-list-" + width + ".png") })
@@ -134,10 +134,10 @@ test("Idea list extracts clean summaries before truncating and retains Markdown 
     }
     // Search responses use the same card conversion as the initial server data.
     await page.goto("/admin/ideas")
-    await page.getByPlaceholder("搜索标题或正文").fill("二级标题")
+    await page.getByPlaceholder("搜索原文、整理正文或讨论摘要").fill("二级标题")
     await page.getByRole("button", { name: "搜索", exact: true }).click()
     await expect(page.locator("main li")).toHaveCount(1)
-    await expect(page.locator("main li p").first()).toHaveText(expected)
+    await expect(page.locator("main li p.line-clamp-3")).toHaveText(expected)
     const after = await integritySnapshot(page)
     expect(after.ideas).toHaveLength(12)
     expect(after.posts).toEqual(before.posts)
