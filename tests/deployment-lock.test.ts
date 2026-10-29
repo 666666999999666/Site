@@ -166,7 +166,7 @@ case "\${1:-}" in
     if [ "\${LOCK_TEST_HOLD_FIRST:-0}" = 1 ] && [ "$number" -eq 1 ]; then
       attempts=0
       while [ ! -e "$LOCK_TEST_STATE/release-first" ]; do
-        attempts=$((attempts + 1)); [ "$attempts" -le 600 ] || exit 88
+        attempts=$((attempts + 1)); [ "$attempts" -le "\${LOCK_TEST_HOLD_ATTEMPTS:-600}" ] || exit 88
         sleep 0.02
       done
     fi
@@ -343,5 +343,25 @@ test("a queued pipeline fetches the advanced local remote after locking and reje
     assert.equal(fetched, advanced, "stale refusal must use the remote main actually fetched after the wait")
     assert.notEqual(fetched, f.sha)
     context.diagnostic(f.events())
+  } finally { await f.cleanup() }
+})
+
+test("a duplicate invocation waits beyond thirty seconds for the default pipeline lock budget", { skip: linuxOnly }, async () => {
+  const f = fixture()
+  try {
+    const first = f.start("first", "pipeline", { LOCK_TEST_HOLD_FIRST: "1", LOCK_TEST_HOLD_ATTEMPTS: "2000" })
+    await f.waitFor(() => f.has("first.fetch-1"), "first invocation never acquired the operation lock")
+    // Empty explicitly selects the shipped default, not this fixture's short budget.
+    const duplicate = f.start("duplicate", "pipeline", { QZSITE_DEPLOY_LOCK_WAIT_SECONDS: "" })
+    await f.waitFor(() => f.has("duplicate.flock-attempt"), "duplicate never waited on the real lock")
+    await delay(31_000)
+    assert.equal(duplicate.child.exitCode, null, `a normal deployment can exceed thirty seconds; duplicate exited early: ${JSON.stringify(duplicate.output())}`)
+    assert.equal(f.has("duplicate.fetch-1"), false, "waiting duplicate must not touch the shared checkout")
+    f.release("release-first")
+    const [one, two] = await Promise.all([f.finish(first), f.finish(duplicate)])
+    assert.equal(one.code, 0, one.stderr)
+    assert.equal(two.code, 0, two.stderr)
+    assert.equal(f.has("duplicate.fetch-3"), true, "duplicate must still run every real fetch/validation layer after acquiring the lock")
+    assert.equal(f.has("overlapping-fetch"), false, f.events())
   } finally { await f.cleanup() }
 })

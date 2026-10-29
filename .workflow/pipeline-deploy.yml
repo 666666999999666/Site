@@ -77,10 +77,15 @@ stages:
       if [ ! /proc/self/fd/9 -ef "$operation_lock_path" ]; then
         exec 9>>"$operation_lock_path"
       fi
-      flock -w "${QZSITE_DEPLOY_LOCK_WAIT_SECONDS:-30}" 9 || {
-        echo "Another deployment or recovery operation is still running" >&2
+      # A normal release can exceed 30 seconds. Queue duplicate/concurrent
+      # agent invocations; after acquiring the lock they still validate the
+      # current canonical SHA and strictly verify any already-stable release.
+      echo "Waiting for deployment lock: commit=$pipeline_commit pid=$$ timeout=${QZSITE_DEPLOY_LOCK_WAIT_SECONDS:-600}s"
+      flock -w "${QZSITE_DEPLOY_LOCK_WAIT_SECONDS:-600}" 9 || {
+        echo "Another deployment or recovery operation is still running; lock wait exhausted for commit=$pipeline_commit pid=$$" >&2
         exit 1
       }
+      echo "Deployment lock acquired: commit=$pipeline_commit pid=$$"
       docker_config="$(mktemp -d /dev/shm/qzsite-docker-config.XXXXXX)"
       bootstrap=""
       cleanup() {
