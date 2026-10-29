@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { spawn, execFileSync, type ChildProcess } from "node:child_process"
-import { mkdirSync, openSync, closeSync } from "node:fs"
+import { mkdirSync, openSync, closeSync, writeFileSync } from "node:fs"
 import { request, type APIRequestContext, type APIResponse } from "@playwright/test"
 import { requireInboxTestDatabaseUrl } from "./inbox-test-database"
 
@@ -51,6 +51,8 @@ async function main() {
     stdio: ["ignore", log, log],
   })
   closeSync(log)
+  server.on("exit", (code, signal) => console.log("Material HTTP server exited", JSON.stringify({ code, signal })))
+  server.on("error", error => console.error("Material HTTP server launch error", error))
   anonymous = await request.newContext({ baseURL })
   api = await request.newContext({ baseURL, extraHTTPHeaders: { Origin: baseURL } })
   const deadline = Date.now() + 180_000
@@ -151,12 +153,45 @@ async function main() {
   assert.equal(home.status(), 200)
   const homeHtml = await home.text()
   for (const label of ["工作台", "先记下来", "最近素材", "继续讨论", "今天想做的事", marker]) assert.ok(homeHtml.includes(label), label)
+  const resumeSection = (html: string) => {
+    const section = html.match(/<section\b[^>]*aria-labelledby="resume-discussion-heading"[^>]*>[\s\S]*?<\/section>/)?.[0]
+    assert.ok(section, "Discussion resume section must be rendered")
+    return section
+  }
+  assert.ok(resumeSection(homeHtml).includes(firstId), "WANT_DISCUSS remains resumable")
+  assert.ok(!resumeSection(homeHtml).includes(secondId), "Archived material must not appear in resume")
+  await expectJson(await api.patch(`/api/ideas/${firstId}`, { data: { discussionStatus: "DISCUSSED" } }))
+  const discussedHome = await api.get("/admin")
+  assert.equal(discussedHome.status(), 200)
+  const discussedResume = resumeSection(await discussedHome.text())
+  assert.ok(discussedResume.includes(firstId), "Saving DISCUSSED must retain the resume entry")
+  assert.ok(discussedResume.includes("先聊 Agent 原理，不转成七项任务"), "Resume must show the last discussion summary")
+  await expectJson(await api.patch(`/api/ideas/${firstId}`, { data: { discussionStatus: "ARCHIVED" } }))
+  const archivedHome = await api.get("/admin")
+  assert.equal(archivedHome.status(), 200)
+  assert.ok(!resumeSection(await archivedHome.text()).includes(firstId), "Archiving must remove the resume entry")
+  await expectJson(await api.patch(`/api/ideas/${firstId}`, { data: { discussionStatus: "DISCUSSED" } }))
+  checks.push("Recent discussion resume retains discussed material with summary and excludes archived material")
   const ideaPage = await api.get(`/admin/ideas/${firstId}`)
   assert.equal(ideaPage.status(), 200)
   const ideaHtml = await ideaPage.text()
+  writeFileSync("test-results/material-http-idea.html", ideaHtml)
   assert.ok(ideaHtml.includes("一本书"))
   assert.ok(!ideaHtml.includes("<img src=x onerror=alert(1)>"))
   assert.ok(ideaHtml.includes(convertedTodo.targetId))
+  const renderedIdeaHtml = ideaHtml.replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, "")
+  const original = renderedIdeaHtml.match(/<details\b[^>]*>[\s\S]*?原始输入（只读）[\s\S]*?<\/details>/)
+  assert.ok(original, "Read-only original input must be present")
+  assert.match(original[0].split(">", 1)[0], /\bopen(?:=|\s|$)/, "Original input is expanded by default")
+  for (const provenance of ["http-acceptance", "收录于", "一本书"]) assert.ok(original[0].includes(provenance), provenance)
+  const readingArticle = renderedIdeaHtml.match(/<article\b[^>]*aria-label="Idea 阅读"[^>]*>[\s\S]*?<\/article>/)
+  assert.ok(readingArticle, "Actual reading article must be rendered")
+  assert.ok(readingArticle[0].includes('aria-label="讨论摘要"'), "Summary is in the visible reading article")
+  assert.ok(readingArticle[0].includes("人工整理内容"), "Derived body is in the visible reading article")
+  // RSC may serialize derived content before the HTML. Compare rendered element
+  // positions, never the first text occurrence in the entire streamed response.
+  assert.ok(original.index! + original[0].length <= readingArticle.index!, "Expanded original precedes the entire derived reading article")
+  checks.push("Expanded immutable original/source/time render before discussion summary and derived content")
   const postList = await api.get("/admin/posts?status=DRAFT&q=" + marker)
   assert.equal(postList.status(), 200)
   assert.ok((await postList.text()).includes("status%3DDRAFT"))

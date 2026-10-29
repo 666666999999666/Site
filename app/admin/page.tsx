@@ -21,8 +21,11 @@ export default async function AdminHomePage() {
       select: { id: true, title: true, discussionStatus: true, capturedAt: true },
     }),
     prisma.idea.findMany({
-      where: { ownerId: userId, discussionStatus: "WANT_DISCUSS" }, orderBy: { updatedAt: "desc" }, take: 4,
-      select: { id: true, title: true, discussionSummary: true },
+      where: { ownerId: userId, OR: [
+        { discussionStatus: "WANT_DISCUSS" },
+        { discussionStatus: "DISCUSSED", discussionSummary: { not: "" } },
+      ] }, orderBy: { updatedAt: "desc" }, take: 4,
+      select: { id: true, title: true, discussionStatus: true, discussionSummary: true },
     }),
   ])
 
@@ -55,13 +58,14 @@ export default async function AdminHomePage() {
             <h2 id="resume-discussion-heading" className="text-xl font-semibold">继续讨论</h2>
             <Link href="/admin/ideas?discussionStatus=WANT_DISCUSS" className="text-sm text-primary hover:underline">想讨论的素材 →</Link>
           </div>
-          <p className="mt-3 text-sm text-muted-foreground">只挑现在想继续的，不必把每条素材都变成任务。</p>
+          <p className="mt-3 text-sm text-muted-foreground">从想讨论的素材，或最近讨论的小结接着聊，不必把它们变成任务。</p>
           {resume.length ? <ul className="mt-3 divide-y divide-border/60">
             {resume.map((idea) => <li key={idea.id} className="py-3">
               <Link href={`/admin/ideas/${encodeURIComponent(idea.id)}`} className="block break-words font-medium hover:underline">{idea.title}</Link>
+              <p className="mt-1 text-xs text-muted-foreground">{MATERIAL_STATUS_LABELS[idea.discussionStatus]}</p>
               {idea.discussionSummary && <p className="mt-1 line-clamp-2 whitespace-pre-line text-sm text-muted-foreground">{idea.discussionSummary}</p>}
             </li>)}
-          </ul> : <p className="py-5 text-sm text-muted-foreground">在素材里标记“想讨论”，下次就能从这里接上。</p>}
+          </ul> : <p className="py-5 text-sm text-muted-foreground">标记“想讨论”，或为已讨论素材留下小结，下次就能从这里接上。</p>}
         </section>
       </div>
       <DailyTopThree initialDashboard={dashboard} />

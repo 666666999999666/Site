@@ -11,3 +11,26 @@ test("material capture/provenance remains separate from public output models", (
   assert.match(migration,/CREATE TRIGGER "Idea_provenance_immutable"/)
   assert.doesNotMatch(migration,/DELETE FROM|DROP TABLE|UPDATE "Project"/)
 })
+
+
+test("material detail presents expanded provenance before discussion and editable interpretation", () => {
+  const source = readFileSync("components/admin/IdeaForm.tsx", "utf8")
+  const raw = source.indexOf("原始输入（只读）")
+  assert.ok(raw > 0)
+  assert.match(source.slice(0, raw), /<details open /)
+  assert.ok(raw < source.indexOf('aria-label="讨论摘要"'))
+  assert.ok(raw < source.indexOf("<IdeaContent"))
+  assert.ok(raw < source.indexOf('id="document-edit"'))
+  assert.match(source, /savedIdea\.source/)
+  assert.match(source, /savedIdea\.capturedAt/)
+})
+
+test("discussion resume includes summarized discussed items without archived records", () => {
+  const source = readFileSync("app/admin/page.tsx", "utf8")
+  const query = source.slice(source.indexOf("prisma.idea.findMany", source.indexOf("prisma.idea.findMany") + 1), source.indexOf("return ("))
+  assert.match(query, /ownerId: userId/)
+  assert.match(query, /discussionStatus: "WANT_DISCUSS"/)
+  assert.match(query, /discussionStatus: "DISCUSSED", discussionSummary: \{ not: "" \}/)
+  assert.doesNotMatch(query, /ARCHIVED|STORED/)
+  assert.match(query, /updatedAt: "desc"/)
+})

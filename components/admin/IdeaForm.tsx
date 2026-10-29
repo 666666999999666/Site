@@ -137,6 +137,20 @@ export function IdeaForm({
       {error && <p role="alert" className="mb-4 text-sm text-destructive">{error}</p>}
       {draft.storageError && <p role="alert" className="mb-4 text-sm text-destructive">{draft.storageError}</p>}
 
+      {savedIdea && (
+        <details open className="mx-auto mb-8 max-w-3xl rounded-lg border border-border/60 p-4">
+          <summary className="cursor-pointer text-sm font-medium">原始输入（只读）</summary>
+          <p className="mt-3 text-xs text-muted-foreground">
+            来源：{savedIdea.source ?? "历史记录"}
+            {savedIdea.capturedAt && <> · 收录于 {new Date(savedIdea.capturedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</>}
+          </p>
+          {savedIdea.source === "legacy" && <p className="mt-2 text-xs text-muted-foreground">历史手工素材保留本次升级前的正文快照，不代表更早的未编辑版本。</p>}
+          <pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">
+            {savedIdea.rawInput ?? savedIdea.sourceInboxItem?.rawInput ?? savedIdea.content}
+          </pre>
+        </details>
+      )}
+
       {mode !== "edit" && (
         <article className="mx-auto min-w-0 max-w-3xl" aria-label={mode === "read" ? "Idea 阅读" : "Idea 预览"}
           id={mode === "preview" ? "document-preview" : undefined}>
@@ -217,19 +231,6 @@ export function IdeaForm({
         </fieldset>
       </div>
 
-      {savedIdea && (
-        <details className="mx-auto mt-8 max-w-3xl rounded-lg border border-border/60 p-4">
-          <summary className="cursor-pointer text-sm font-medium">查看原始输入（只读）</summary>
-          <p className="mt-3 text-xs text-muted-foreground">
-            来源：{savedIdea.source ?? "历史记录"}
-            {savedIdea.capturedAt && <> · 收录于 {new Date(savedIdea.capturedAt).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}</>}
-          </p>
-          {savedIdea.source === "legacy" && <p className="mt-2 text-xs text-muted-foreground">历史手工素材保留本次升级前的正文快照，不代表更早的未编辑版本。</p>}
-          <pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-4 text-sm">
-            {savedIdea.rawInput ?? savedIdea.sourceInboxItem?.rawInput ?? savedIdea.content}
-          </pre>
-        </details>
-      )}
       {!!savedIdea?.conversions?.length && (
         <section className="mx-auto mt-6 max-w-3xl space-y-2" aria-label="已转换内容">
           <h2 className="text-sm font-medium">由这份素材创建</h2>
